@@ -1,0 +1,12 @@
+{
+  "name": "@arcade/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@arcade/shared": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc -b"
+  }
+}

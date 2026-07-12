@@ -1,0 +1,13 @@
+{
+  "name": "@arcade/game-jungnim",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@arcade/shared": "*",
+    "@arcade/core": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc -b"
+  }
+}
