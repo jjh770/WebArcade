@@ -4,5 +4,6 @@ export { SeededRNG } from "./SeededRNG";
 export { GameLoop } from "./GameLoop";
 export { GameRunner } from "./GameRunner";
 export { InputManager } from "./input/InputManager";
+export { NetClient } from "./net/NetClient";
 export { Canvas2DRenderer } from "./render/Canvas2DRenderer";
-// NetClient, GameStateMachine는 멀티 단계에서 추가
+// GameStateMachine는 앱 플로우 단계에서 추가

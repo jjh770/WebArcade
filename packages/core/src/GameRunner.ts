@@ -17,15 +17,26 @@ import { InputManager } from "./input/InputManager";
 
 export class GameRunner {
   private readonly loop: GameLoop;
+  /** 이번 판에서 사망 콜백을 이미 쐈는지(한 번만 발화). */
+  private deathReported = false;
 
   constructor(
     private readonly game: IGame,
     private readonly renderer: IRenderer,
     private readonly input: InputManager,
+    /** 로컬 사망이 처음 감지된 순간 한 번 호출(멀티에서 player_died 전송용).
+     *  게임이 뭔지는 모른다 — IGame.isPlayerDead()만 관찰. */
+    private readonly onDeath?: () => void,
   ) {
     this.loop = new GameLoop(
       // 고정 스텝: 현재 입력 스냅샷과 tick만 게임에 전달.
-      (tick) => this.game.update(tick, this.input.getState()),
+      (tick) => {
+        this.game.update(tick, this.input.getState());
+        if (!this.deathReported && this.game.isPlayerDead()) {
+          this.deathReported = true;
+          this.onDeath?.();
+        }
+      },
       // 렌더: 보간 alpha만 전달(로직엔 영향 없음).
       (alpha) => this.game.render(this.renderer, alpha),
     );
@@ -34,9 +45,23 @@ export class GameRunner {
   /** 시드로 게임을 초기화하고 입력·루프를 시작한다. tick=0부터. */
   start(seed: number): void {
     this.game.init(seed);
+    this.deathReported = false;
     this.input.start();
     this.loop.resetTick();
     this.loop.start();
+  }
+
+  /** 새 시드로 다음 판을 시작한다. 루프·입력 리스너는 유지한 채 tick만 0으로.
+   *  (게임오버 → 다시 시작 한 바퀴. 어떤 게임인지는 여전히 모른다 — IGame.init만 호출) */
+  restart(seed: number): void {
+    this.game.init(seed);
+    this.deathReported = false;
+    this.loop.resetTick();
+  }
+
+  /** 현재 게임이 로컬 사망 판정을 냈는지 위임. 앱이 재시작 시점을 정하는 데 쓴다. */
+  isPlayerDead(): boolean {
+    return this.game.isPlayerDead();
   }
 
   /** 루프와 입력 리스너를 멈춘다. */

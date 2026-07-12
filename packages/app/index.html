@@ -5,25 +5,135 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Arcade — 결정론적 웹 멀티 아케이드</title>
     <style>
-      /* 게임 화면만 보이는 최소 스타일. 메뉴/로비 UI는 이후 단계. */
-      html,
-      body {
-        margin: 0;
-        height: 100%;
-        background: #1a1a1a;
+      :root {
+        --bg: #1a1a1a;
+        --panel: #22242a;
+        --ink: #f1faee;
+        --muted: #9aa0a6;
+        --accent: #e63946;
+        --accent2: #457b9d;
+        --field: #2d2f36;
       }
-      body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      #game {
-        background: #f1faee; /* 밝은 배경 위 빨간 원이 잘 보이도록 */
-      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+        font-family: system-ui, "Segoe UI", sans-serif; }
+      body { display: flex; align-items: center; justify-content: center; }
+
+      /* 캔버스와 UI 오버레이를 겹치는 800x600 무대. */
+      #stage { position: relative; width: 800px; height: 600px; }
+      #game { display: block; width: 800px; height: 600px; background: #f1faee; }
+
+      #ui { position: absolute; inset: 0; }
+      .screen { position: absolute; inset: 0; display: none;
+        align-items: center; justify-content: center; }
+      .screen.active { display: flex; }
+      /* 플레이 중(오버레이 전부 비활성)에는 캔버스만 보인다. */
+
+      .card { background: var(--panel); padding: 32px 36px; border-radius: 14px;
+        min-width: 340px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+      .card h1 { margin: 0 0 4px; font-size: 22px; }
+      .card h2 { margin: 0 0 18px; font-size: 15px; font-weight: 500; color: var(--muted); }
+      .card .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+
+      input { width: 100%; padding: 11px 13px; margin: 6px 0 14px; border: none;
+        border-radius: 8px; background: var(--field); color: var(--ink); font-size: 15px; }
+      button { padding: 11px 16px; border: none; border-radius: 8px; cursor: pointer;
+        font-size: 15px; font-weight: 600; background: var(--accent); color: #fff; }
+      button.secondary { background: transparent; color: var(--muted); border: 1px solid #3a3d44; }
+      button:disabled { opacity: .4; cursor: not-allowed; }
+      .row { display: flex; gap: 10px; }
+      .row > * { flex: 1; }
+      .stack { display: flex; flex-direction: column; gap: 10px; }
+      .divider { text-align: center; color: var(--muted); font-size: 12px; margin: 14px 0; }
+
+      #ready-code { font-size: 30px; letter-spacing: 6px; font-weight: 700;
+        text-align: center; color: var(--accent2); margin: 4px 0 14px; }
+      ul.players { list-style: none; padding: 0; margin: 0 0 16px; max-height: 220px; overflow-y: auto; }
+      ul.players li { padding: 9px 12px; background: var(--field); border-radius: 8px;
+        margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+      .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--accent2); }
+      .badge.you { background: #2a9d8f; }
+
+      #countdown-num { font-size: 120px; font-weight: 800; color: var(--accent);
+        text-shadow: 0 6px 30px rgba(230,57,70,.4); }
+
+      table.ranks { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+      table.ranks td { padding: 8px 10px; border-bottom: 1px solid #34363d; }
+      table.ranks tr.self { background: rgba(42,157,143,.15); }
+      table.ranks td.rank { width: 40px; color: var(--muted); font-weight: 700; }
+      table.ranks td.time { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+      #error-toast { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+        background: #b00020; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 14px;
+        opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90%; }
+      #error-toast.show { opacity: 1; }
     </style>
   </head>
   <body>
-    <canvas id="game"></canvas>
+    <div id="stage">
+      <canvas id="game"></canvas>
+      <div id="ui">
+        <!-- 닉네임 -->
+        <section id="screen-nickname" class="screen active">
+          <div class="card">
+            <h1>죽림고수</h1>
+            <h2>사방에서 날아오는 화살을 피해라</h2>
+            <input id="nick-input" maxlength="12" placeholder="닉네임 (비우면 랜덤)" />
+            <button id="nick-go" style="width:100%">시작</button>
+          </div>
+        </section>
+
+        <!-- 로비: 방 만들기 / 코드 입장 -->
+        <section id="screen-lobby" class="screen">
+          <div class="card">
+            <h1>로비</h1>
+            <h2 id="lobby-hello"></h2>
+            <button id="create-btn" style="width:100%">방 만들기</button>
+            <div class="divider">— 또는 코드로 입장 —</div>
+            <div class="row">
+              <input id="join-code" maxlength="4" placeholder="코드 4자리" style="text-transform:uppercase" />
+              <button id="join-btn" style="flex:0 0 auto">입장</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 대기실 -->
+        <section id="screen-ready" class="screen">
+          <div class="card">
+            <h1>대기실</h1>
+            <h2>방 코드</h2>
+            <div id="ready-code">----</div>
+            <ul class="players" id="ready-players"></ul>
+            <div class="stack">
+              <button id="start-btn" style="width:100%">시작</button>
+              <button id="leave-btn" class="secondary" style="width:100%">나가기</button>
+            </div>
+            <p class="hint" id="ready-hint"></p>
+          </div>
+        </section>
+
+        <!-- 카운트다운 -->
+        <section id="screen-countdown" class="screen">
+          <div id="countdown-num">3</div>
+        </section>
+
+        <!-- 결과 -->
+        <section id="screen-result" class="screen">
+          <div class="card">
+            <h1>순위표</h1>
+            <h2 id="result-sub"></h2>
+            <table class="ranks"><tbody id="result-body"></tbody></table>
+            <div class="stack">
+              <button id="again-btn" style="width:100%">다시 하기</button>
+              <button id="result-leave-btn" class="secondary" style="width:100%">로비로</button>
+            </div>
+            <p class="hint" id="result-hint"></p>
+          </div>
+        </section>
+
+        <div id="error-toast"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

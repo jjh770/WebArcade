@@ -36,6 +36,35 @@ export class Room {
     this.members.push(m);
   }
 
+  /** 판 시작: 시드 배포 + 상태 전환 + 모든 멤버 생존 상태로 리셋(새 시드 재시작 포함). */
+  startGame(seed: number): void {
+    this.seed = seed;
+    this.state = "playing";
+    for (const m of this.members) {
+      m.alive = true;
+      m.survivalTicks = 0;
+    }
+  }
+
+  /** 로컬 사망 신호 반영. 해당 멤버가 있으면 true. */
+  markDied(id: string, survivalTicks: number): boolean {
+    const m = this.members.find((x) => x.id === id);
+    if (!m || !m.alive) return false;
+    m.alive = false;
+    m.survivalTicks = survivalTicks;
+    return true;
+  }
+
+  /** 판 종료. 살아남은 사람(승자)의 생존시간을 "마지막 사망 시점"으로 근사해 둔다
+   *  (승자는 그때까지 살아있었으므로 최소 그만큼 버틴 것 — 정확한 표기는 UI 단계에서). */
+  finish(): void {
+    const maxDead = this.members.reduce((mx, m) => (m.alive ? mx : Math.max(mx, m.survivalTicks)), 0);
+    for (const m of this.members) {
+      if (m.alive) m.survivalTicks = maxDead;
+    }
+    this.state = "finished";
+  }
+
   /** 반환값: 호스트가 바뀌었으면 새 호스트 id, 아니면 null. */
   removeMember(id: string): { hostChanged: string | null } {
     const wasHost = this.hostId === id;

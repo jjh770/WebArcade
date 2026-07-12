@@ -18,6 +18,7 @@ export type ClientMessage =
 
 /** 서버 → 클라이언트 */
 export type ServerMessage =
+  | { type: "welcome"; id: string } // 접속 직후 자기 id 통지(호스트 판별·자기 행 강조용)
   | { type: "room_state"; code: string; players: PlayerPublic[]; hostId: string }
   | { type: "game_start"; seed: number; startTime: number; gameId: string }
   | { type: "ranking_update"; alive: number; ranks: RankEntry[] }
