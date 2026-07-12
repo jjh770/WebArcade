@@ -16,6 +16,10 @@ export const jungnimConfig = {
   /** 순위 방향: 생존시간이 길수록 좋음. */
   scoreDirection: "higher" as ScoreDirection,
 
+  /** 화면 크기(px). 플레이어 초기 위치·경계 클램프 기준. */
+  screenWidth: 800,
+  screenHeight: 600,
+
   /** 플레이어 이동 속도(px/tick). */
   playerSpeed: 3,
 

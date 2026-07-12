@@ -4,6 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Arcade — 결정론적 웹 멀티 아케이드</title>
+    <style>
+      /* 게임 화면만 보이는 최소 스타일. 메뉴/로비 UI는 이후 단계. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #1a1a1a;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #game {
+        background: #f1faee; /* 밝은 배경 위 빨간 원이 잘 보이도록 */
+      }
+    </style>
   </head>
   <body>
     <canvas id="game"></canvas>

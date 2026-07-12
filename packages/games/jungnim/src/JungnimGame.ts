@@ -27,13 +27,16 @@ export class JungnimGame implements IGame {
 
   init(seed: number): void {
     // 결정론 불변식: 게임 로직 난수는 반드시 이 시드 RNG에서만.
+    // (rng 자체는 여기서 위치를 뽑는 데 쓰이지 않지만, ArrowSpawner가 이후 소유한다.)
     this.rng = new SeededRNG(seed);
+    // rng는 지금은 소비하지 않는다 — ArrowSpawner가 이후 소유·소비한다.
+    // 필드를 보관만 하므로 미사용 경고를 억제(update의 `void difficulty`와 동일 관용구).
+    void this.rng;
     this.survivalTicks = 0;
     this.dead = false;
-    // 뼈대 단계 확인용: 첫 난수로 플레이어 초기 위치를 결정론적으로 배치.
-    // (구현 단계에서 ArrowSpawner/ArrowPool 초기화로 확장)
-    this.px = this.rng.range(100, 300);
-    this.py = this.rng.range(100, 300);
+    // 원작 죽림고수: 플레이어는 화면 중앙에서 시작.
+    this.px = jungnimConfig.screenWidth / 2;
+    this.py = jungnimConfig.screenHeight / 2;
   }
 
   update(tick: number, input: InputState): void {
@@ -49,6 +52,11 @@ export class JungnimGame implements IGame {
     if (input.right) this.px += s;
     if (input.up) this.py -= s;
     if (input.down) this.py += s;
+
+    // 화면 경계 클램프: 원 전체가 화면 안에 있도록 반지름만큼 여백을 둔다.
+    const r = jungnimConfig.playerRadius;
+    this.px = clamp(this.px, r, jungnimConfig.screenWidth - r);
+    this.py = clamp(this.py, r, jungnimConfig.screenHeight - r);
 
     // TODO: 화살 스폰/이동, 로컬 피격 판정 → this.dead 세팅
     this.survivalTicks = tick;
@@ -72,4 +80,9 @@ export class JungnimGame implements IGame {
     this.survivalTicks = 0;
     this.dead = false;
   }
+}
+
+/** 값을 [min, max]로 제한. 순수 함수(결정론과 무관하지만 부수효과 없음 선호). */
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
 }
