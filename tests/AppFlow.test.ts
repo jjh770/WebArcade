@@ -41,3 +41,42 @@ describe("앱 FSM", () => {
     expect(flow.state).toBe("result");
   });
 });
+
+describe("연습(싱글) 모드 흐름", () => {
+  const toLobby: readonly AppEvent[] = ["nickname_submit", "open_games", "select_game"];
+
+  it("로비에서 방·카운트다운을 건너뛰고 바로 플레이한다", () => {
+    const flow = createFlow();
+    advance(flow, [...toLobby, "start_solo"]);
+    expect(flow.state).toBe("playing");
+  });
+
+  it("결과에서 새 라운드를 바로 시작할 수 있다", () => {
+    const flow = createFlow();
+    advance(flow, [...toLobby, "start_solo", "game_over"]);
+    expect(flow.state).toBe("result");
+    flow.transition("start_solo");
+    expect(flow.state).toBe("playing");
+  });
+
+  it("결과에서 로비로 나갈 수 있다", () => {
+    const flow = createFlow();
+    advance(flow, [...toLobby, "start_solo", "game_over", "leave_room"]);
+    expect(flow.state).toBe("lobby");
+  });
+
+  it("플레이 중에는 연습을 다시 시작할 수 없다", () => {
+    // 진행 중인 라운드를 버튼 하나로 갈아엎지 못하게 막는다.
+    const flow = createFlow();
+    advance(flow, [...toLobby, "start_solo"]);
+    expect(flow.can("start_solo")).toBe(false);
+  });
+
+  it("대기실(멀티)에서는 연습으로 새지 않는다", () => {
+    // 방에 사람들을 모아둔 채 혼자 연습으로 빠지면 방이 깨진다.
+    const flow = createFlow();
+    advance(flow, [...toLobby, "room_joined"]);
+    expect(flow.state).toBe("ready");
+    expect(flow.can("start_solo")).toBe(false);
+  });
+});

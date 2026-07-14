@@ -58,6 +58,11 @@ let myId: string | null = null;
 let myNickname = "";
 let amHost = false;
 let finalRanks: readonly RankEntry[] = [];
+/** 연습(싱글) 모드 여부. 서버를 한 번도 거치지 않는 라운드다 —
+ *  사망·결과·재시작을 전부 로컬에서 처리하고, 네트워크 메시지를 보내지 않는다. */
+let soloMode = false;
+/** 연습 결과표에서 "나"를 가리키는 가짜 id. 서버가 준 실제 id와 절대 겹치지 않게 둔다. */
+const SOLO_ID = "solo";
 
 function transition(event: AppEvent): boolean {
   if (!appState.can(event)) return false;
@@ -75,6 +80,8 @@ function onLocalDeath(): void {
   if (appState.state !== "playing") return;
   const score = session.getScore();
   if (score === null) return;
+  // 연습은 죽는 순간이 곧 끝이다. 관전할 남도, 기다릴 서버도 없다.
+  if (soloMode) return showSoloResult(score);
   net.send({ type: "player_died", survivalTicks: score });
   transition("local_death");
 }
@@ -140,7 +147,7 @@ byId("menu-start").addEventListener("click", () => {
   transition("open_games");
 });
 byId("menu-options").addEventListener("click", () => toast("옵션은 준비 중입니다."));
-byId("menu-credits").addEventListener("click", () => toast("Arcade — 결정론 동기화 웹 멀티 아케이드 프레임워크"));
+byId("menu-credits").addEventListener("click", () => toast("Arcade — 웹 멀티 아케이드 게임"));
 
 function navTo(target: string | undefined): void {
   const event = target === "notice" ? "nav_notice"
@@ -166,6 +173,40 @@ function selectGame(id: GameId): void {
   transition("select_game");
 }
 
+/* ---- 연습(싱글) 모드 -------------------------------------------------------
+   서버를 전혀 쓰지 않는다. 시드를 로컬에서 뽑고, 지금 이 순간을 tick 0으로 삼는다.
+   게임 코드는 멀티와 완전히 동일하다 — 결정론 코어가 시드만 다르게 돌 뿐이다.
+   덕분에 서버가 자고 있어도, 친구가 없어도 게임을 할 수 있다. */
+
+/** 라운드 시드. 게임 로직이 아니라 "시드 고르기"라 Math.random을 써도 결정론과 무관하다
+ *  (서버도 같은 일을 한다). 이 시드가 정해진 뒤로는 모든 것이 시드와 tick에서만 파생된다. */
+function randomSeed(): number {
+  return Math.floor(Math.random() * 0xffffffff) >>> 0;
+}
+
+function startSolo(): void {
+  if (!selectedGameId) return;
+  if (!transition("start_solo")) return;
+  soloMode = true;
+  finalRanks = [];
+  session.setRoster([], null); // 남이 없다 → peer도, 관전 뷰도 없다.
+  setAliveHud("연습");
+  if (!session.start(selectedGameId, randomSeed(), performance.now())) {
+    toast(`게임을 시작할 수 없습니다: ${selectedGameId}`);
+  }
+}
+
+function showSoloResult(score: number): void {
+  if (!transition("game_over")) return;
+  finalRanks = [{ id: SOLO_ID, rank: 1, nickname: myNickname, survivalTicks: score }];
+  // amHost=true로 넘겨 "다시 하기"를 보이게 한다(연습은 언제나 내가 방장이다).
+  renderResult(finalRanks, SOLO_ID, true);
+  setAliveHud("", true);
+  session.stopRound();
+}
+
+byId("solo-btn").addEventListener("click", startSolo);
+
 byId("create-btn").addEventListener("click", () => {
   if (!selectedGameId || !ensureNetwork()) return;
   net.send({ type: "create_room", gameId: selectedGameId, nickname: myNickname });
@@ -184,7 +225,8 @@ byId("leave-btn").addEventListener("click", leaveRoom);
 byId("result-leave-btn").addEventListener("click", leaveRoom);
 
 function leaveRoom(): void {
-  net.send({ type: "leave_room" });
+  if (!soloMode) net.send({ type: "leave_room" }); // 연습은 애초에 방이 없다.
+  soloMode = false;
   session.leaveRoom();
   finalRanks = [];
   location.hash = "";
@@ -231,7 +273,7 @@ byId("death-watch-btn").addEventListener("click", () => {
 });
 
 window.setInterval(() => {
-  if (appState.state !== "playing") return;
+  if (soloMode || appState.state !== "playing") return; // 연습: 내 위치를 볼 남이 없다.
   const position = session.getPosition();
   if (position) net.send({ type: "player_state", px: position.x, py: position.y });
 }, POSITION_SEND_MS);
@@ -245,7 +287,11 @@ function showResult(ranks: readonly RankEntry[]): void {
   transition("game_over");
 }
 
-byId("again-btn").addEventListener("click", () => net.send({ type: "return_to_ready" }));
+byId("again-btn").addEventListener("click", () => {
+  // 연습: 대기실이 없으므로 새 시드로 곧장 다시 시작한다. 멀티: 호스트가 전원을 대기실로.
+  if (soloMode) return startSolo();
+  net.send({ type: "return_to_ready" });
+});
 
 const hashCode = location.hash.slice(1).toUpperCase();
 let autoJoinPending = /^[A-HJ-NP-Z]{4}$/.test(hashCode);
