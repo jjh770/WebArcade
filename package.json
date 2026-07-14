@@ -16,9 +16,11 @@
     "build": "tsc -b && npm run build --workspace @arcade/app",
     "build:server": "npm run build --workspace @arcade/server",
     "typecheck": "tsc -b",
+    "test": "vitest run",
     "preview": "npm run preview --workspace @arcade/app"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   }
 }

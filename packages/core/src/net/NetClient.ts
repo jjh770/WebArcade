@@ -7,17 +7,29 @@
    ============================================================ */
 
 import type { ClientMessage, ServerMessage } from "@arcade/shared";
+import {
+  selectBestClockAnchor,
+  serverNowFromAnchor,
+  serverTimeToPerformance as convertServerTimeToPerformance,
+  type ClockAnchor,
+  type ClockSample,
+} from "../ClockSync";
 
 export class NetClient {
   private ws: WebSocket | null = null;
   private readonly handlers = new Set<(msg: ServerMessage) => void>();
+  private readonly syncRequests = new Map<string, { sentAt: number; resolve: (sample: ClockSample) => void; reject: (error: Error) => void; timeout: number }>();
+  private syncSequence = 0;
+  private clockAnchor: ClockAnchor | null = null;
 
   /** 서버에 연결. open되면 resolve, 실패하면 reject. */
   connect(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(url);
       this.ws = ws;
-      ws.onopen = () => resolve();
+      ws.onopen = () => {
+        this.synchronizeClock().then(resolve, reject);
+      };
       ws.onerror = () => reject(new Error(`WebSocket 연결 실패: ${url}`));
       ws.onmessage = (ev) => {
         let msg: ServerMessage;
@@ -25,6 +37,10 @@ export class NetClient {
           msg = JSON.parse(String(ev.data)) as ServerMessage;
         } catch {
           return; // 파싱 불가 메시지는 무시.
+        }
+        if (msg.type === "time_sync_response") {
+          this.handleTimeSync(msg.requestId, msg.serverTime);
+          return;
         }
         for (const h of this.handlers) h(msg);
       };
@@ -38,6 +54,20 @@ export class NetClient {
     }
   }
 
+  get isClockSynchronized(): boolean {
+    return this.clockAnchor !== null;
+  }
+
+  getServerNow(): number {
+    if (!this.clockAnchor) throw new Error("서버 시각이 아직 동기화되지 않았습니다.");
+    return serverNowFromAnchor(this.clockAnchor, performance.now());
+  }
+
+  serverTimeToPerformance(serverTime: number): number {
+    if (!this.clockAnchor) throw new Error("서버 시각이 아직 동기화되지 않았습니다.");
+    return convertServerTimeToPerformance(this.clockAnchor, serverTime);
+  }
+
   /** 서버 메시지 구독. 반환된 함수를 호출하면 구독 해제. */
   onMessage(handler: (msg: ServerMessage) => void): () => void {
     this.handlers.add(handler);
@@ -48,5 +78,44 @@ export class NetClient {
     this.ws?.close();
     this.ws = null;
     this.handlers.clear();
+    this.clockAnchor = null;
+    for (const pending of this.syncRequests.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error("WebSocket 연결이 종료되었습니다."));
+    }
+    this.syncRequests.clear();
+  }
+
+
+  private async synchronizeClock(): Promise<void> {
+    const samples = await Promise.allSettled(Array.from({ length: 5 }, () => this.sampleClock()));
+    const successful = samples
+      .filter((result): result is PromiseFulfilledResult<ClockSample> => result.status === "fulfilled")
+      .map((result) => result.value);
+    if (successful.length === 0) throw new Error("서버 시각 동기화에 실패했습니다.");
+    this.clockAnchor = selectBestClockAnchor(successful);
+  }
+
+  private sampleClock(): Promise<ClockSample> {
+    return new Promise((resolve, reject) => {
+      const requestId = `clock-${++this.syncSequence}`;
+      const sentAt = performance.now();
+      const timeout = window.setTimeout(() => {
+        this.syncRequests.delete(requestId);
+        reject(new Error("서버 시각 응답 시간 초과"));
+      }, 1000);
+      this.syncRequests.set(requestId, { sentAt, resolve, reject, timeout });
+      this.send({ type: "time_sync_request", requestId });
+    });
+  }
+
+  private handleTimeSync(requestId: string, serverTime: number): void {
+    const pending = this.syncRequests.get(requestId);
+    if (!pending) return;
+    this.syncRequests.delete(requestId);
+    clearTimeout(pending.timeout);
+    const receivedAt = performance.now();
+    const rtt = receivedAt - pending.sentAt;
+    pending.resolve({ rtt, receivedAt, serverTimeAtReceipt: serverTime + rtt / 2 });
   }
 }

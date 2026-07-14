@@ -37,6 +37,7 @@ export class GameLoop {
   ) {}
 
   start(): void {
+    if (this.running) return;
     this.running = true;
     this.rafId = requestAnimationFrame(this.rafLoop);
     // 백그라운드에서 rAF가 멈춰도 계속 전진시키는 폴백(렌더는 rAF만 담당).
@@ -51,9 +52,13 @@ export class GameLoop {
   }
 
   /** 새 판 시작: tick=0, 실시간 기준점(epoch) 리셋. */
-  resetTick(): void {
+  resetTick(epoch = performance.now()): void {
     this.tick = 0;
-    this.epoch = performance.now();
+    this.epoch = epoch;
+  }
+
+  get currentTick(): number {
+    return this.tick;
   }
 
   /** 보일 때: 매 rAF마다 따라잡고 렌더. rAF 체인은 여기서만 이어진다(중복 방지). */

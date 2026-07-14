@@ -35,7 +35,7 @@ export interface IGame {
   getPosition(): { x: number; y: number };
 
   /** 관전 대상(남)들의 현재 위치를 게임에 알린다. 게임은 이 정보로 각자의
-   *  로컬 전용 요소(예: 조준 화살)를 재구성해 renderSpectator에서 그린다.
+   *  로컬 전용 시각 요소를 근사해 renderSpectator에서 그린다.
    *  로컬 전용 요소가 없는 게임은 무시하면 된다. (잠정 IGame 확장) */
   syncPeers(peers: readonly PeerState[]): void;
 

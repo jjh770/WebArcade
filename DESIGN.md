@@ -7,8 +7,9 @@
 
 ## 0. 한 문장 요약
 
-같은 시드로 모두가 같은 세계(화살 패턴 등)를 각자 화면에서 겪고, 네트워크로는 결과(생존/사망)만 오가는
-**결정론적 동기화 기반 웹 멀티 아케이드 프레임워크**. 그 위에 게임을 여러 개 얹는다. 첫 게임은 "죽림고수"(화살 피하기).
+같은 시드로 모두가 같은 세계(화살 패턴 등)를 각자 화면에서 겪고, 게임 판정은 결과(생존/사망)만 동기화하는
+**결정론적 동기화 기반 웹 멀티 아케이드 프레임워크**. 관전 품질을 위해 플레이어 위치는 10Hz 스냅샷으로 별도 중계한다.
+그 위에 게임을 여러 개 얹는다. 첫 게임은 "죽림고수"(화살 피하기).
 
 핵심 설계 철학: **설계 판단은 사람이, 반복 검증은 AI가.**
 
@@ -45,7 +46,8 @@
 3. **난이도·스폰 등 모든 진행은 tick의 함수.** `Date.now()`로 난이도를 올리지 않는다. 예: `difficulty = floor(tick / 300)`.
 4. **판정은 로컬, 동기화는 결과만.** 피격 판정은 각 클라이언트가 자기 화면에서 내린다. 부동소수점 완전 결정론까지
    갈 필요 없음 — 화살 패턴만 시각적으로 동일하면 충분. 네트워크로는 "죽음/생존시간"만 전송.
-5. **death spiral 방지.** 루프에서 `delta > 250ms`면 클램프한다(탭 전환 후 프리즈 방지).
+5. **실시간 epoch 기반 따라잡기.** tick은 예약 시작 시각 이후 흐른 실시간에서 계산한다. 백그라운드에서
+   놓친 tick은 한 번에 최대 300개씩 여러 호출에 나눠 따라잡아 AFK로 월드가 뒤처지거나 UI가 오래 멈추지 않게 한다.
 
 > "어디까지 결정론으로 맞추고 어디부터 로컬에 맡길지 선을 긋는" 것이 핵심 설계 판단 지점이다.
 
@@ -77,7 +79,7 @@ arcade-framework/
 │  ├─ core/                # 엔진 — 게임을 모름
 │  │  ├─ GameLoop.ts       # 고정 타임스텝 루프
 │  │  ├─ SeededRNG.ts      # mulberry32 시드 PRNG
-│  │  ├─ GameStateMachine.ts
+│  │  ├─ StateMachine.ts   # 게임을 모르는 범용 FSM
 │  │  ├─ GameRunner.ts     # IGame을 받아 구동하는 오케스트레이터
 │  │  ├─ net/NetClient.ts
 │  │  ├─ render/
@@ -108,11 +110,15 @@ export interface IGame {
   init(seed: number): void;                       // 시드로 결정론 초기화
   update(tick: number, input: InputState): void;  // 고정 스텝 전진
   render(r: IRenderer, alpha: number): void;       // 자기 렌더
+  renderSpectator(r: IRenderer, target: SpectateTarget): void;
   isPlayerDead(): boolean;                         // 로컬 사망 판정
+  getPosition(): { x: number; y: number };         // 관전 위치 전송
+  syncPeers(peers: readonly PeerState[]): void;    // 관전 위치 반영
   getScore(): number;                              // 순위 기준
-  reset(): void;                                   // 재시작용
 }
 ```
+
+재시작은 `init(newSeed)` 재호출로 통일한다. 관전 위치와 개인 조준 화살은 시각적 근사이며 판정에는 사용하지 않는다.
 
 **잠정적으로 열어둘 지점** (두 번째 게임에서 실제로 부딪히면 넓힌다. 상상으로 미리 넓히지 않는다):
 - ~~`getScore()`의 우열 방향~~ → **해소됨.** `ScoreDirection`('higher'|'lower') 타입으로 분리하여
@@ -136,11 +142,12 @@ export interface IGame {
 2. **메인 · 게임 목록**: 게임 시작 / 옵션 / 크레딧. "게임 시작" → 게임 목록(GameRegistry에서 자동 생성).
 3. **로비**: 게임 선택 후 진입. 실시간 대전 찾기 / 방 만들기 / 방 코드 입력.
    - **실시간 대전 찾기는 나중에 구현** (매치메이킹은 별도 서브시스템. 코드 기반 방을 먼저 완성).
-4. **방 대기실 (Ready)**: 방 만들기 → 코드 발급(I·O 제외 4자리). 코드로 참가. 인원 제한 없음(일단).
+4. **방 대기실 (Ready)**: 방 만들기 → 코드 발급(I·O 제외 4자리). 코드로 참가. v1 최대 32명.
    - 준비 버튼 없음. **호스트가 시작 버튼을 누르면 즉시 시작** (TETR.IO 방식).
    - 호스트가 나가면 **남은 사람 중 가장 먼저 들어온 사람**에게 이양(서버가 입장 순서 리스트로 관리).
-5. **시드 배포 · 카운트다운**: 호스트 시작 → 서버가 `game_start(seed, startTime)` 브로드캐스트.
-   각 클라는 자기 시계로 `startTime`(미래 시각)까지 카운트다운 후 동시에 `tick=0`으로 시작.
+5. **시드 배포 · 카운트다운**: 연결 시 5회 ping/pong 중 RTT가 가장 낮은 표본으로 서버 시각을 보정한다.
+   호스트 시작 → 서버가 `game_start(seed, startTime)` 브로드캐스트. 각 클라는 보정된 시각과 예약 epoch로
+   카운트다운하고, 늦은 콜백도 예약 시각부터 경과한 tick을 따라잡는다.
 6. **플레이**: 본인 화면 크게 + 우측에 무작위 생존자 최대 3명.
    - 화살은 각 클라가 시드로 로컬 생성. 피격 판정도 로컬.
    - 관전 대상이 죽으면 다른 무작위 생존자로 교체.
@@ -149,37 +156,40 @@ export interface IGame {
 7. **본인 사망 시 선택지**:
    - (a) 결과창 유지 — 메인 자리에 내 결과, 우측에 관전 대상.
    - (b) 관전 — 메인 자리도 남의 화면. 관전 1명 + 관전 최대 3명(1+3→1+1 축소 규칙 적용).
-8. **게임 종료**: 최후 1인 또는 전원 사망 시. **상태와 무관하게 그 자리에서 순위표 표시**
+8. **게임 종료**: 전원 사망 시. **상태와 무관하게 그 자리에서 순위표 표시**
    (관전 중이면 관전 화면 위에, 생존자면 플레이 화면 위에. "본인 화면 복귀" 없음).
    - 순위표 = **등수 + 닉네임 + 생존시간** (생존시간 긴 순).
 9. **순위표 다음**: 같은 방 다시 하기(새 시드로 재시작 → 대기실) / 로비로 가기(방 나가기).
 
-> **관전 시스템 전체는 로컬 판단이다.** 누굴 보여줄지, 교체할지, 레이아웃 축소는 전부 내 클라이언트가 결정한다.
-> 서버는 관전이 뭔지도 모른다. 각 플레이어의 위치·생존 여부는 이미 받고 있고, 화살은 시드로 이미 안다.
-> → 관전 기능이 아무리 복잡해도 **네트워크 부담 0**.
+> **관전 대상 선택과 레이아웃은 로컬 판단이다.** 서버는 게임 화면을 시뮬레이션하지 않고, 각 클라이언트가
+> 보낸 최신 위치를 방 단위 10Hz `peer_snapshot`으로 묶어 중계한다. 공통 화살은 seed/tick으로 정확히
+> 재현하고, 원격 아바타와 개인 조준 화살은 위치 스냅샷을 보간한 시각적 근사다.
 
 ---
 
 ## 5. 네트워크 프로토콜 (shared/protocol.ts)
 
 ```
-클라 → 서버:  join_room(code, nickname) · create_room(gameId, nickname)
-             player_ready · player_died(survivalTime) · leave_room
-서버 → 클라:  room_state(players, hostId) · game_start(seed, startTime, gameId)
+클라 → 서버:  join_room(code, nickname) · create_room(gameId, nickname) · start_game
+             time_sync_request · player_state(px, py) · player_died(survivalTicks)
+             return_to_ready · leave_room
+서버 → 클라:  welcome(id) · time_sync_response · room_state(state, players, hostId)
+             game_start(seed, startTime, gameId) · peer_snapshot(peers) · peer_died(id)
              ranking_update(alive, ranks) · game_over(finalRanks) · host_changed(newHostId)
 ```
 
 - 서버는 게임 내용을 모른다. `gameId`는 문자열로 중계할 뿐.
-- 게임당 플레이어 한 명이 보내는 실질 메시지는 극소수. 화살은 네트워크를 한 번도 타지 않는다.
-- 이 구조 덕에 "인원 확장이 거의 공짜" → "최대한 많이" 목표가 성립.
+- 화살은 네트워크를 한 번도 타지 않는다. 관전 위치만 플레이어당 10Hz로 보내며 서버가 방별 스냅샷으로 묶는다.
+- v1은 최대 32명으로 검증한다. 그 이상 확장은 측정 후 전송 빈도·압축·관전 정책을 다시 결정한다.
 
 ---
 
 ## 6. 서버 — 방 관리 (결정론 덕에 단순함)
 
-서버가 들고 있는 것: 방 코드, 접속자(입장 순서 리스트), 상태, 시드, gameId. 그게 전부.
+서버가 들고 있는 것: 방 코드, 접속자(입장 순서 리스트), 상태, 시드, 시작 시각, gameId, 최신 관전 위치.
 
-- `Room`: 접속자를 **순서 있는 리스트**로 관리(호스트 이양의 근거). 진행 중이면 입장 거절.
+- `Room`: 접속자를 **순서 있는 리스트**로 관리(호스트 이양의 근거). 최대 32명, 진행 중이면 입장 거절.
+- 진행 중 연결 종료는 서버 경과 tick의 사망으로 기록하고 해당 라운드 최종 순위에는 남긴다.
 - `RoomManager`: 코드 생성 시 I·O 제외한 문자셋 사용. `start()`에서 시드 + `startTime = now + 3000` 배포.
 - `RankingService`: 생존 신호 수집, 순위 계산, `ranking_update` 중계.
 

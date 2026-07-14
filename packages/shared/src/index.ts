@@ -2,7 +2,15 @@
 
 export type { IGame } from "./IGame";
 export type { IRenderer } from "./IRenderer";
-export type { InputState, ScoreDirection, PlayerPublic, SpectateTarget, PeerState } from "./types";
+export type {
+  InputState,
+  ScoreDirection,
+  RoomState,
+  PlayerPublic,
+  SpectateTarget,
+  PeerState,
+  PeerSnapshot,
+} from "./types";
 export type {
   ClientMessage,
   ServerMessage,

@@ -41,6 +41,7 @@
         background: var(--bg); opacity: 0; visibility: hidden; pointer-events: none;
         transition: opacity .28s ease, visibility .28s; }
       .screen.active { opacity: 1; visibility: visible; pointer-events: auto; }
+      .screen.play-overlay { background: rgba(26, 26, 26, .62); }
       @keyframes cardIn { from { opacity: 0; transform: translateY(12px) scale(.97); }
         to { opacity: 1; transform: none; } }
       .screen.active .card { animation: cardIn .34s cubic-bezier(.2,.7,.2,1) both; }
@@ -236,7 +237,19 @@
         </section>
 
         <!-- 결과 -->
-        <section id="screen-result" class="screen">
+        <section id="screen-death" class="screen play-overlay">
+          <div class="card">
+            <h1>사망했습니다</h1>
+            <h2>내 결과를 유지하거나 생존자를 관전할 수 있습니다.</h2>
+            <div class="stack">
+              <button id="death-stay-btn" style="width:100%">내 결과 유지</button>
+              <button id="death-watch-btn" class="secondary" style="width:100%">관전하기</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 최종 결과: 마지막 플레이 프레임 위에 표시 -->
+        <section id="screen-result" class="screen play-overlay">
           <div class="card">
             <h1>순위표</h1>
             <h2 id="result-sub"></h2>

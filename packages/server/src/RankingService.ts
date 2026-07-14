@@ -10,7 +10,7 @@
    ============================================================ */
 
 import type { RankEntry } from "@arcade/shared";
-import type { Member } from "./Room";
+import type { Member } from "./Room.js";
 
 export class RankingService {
   static computeRanks(members: readonly Member[]): RankEntry[] {
@@ -19,6 +19,7 @@ export class RankingService {
       return b.survivalTicks - a.survivalTicks; // 오래 버틴 순
     });
     return sorted.map((m, i) => ({
+      id: m.id,
       rank: i + 1,
       nickname: m.nickname,
       survivalTicks: m.survivalTicks,

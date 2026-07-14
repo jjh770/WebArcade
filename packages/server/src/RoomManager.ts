@@ -1,24 +1,17 @@
-/* ============================================================
-   RoomManager — 방 생성·조회·삭제
-   ------------------------------------------------------------
-   코드 문자셋에서 I, O를 제외한다(1·0과 혼동 방지 — TETR.IO 방식).
-   ============================================================ */
+import { randomInt } from "node:crypto";
+import { Room } from "./Room.js";
 
-import { Room } from "./Room";
-
-const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // I, O 제외
+const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const CODE_LENGTH = 4;
+export const ROOM_CAPACITY = 32;
 
 export class RoomManager {
-  private rooms = new Map<string, Room>();
+  private readonly rooms = new Map<string, Room>();
 
   createRoom(gameId: string): Room {
     let code: string;
-    do {
-      code = this.generateCode();
-    } while (this.rooms.has(code));
-
-    const room = new Room(code, gameId);
+    do code = this.generateCode(); while (this.rooms.has(code));
+    const room = new Room(code, gameId, ROOM_CAPACITY);
     this.rooms.set(code, room);
     return room;
   }
@@ -27,15 +20,17 @@ export class RoomManager {
     return this.rooms.get(code);
   }
 
+  getRooms(): readonly Room[] {
+    return [...this.rooms.values()];
+  }
+
   deleteRoom(code: string): void {
     this.rooms.delete(code);
   }
 
   private generateCode(): string {
     let code = "";
-    for (let i = 0; i < CODE_LENGTH; i++) {
-      code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-    }
+    for (let i = 0; i < CODE_LENGTH; i++) code += CODE_CHARS[randomInt(CODE_CHARS.length)];
     return code;
   }
 }

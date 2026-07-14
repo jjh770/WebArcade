@@ -37,5 +37,9 @@ export const GAME_REGISTRY = {
  *  존재하지 않는 게임 id를 참조하면 컴파일 타임에 걸린다. */
 export type GameId = keyof typeof GAME_REGISTRY;
 
+export function isGameId(value: string): value is GameId {
+  return value in GAME_REGISTRY;
+}
+
 /** 게임 선택 화면용 목록 (자동 생성). */
 export const gameList: GameEntry[] = Object.values(GAME_REGISTRY);

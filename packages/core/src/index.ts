@@ -6,4 +6,11 @@ export { GameRunner, type GameView } from "./GameRunner";
 export { InputManager } from "./input/InputManager";
 export { NetClient } from "./net/NetClient";
 export { Canvas2DRenderer } from "./render/Canvas2DRenderer";
-// GameStateMachine는 앱 플로우 단계에서 추가
+export { StateMachine, type TransitionTable, type StateTransition } from "./StateMachine";
+export {
+  selectBestClockAnchor,
+  serverNowFromAnchor,
+  serverTimeToPerformance,
+  type ClockAnchor,
+  type ClockSample,
+} from "./ClockSync";

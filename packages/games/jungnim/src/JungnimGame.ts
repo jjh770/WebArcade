@@ -4,15 +4,15 @@
    이 클래스는 games/ 안에만 존재한다. core는 이걸 모른다.
    core의 GameRunner는 IGame 인터페이스로만 이 게임을 구동한다.
 
-   진행 상황(DESIGN.md 7절): 싱글·멀티·관전까지 검증된 첫 게임. IGame만
-   구현하며 core는 이 클래스를 모른다. 두 번째 게임이 IGame 추상을 확정할 것.
+   진행 상황(DESIGN.md 7절): 싱글·멀티·관전 기반이 구현된 첫 게임. IGame만
+   구현하며 core는 이 클래스를 모른다. 실제 멀티 수용 검증 뒤 두 번째 게임이 IGame 추상을 확정한다.
 
    화살 구조(두 레이어 + 아바타):
    - 공통(common): 시드 기반, 모두가 동일. commonPool 하나. (관전자도 그대로 봄)
    - 개인(personal): "그 사람을 조준". 아바타(나 + 관전 대상 남들)마다 별도 풀.
      개인 스포너는 공유 personalSeed를 쓰므로 스폰 스케줄·패턴은 모두 같고,
      조준/출발점만 그 아바타의 위치에 의존한다 → 남의 위치만 알면 그 사람의
-     개인 화살을 재구성해 관전 화면에 그릴 수 있다. (DESIGN 관전 가시성)
+     개인 화살을 관전 화면에서 시각적으로 근사할 수 있다. (DESIGN 관전 가시성)
    ============================================================ */
 
 import type { IGame, IRenderer, InputState, SpectateTarget, PeerState } from "@arcade/shared";
@@ -29,11 +29,11 @@ const HUD_COLOR = "#1d3557";
 
 /** 개인 시드 = 공통 시드에서 파생(별도 스트림 보장). 값 자체는 임의의 큰 홀수 상수.
  *  ⚠️ 현재는 모든 플레이어가 같은 personalSeed → 개인 스폰 스케줄·패턴이 동일하고
- *  조준만 위치로 갈린다. 그래서 남의 위치만 알면 개인 화살을 재구성할 수 있다.
- *  멀티에서 플레이어별로 다르게 하려면 playerId를 섞고, 재구성 시에도 그 id가 필요. */
+ *  조준만 위치로 갈린다. 관전자는 원격 위치를 보간해 개인 화살을 근사한다.
+ *  멀티에서 플레이어별로 다르게 하려면 playerId를 섞고, 관전 계산에도 그 id가 필요하다. */
 const PERSONAL_SEED_SALT = 0x9e3779b9;
 
-/** 개인 화살을 재구성할 대상(나 또는 관전 대상 남).
+/** 개인 화살을 계산할 대상(나 또는 관전 대상 남).
  *  x,y = 실제 사용(렌더·스폰) 위치. tx,ty = 네트워크로 받은 목표 위치.
  *  관전 대상은 매 틱 x,y를 tx,ty로 부드럽게 당겨(ease) 끊김 없이 움직인다. */
 type Avatar = { x: number; y: number; tx: number; ty: number; pool: ArrowPool; spawner: PersonalSpawner };
@@ -80,7 +80,7 @@ export class JungnimGame implements IGame {
     this.commonSpawner.update(tick, this.commonPool);
     this.moveArrows(this.commonPool);
 
-    // 관전 대상(남)들: 네트워크 위치(tx,ty)로 부드럽게 당긴 뒤 개인 화살 재구성.
+    // 관전 대상(남)들: 네트워크 위치(tx,ty)로 부드럽게 당긴 뒤 개인 화살을 근사.
     // 위치가 ~10Hz라 매 틱 ease해야 점·화살이 끊기지 않는다.
     const s = jungnimConfig.spectateSmoothing;
     for (const peer of this.peers.values()) {
@@ -137,7 +137,7 @@ export class JungnimGame implements IGame {
     // 점·화살 모두 ease된 위치(peer.x,y)로 그려 부드럽게. 없으면 target 좌표 폴백.
     const dotX = peer ? peer.x : target.x;
     const dotY = peer ? peer.y : target.y;
-    if (peer) this.drawPool(r, peer.pool); // 그 사람의 개인(조준) 화살 재구성
+    if (peer) this.drawPool(r, peer.pool); // 그 사람의 개인(조준) 화살 시각 근사
     r.circle(dotX, dotY, jungnimConfig.playerRadius, PLAYER_COLOR);
     r.text(`관전: ${target.label}`, 12, 28, HUD_COLOR, 22);
   }

@@ -1,7 +1,7 @@
 # Arcade Framework — 웹 멀티 아케이드
 
-같은 시드로 모두가 같은 세계를 각자 화면에서 겪고, 네트워크로는 결과(생존/사망)만 오가는
-**결정론적 동기화 기반 웹 멀티 아케이드 프레임워크**. 그 위에 게임을 여러 개 얹는다.
+같은 시드로 모두가 같은 세계를 각자 화면에서 겪고, 판정 결과는 생존/사망으로 동기화하는
+**결정론적 동기화 기반 웹 멀티 아케이드 프레임워크**. 관전을 위해 위치는 10Hz 방 단위 스냅샷으로 중계한다.
 
 첫 게임은 **죽림고수**(사방에서 날아오는 화살 피하기). 최대한 많은 인원이 같은 화살 패턴을 각자
 화면에서 겪으며 누가 더 오래 버티는지 겨룬다.
@@ -36,6 +36,7 @@ packages/
 ```bash
 npm install
 npm run typecheck      # 전체 타입 검사 (tsc -b)
+npm test               # 결정론·FSM·방 흐름 회귀 테스트 (Vitest)
 npm run dev            # 클라이언트 개발 서버
 npm run dev:server     # WebSocket 서버 (별도 터미널)
 npm run build          # 클라이언트 정적 빌드
@@ -45,7 +46,8 @@ npm run build          # 클라이언트 정적 빌드
 
 이 프레임워크의 핵심: 새 게임은 **인터페이스 하나 구현 + 레지스트리 등록**이면 된다.
 
-1. `packages/games/<name>/` 생성, `IGame`을 구현하는 클래스 작성 (`init`/`update`/`render`/`isPlayerDead`/`getScore`/`reset`).
+1. `packages/games/<name>/` 생성, `IGame`을 구현하는 클래스 작성
+   (`init`/`update`/`render`/`renderSpectator`/`isPlayerDead`/`getPosition`/`syncPeers`/`getScore`).
 2. 게임 튜닝값은 `config.ts`에 데이터로 분리 (`scoreDirection` 포함).
 3. `packages/app/src/GameRegistry.ts`의 `GAME_REGISTRY`에 항목 추가 (factory 함수 포함).
 
@@ -64,3 +66,12 @@ npm run build          # 클라이언트 정적 빌드
 - `update()`는 고정 스텝만 (실측 deltaTime 안 받음)
 - 난이도·스폰은 `tick`의 함수 (`Date.now()` 금지)
 - 피격 판정은 로컬, 네트워크로는 생존/사망 결과만
+
+## 멀티·관전 기준
+
+- 방 상태는 범용 FSM으로 `Ready → Countdown → Playing → Dead/Watching → Result` 전이
+- 서버 시각을 5회 측정해 예약된 `startTime`부터 동일한 tick 진행
+- v1 방 최대 32명
+- 플레이어 위치는 10Hz로 보내고 서버가 `peer_snapshot`으로 일괄 중계
+- 공통 화살은 정확히 결정론 재현, 원격 이동·개인 화살은 관전용 시각적 근사
+- 게임은 전원 사망 시 종료, 호스트가 전원을 대기실로 돌린 뒤 새 시드로 재시작

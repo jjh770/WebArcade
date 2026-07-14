@@ -1,79 +1,156 @@
-/* ============================================================
-   Room — 방 하나의 상태
-   ------------------------------------------------------------
-   서버는 게임을 모른다. 방이 들고 있는 건 코드·접속자·상태·시드·gameId뿐.
-   화살은 각 클라가 시드로 로컬 생성하므로 서버는 관여하지 않는다.
+import type { PlayerPublic, RoomState } from "@arcade/shared";
 
-   접속자는 "입장 순서 리스트"로 관리한다 → 호스트가 나가면
-   남은 사람 중 가장 먼저 들어온 사람에게 이양(DESIGN.md 4절).
-   ============================================================ */
-
-export type RoomState = "waiting" | "countdown" | "playing" | "finished";
+const FIXED_STEP_MS = 1000 / 60;
 
 export type Member = {
   id: string;
   nickname: string;
   alive: boolean;
   survivalTicks: number;
+  connected: boolean;
+  px: number;
+  py: number;
+  hasPosition: boolean;
 };
 
+export type DisconnectResult = { hostChanged: string | null; died: boolean };
+
+/** 게임 내용을 모르는 방 상태. 연결 목록과 현재 라운드 참가 기록을 함께 보존한다. */
 export class Room {
-  /** 입장 순서 보존 배열. 인덱스 0이 현재 호스트. */
   private members: Member[] = [];
   state: RoomState = "waiting";
   seed: number | null = null;
+  startTime: number | null = null;
 
   constructor(
     public readonly code: string,
     public readonly gameId: string,
+    public readonly capacity: number,
   ) {}
 
   get hostId(): string | null {
-    return this.members[0]?.id ?? null;
+    return this.members.find((member) => member.connected)?.id ?? null;
   }
 
-  addMember(m: Member): void {
-    this.members.push(m);
+  get connectedCount(): number {
+    return this.members.reduce((count, member) => count + (member.connected ? 1 : 0), 0);
   }
 
-  /** 판 시작: 시드 배포 + 상태 전환 + 모든 멤버 생존 상태로 리셋(새 시드 재시작 포함). */
-  startGame(seed: number): void {
-    this.seed = seed;
-    this.state = "playing";
-    for (const m of this.members) {
-      m.alive = true;
-      m.survivalTicks = 0;
-    }
+  hasConnectedMember(id: string): boolean {
+    return this.members.some((member) => member.id === id && member.connected);
   }
 
-  /** 로컬 사망 신호 반영. 해당 멤버가 있으면 true. */
-  markDied(id: string, survivalTicks: number): boolean {
-    const m = this.members.find((x) => x.id === id);
-    if (!m || !m.alive) return false;
-    m.alive = false;
-    m.survivalTicks = survivalTicks;
+  addMember(id: string, nickname: string): boolean {
+    if (this.state !== "waiting" || this.connectedCount >= this.capacity || this.hasConnectedMember(id)) return false;
+    this.members.push({ id, nickname, alive: true, survivalTicks: 0, connected: true, px: 0, py: 0, hasPosition: false });
     return true;
   }
 
-  /** 판 종료. (전원 사망 시에만 호출되므로 생존자 보정은 불필요 — 모두 자기
-   *  생존시간을 이미 보고했다.) */
+  startCountdown(seed: number, startTime: number): void {
+    this.members = this.members.filter((member) => member.connected);
+    this.seed = seed;
+    this.startTime = startTime;
+    this.state = "countdown";
+    for (const member of this.members) {
+      member.alive = true;
+      member.survivalTicks = 0;
+      member.px = 0;
+      member.py = 0;
+      member.hasPosition = false;
+    }
+  }
+
+  ensurePlaying(now: number): boolean {
+    if (this.state === "countdown" && this.startTime !== null && now >= this.startTime) this.state = "playing";
+    return this.state === "playing";
+  }
+
+  elapsedTicks(now: number): number {
+    if (this.startTime === null) return 0;
+    return Math.max(0, Math.floor((now - this.startTime) / FIXED_STEP_MS));
+  }
+
+  updatePosition(id: string, px: number, py: number): boolean {
+    const member = this.members.find((candidate) => candidate.id === id && candidate.connected && candidate.alive);
+    if (!member) return false;
+    member.px = px;
+    member.py = py;
+    member.hasPosition = true;
+    return true;
+  }
+
+  markDied(id: string, survivalTicks: number): boolean {
+    const member = this.members.find((candidate) => candidate.id === id);
+    if (!member || !member.alive) return false;
+    member.alive = false;
+    member.survivalTicks = survivalTicks;
+    return true;
+  }
+
+  disconnectMember(id: string, now: number): DisconnectResult {
+    const beforeHost = this.hostId;
+    const member = this.members.find((candidate) => candidate.id === id && candidate.connected);
+    if (!member) return { hostChanged: null, died: false };
+
+    let died = false;
+    if (this.state === "countdown" || this.state === "playing") {
+      this.ensurePlaying(now);
+      if (member.alive) {
+        member.alive = false;
+        member.survivalTicks = this.state === "playing" ? this.elapsedTicks(now) : 0;
+        died = true;
+      }
+      member.connected = false;
+    } else {
+      this.members = this.members.filter((candidate) => candidate.id !== id);
+    }
+
+    const afterHost = this.hostId;
+    return { hostChanged: beforeHost !== afterHost ? afterHost : null, died };
+  }
+
   finish(): void {
     this.state = "finished";
   }
 
-  /** 반환값: 호스트가 바뀌었으면 새 호스트 id, 아니면 null. */
-  removeMember(id: string): { hostChanged: string | null } {
-    const wasHost = this.hostId === id;
-    this.members = this.members.filter((m) => m.id !== id);
-    if (wasHost && this.hostId) return { hostChanged: this.hostId };
-    return { hostChanged: null };
+  returnToWaiting(): void {
+    this.members = this.members.filter((member) => member.connected);
+    this.state = "waiting";
+    this.seed = null;
+    this.startTime = null;
+    for (const member of this.members) {
+      member.alive = true;
+      member.survivalTicks = 0;
+      member.px = 0;
+      member.py = 0;
+      member.hasPosition = false;
+    }
   }
 
-  getMembers(): readonly Member[] {
+  getConnectedMembers(): readonly Member[] {
+    return this.members.filter((member) => member.connected);
+  }
+
+  getRankingMembers(): readonly Member[] {
     return this.members;
   }
 
+  getPublicPlayers(): PlayerPublic[] {
+    return this.getConnectedMembers().map((member) => ({
+      id: member.id,
+      nickname: member.nickname,
+      alive: member.alive,
+      survivalTicks: member.survivalTicks,
+    }));
+  }
+
+  getPeerSnapshot(): { id: string; px: number; py: number }[] {
+    return this.members
+      .filter((member) => member.connected && member.alive && member.hasPosition)
+      .map((member) => ({ id: member.id, px: member.px, py: member.py }));
+  }
+
   isEmpty(): boolean {
-    return this.members.length === 0;
+    return this.connectedCount === 0;
   }
 }

@@ -21,6 +21,7 @@ const KEY_MAP: Record<string, keyof InputState> = {
 };
 
 export class InputManager {
+  private listening = false;
   private readonly state: InputState = {
     up: false,
     down: false,
@@ -33,12 +34,16 @@ export class InputManager {
 
   /** keydown/keyup 리스너 등록. GameRunner.start()에서 호출. */
   start(): void {
+    if (this.listening) return;
+    this.listening = true;
     this.target.addEventListener("keydown", this.onKeyDown);
     this.target.addEventListener("keyup", this.onKeyUp);
   }
 
   /** 리스너 해제 + 눌림 상태 초기화(정지 후 유령 입력 방지). */
   stop(): void {
+    if (!this.listening) return;
+    this.listening = false;
     this.target.removeEventListener("keydown", this.onKeyDown);
     this.target.removeEventListener("keyup", this.onKeyUp);
     this.state.up = this.state.down = this.state.left = this.state.right = false;
