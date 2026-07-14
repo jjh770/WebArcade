@@ -21,11 +21,12 @@
 ```
 packages/
 ├─ shared/        # 계약: IGame · IRenderer · 프로토콜 · 타입 (모두가 의존)
-├─ core/          # 엔진: GameLoop · SeededRNG · 렌더러 (게임을 모름)
+├─ core/          # 엔진: GameLoop · SeededRNG · StateMachine · ClockSync · 렌더러 (게임을 모름)
 ├─ games/
 │  └─ jungnim/    # 죽림고수 (IGame 구현)
-├─ server/        # WebSocket 서버 (방·시드·순위)
+├─ server/        # WebSocket 서버 (방·시드·순위. 게임 내용을 모름)
 └─ app/           # 진입점 + GameRegistry (게임 등록)
+tests/            # Vitest — 결정론·클럭·FSM·방·서버 통합 회귀
 ```
 
 **의존성 규칙**: 모든 의존성은 위로만 향한다. `core`는 `games`를 import하지 않는다.
@@ -45,28 +46,46 @@ npm run build:server   # 서버 빌드 (dist/index.js)
 
 ## 배포
 
-프론트(정적 파일)와 게임 서버(상시 WebSocket)는 성격이 달라 **따로 올린다**.
+**라이브**: https://web-arcade-sigma.vercel.app (서버: `wss://webarcade.fly.dev`)
 
-### 1. 게임 서버 → Fly.io
+프론트(정적 파일)와 게임 서버(상시 WebSocket)는 성격이 달라 **따로 올린다**.
+자세한 근거와 제약은 [`DESIGN.md` 9절](./DESIGN.md) 참조.
+
+**바꾼 패키지에 따라 재배포 대상이 다르다. `shared`(프로토콜)를 고치면 반드시 둘 다** —
+한쪽만 올리면 서버와 클라가 서로 다른 메시지 형식을 쓰게 되어 조용히 깨진다.
+
+| 고친 곳 | 재배포 |
+|---|---|
+| `app` · `core` · `games` | `vercel --prod` |
+| `server` | `fly deploy` |
+| `shared` | **둘 다** |
+
+### 게임 서버 → Fly.io
 
 ```bash
-fly launch --no-deploy   # 최초 1회. app 이름이 겹치면 fly.toml의 app 값을 바꾼다
 fly deploy
 curl https://<app>.fly.dev/health   # {"ok":true} 나오면 성공
 ```
 
-⚠️ **머신은 1대만 유지해야 한다.** 방 상태가 서버 메모리에 있어서, 2대 이상이면 같은 방
-사람들이 서로 다른 머신에 붙어 방이 갈라지고, 머신이 잠들면 진행 중인 방이 사라진다.
-`fly.toml`이 이미 `auto_stop_machines = false` / `min_machines_running = 1`로 잡아 뒀다.
+⚠️ **머신은 1대만 유지해야 한다** (`fly scale count 1`). 방 상태가 서버 메모리(`RoomManager`의
+`Map`)에만 있어서, 2대 이상이면 같은 방 코드를 쳐도 다른 머신에 붙은 사람은 방을 못 찾는다.
+`fly.toml`이 `auto_stop_machines = 'off'` / `min_machines_running = 1`로 고정해 뒀다.
 
-### 2. 프론트 → Vercel / Cloudflare Pages
+⚠️ **`fly deploy`는 서버를 재시작한다 = 진행 중인 방이 전부 사라지고 접속자가 튕긴다.**
+사람들이 플레이 중일 때 배포하지 않는다.
 
-저장소를 연결하고 환경변수 **`VITE_WS_URL = wss://<app>.fly.dev`** 를 넣는다.
-(Vercel은 `vercel.json`이 빌드 설정을 이미 갖고 있다. Cloudflare Pages는 빌드 명령
-`npm run build`, 출력 디렉터리 `packages/app/dist`로 직접 설정한다.)
+### 프론트 → Vercel
 
-⚠️ 페이지가 https면 `ws://`는 브라우저가 **mixed content로 차단**한다 — 반드시 `wss://`.
-`VITE_WS_URL`을 안 넣으면 로컬 개발 기본값(`ws://<호스트>:8080`)으로 붙으려다 실패한다.
+```bash
+vercel --prod
+```
+
+환경변수 **`VITE_WS_URL = wss://<app>.fly.dev`** 가 Production에 등록돼 있어야 한다
+(`vercel env add VITE_WS_URL production`). 빌드 설정은 `vercel.json`에 있다.
+
+⚠️ 이 값은 **빌드 타임에 번들에 박힌다.** 서버 주소를 바꾸면 환경변수만 고쳐선 소용없고
+`vercel --prod`로 다시 빌드해야 반영된다. 페이지가 https이므로 반드시 `wss://` —
+`ws://`는 브라우저가 mixed content로 차단한다.
 
 ## 새 게임 추가법
 

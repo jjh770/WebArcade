@@ -19,11 +19,25 @@
 
 - **언어**: TypeScript (클라이언트·서버·공유 계약 전부)
 - **렌더링**: Canvas 2D로 시작. `IRenderer` 인터페이스로 추상화하여, 필요 시 PixiJS(WebGL)로 교체 가능하게 둔다.
-- **클라이언트 게임 루프**: `requestAnimationFrame` + 고정 타임스텝 누산기
+- **클라이언트 게임 루프**: 고정 타임스텝 + **rAF + `setInterval` 폴백** (아래 참조)
 - **네트워크**: WebSocket (`ws` 라이브러리). Photon 아님. WebGL/브라우저 표준.
 - **서버**: Node.js + `ws`. 작은 authoritative 서버.
 - **빌드 타깃**: 웹 (링크 클릭 → 바로 플레이). 정적 클라 + WebSocket 서버 분리 배포.
 - **구조**: 모노레포 (shared / core / games / server / app)
+- **테스트**: Vitest (`npm test`) — 결정론·클럭·FSM·방 흐름·서버 통합 회귀
+
+### 왜 rAF만으로는 안 되는가 (GameLoop)
+
+`requestAnimationFrame`은 **탭이 백그라운드로 가면 브라우저가 멈춘다.** 싱글이면 상관없지만
+멀티에서는 치명적이다 — 다른 탭을 보다 돌아오면 내 월드만 몇 초 뒤처져 있고, 남들은 이미
+저만치 진행해 있다. 결정론이 깨진 게 아니라 **내 tick이 안 흐른 것**이지만 결과는 똑같이 망가진다.
+
+그래서 `GameLoop`는 두 축으로 돈다:
+- **rAF**: 화면이 보일 때의 부드러운 렌더 (자유 프레임레이트, 보간 alpha 사용)
+- **`setInterval` 폴백**: 백그라운드에서도 tick을 계속 전진시킨다
+
+둘 다 "예약된 시작 시각(epoch)부터 흐른 실시간"에서 tick을 계산하므로 **중복 전진하지 않는다.**
+tick의 유일한 근거는 벽시계 경과 시간이지, 콜백이 몇 번 불렸는지가 아니다.
 
 > 왜 Unity가 아닌가: 원래 만들고 싶었던 것이 TETR.IO 같은 "웹이 곧 게임"인 웹 네이티브 경험이기 때문.
 > C#/Unity 아키텍처 감각(IRepository, FSM, 오브젝트 풀링)은 TypeScript로 1:1 이식된다.
@@ -70,38 +84,50 @@
 ### 폴더 구조
 
 ```
-arcade-framework/
+WebArcade/
 ├─ packages/
-│  ├─ shared/
-│  │  ├─ IGame.ts          # 게임이 구현할 인터페이스 (계약)
+│  ├─ shared/src/          # 계약 — 구현 없음. 모두가 의존한다.
+│  │  ├─ IGame.ts          # 게임이 구현할 인터페이스
+│  │  ├─ IRenderer.ts      # 렌더 계약 (⚠️ core가 아니라 여기. 아래 근거 참조)
 │  │  ├─ protocol.ts       # WebSocket 메시지 타입
-│  │  └─ types.ts          # InputState, GameConfig 등
-│  ├─ core/                # 엔진 — 게임을 모름
-│  │  ├─ GameLoop.ts       # 고정 타임스텝 루프
+│  │  └─ types.ts          # InputState, PeerState, RoomState 등
+│  ├─ core/src/            # 엔진 — 게임을 모름
+│  │  ├─ GameLoop.ts       # 고정 타임스텝 (rAF + setInterval 폴백)
 │  │  ├─ SeededRNG.ts      # mulberry32 시드 PRNG
-│  │  ├─ StateMachine.ts   # 게임을 모르는 범용 FSM
-│  │  ├─ GameRunner.ts     # IGame을 받아 구동하는 오케스트레이터
+│  │  ├─ StateMachine.ts   # 게임을 모르는 범용 FSM (허용 안 된 전이는 예외)
+│  │  ├─ ClockSync.ts      # RTT 최소 표본으로 서버 시각 보정
+│  │  ├─ GameRunner.ts     # IGame을 받아 구동 + 멀티 뷰 렌더
 │  │  ├─ net/NetClient.ts
-│  │  ├─ render/
-│  │  │  ├─ IRenderer.ts
-│  │  │  └─ Canvas2DRenderer.ts
+│  │  ├─ render/Canvas2DRenderer.ts   # IRenderer 구현 (논리좌표 ↔ DPR 픽셀)
 │  │  └─ input/InputManager.ts
-│  ├─ games/
-│  │  └─ jungnim/          # 죽림고수 (첫 게임)
-│  │     ├─ JungnimGame.ts # implements IGame
-│  │     ├─ ArrowSpawner.ts
-│  │     ├─ ArrowPool.ts
-│  │     └─ config.ts
-│  ├─ server/
-│  │  └─ src/
-│  │     ├─ index.ts
-│  │     ├─ RoomManager.ts
-│  │     ├─ Room.ts
-│  │     └─ RankingService.ts
-│  └─ app/
-│     ├─ main.ts
-│     └─ GameRegistry.ts   # 새 게임은 여기에만 등록
+│  ├─ games/jungnim/src/   # 죽림고수 (첫 게임)
+│  │  ├─ JungnimGame.ts    # implements IGame
+│  │  ├─ ArrowSpawner.ts   # 공통(시드) 화살 — 모두가 동일
+│  │  ├─ PersonalSpawner.ts# 개인(조준) 화살 — 별도 RNG 스트림
+│  │  ├─ ArrowPool.ts      # 오브젝트 풀
+│  │  └─ config.ts         # 튜닝값을 데이터로 분리
+│  ├─ server/src/          # 게임 내용을 모름. gameId는 문자열일 뿐.
+│  │  ├─ index.ts          # 부팅만 (PORT 읽기)
+│  │  ├─ ArcadeServer.ts   # HTTP(+/health) 위에 WS. 메시지 라우팅.
+│  │  ├─ validation.ts     # 모든 수신 메시지 형식·범위 검증
+│  │  ├─ RoomManager.ts    # 방 목록 (인메모리 Map)
+│  │  ├─ Room.ts
+│  │  └─ RankingService.ts
+│  └─ app/src/             # 진입점 — 위의 조각들을 엮는 곳
+│     ├─ main.ts           # 오케스트레이션 (네트워크 ↔ 상태 ↔ 뷰)
+│     ├─ AppFlow.ts        # 앱 상태 전이표 (StateMachine에 주입)
+│     ├─ AppView.ts        # DOM·화면 전환·플레이 영역 레이아웃
+│     ├─ GameSession.ts    # 한 라운드의 게임·입력·관전·멀티뷰 소유
+│     ├─ GameRegistry.ts   # ⭐ 새 게임은 여기에만 등록
+│     └─ siteContent.ts    # 공지 등 사이트 콘텐츠 데이터
+└─ tests/                  # Vitest — 결정론·클럭·FSM·방·서버 통합
 ```
+
+**왜 `IRenderer`가 `core`가 아니라 `shared`에 있는가?**
+`games/*`가 렌더를 하려면 렌더 계약을 알아야 한다. 그 계약이 `core`에 있으면 게임이 엔진 구현체에
+묶인다. 계약(`IRenderer`)은 `shared`에, 구현(`Canvas2DRenderer`)은 `core`에 두면 게임은 **"무엇을
+그릴지"만 알고 "어떻게 그리는지"는 모른다.** PixiJS로 갈아끼워도 게임 코드는 한 줄도 안 바뀐다.
+`IGame`이 게임 → 엔진 방향의 계약이라면, `IRenderer`는 엔진 → 게임 방향의 계약이다. 둘 다 `shared`.
 
 ### IGame 계약 (잠정 — 두 번째 게임이 검증할 때까지 확정하지 않음)
 
@@ -202,15 +228,20 @@ export interface IGame {
 
 추상화는 상상으로 하지 않는다. 만들고 나서 두 번째 사례로 검증하며 추출한다.
 
-1. **코어 + shared(IGame) + games/jungnim을 처음부터 분리된 구조로 짠다.**
+1. ✅ **코어 + shared(IGame) + games/jungnim을 처음부터 분리된 구조로 짠다.**
    죽림고수도 처음부터 `implements IGame`. 단 인터페이스는 잠정.
-2. **죽림고수 싱글 완성** — GameLoop·SeededRNG·FSM·Canvas 렌더 검증. 혼자 플레이되는 죽림고수.
-3. **죽림고수에 멀티 부착, 전체 플로우를 끝까지 돌린다** — 방·시드 동기화·순위·관전. 
+2. ✅ **죽림고수 싱글 완성** — GameLoop·SeededRNG·FSM·Canvas 렌더 검증. 혼자 플레이되는 죽림고수.
+3. ✅ **죽림고수에 멀티 부착, 전체 플로우를 끝까지 돌린다** — 방·시드 동기화·순위·관전.
    ⚠️ 싱글만 돌 때 두 번째 게임을 붙이지 않는다. 멀티까지 전체 플로우가 한 바퀴 돌아야 코어가 검증된다.
-4. **멈추고 훑고 청소한다** — core에 죽림고수 냄새(예: GameRunner가 "화살"을 안다)가 새어들었는지 점검·제거.
-   (Serena MCP로 core가 games를 import하는 지점을 심볼 단위로 탐색하기 좋은 단계.)
-5. **두 번째 게임을 붙이며 IGame이 안 맞는 부분을 넓힌다** — 이 시점에 추상화가 진짜로 확정된다.
+4. ✅ **멈추고 훑고 청소한다** — core에 죽림고수 냄새(예: GameRunner가 "화살"을 안다)가 새어들었는지 점검·제거.
+   여기서 나온 것: 범용 `StateMachine` 추출, app을 AppFlow/AppView/GameSession으로 분해,
+   서버를 `ArcadeServer` + `validation`으로 분리, Vitest 회귀 스위트.
+5. ⬅️ **[현재] 두 번째 게임을 붙이며 IGame이 안 맞는 부분을 넓힌다** — 이 시점에 추상화가 진짜로 확정된다.
 6. **세 번째부터**는 IGame 구현 + GameRegistry 등록만.
+
+> 3~4단계 이후 배포(9절)까지 마쳐 링크 하나로 플레이 가능한 상태다. 다만 **결정론이 진짜
+> 네트워크·기기 차이를 견디는지는 아직 다수 동시 플레이로 검증되지 않았다.** 5단계 전에 이걸
+> 먼저 확인하는 편이 낫다 — 코어가 틀렸다면 두 번째 게임은 틀린 코어 위에 얹히기 때문이다.
 
 ---
 
@@ -233,8 +264,48 @@ export interface IGame {
 
 ---
 
-## 9. 배포 (나중 단계)
+## 9. 배포 (완료 — 라이브)
 
-- 클라(정적): Vercel / Netlify / GitHub Pages
-- 서버(WebSocket): Railway / Render / Fly.io
-- "완결"에는 배포까지 포함 — 링크 하나로 남이 플레이할 수 있어야 함.
+"완결"에는 배포까지 포함한다. 링크 하나로 남이 플레이할 수 있어야 한다.
+
+- **프론트(정적)**: Vercel — https://web-arcade-sigma.vercel.app
+- **게임 서버(WebSocket)**: Fly.io(도쿄/nrt) — `wss://webarcade.fly.dev`
+
+### 왜 둘을 따로 올리는가
+
+성격이 정반대다. 프론트는 **한 번 넘겨주고 끝나는 정적 파일**(index.html + JS 한 덩어리)이고,
+서버는 **연결을 계속 붙들고 있는 상시 프로세스**다. 정적 파일은 CDN이 공짜로 잘 뿌리고, 상시
+프로세스는 CDN이 못 한다. 섞으면 양쪽 다 나빠진다.
+
+게임은 **서버에서 돌지 않는다.** 각자 브라우저가 같은 시드로 같은 게임을 돌리고, 서버는 "시드는
+X다", "이 사람 죽었다", "위치는 여기다" 같은 짧은 사실만 중계한다. 그래서 256MB 서버 1대로 충분하다.
+
+### ⚠️ 서버 머신은 반드시 1대
+
+방 상태가 `RoomManager`의 **인메모리 `Map`** 이다(DB 없음). 여기서 두 가지가 따라온다:
+
+1. **머신이 2대면 Map도 2개다.** 각 프로세스가 자기 Map을 갖고 서로 대화하지 않으므로, 같은 방
+   코드를 쳐도 다른 머신에 붙은 사람은 "그런 방 없음"을 받는다. 누가 어느 머신에 붙을지는 운이라
+   "될 때도 있고 안 될 때도 있는" 최악의 버그가 된다.
+2. **프로세스가 재시작하면 방이 사라진다.** `fly deploy`는 서버를 재시작한다 → **사람들이 플레이
+   중일 때 배포하면 전원 튕긴다.**
+
+`fly.toml`이 `auto_stop_machines = 'off'` / `min_machines_running = 1`로 고정해 뒀다.
+스케일아웃이 필요해지는 날에는 **방 상태를 Redis 등 외부 저장소로 빼는 것이 선행 조건**이다.
+
+### ⚠️ `VITE_WS_URL`은 빌드 타임에 박힌다
+
+프론트가 붙을 서버 주소는 Vite가 **번들에 문자열로 굳혀 넣는다.** 런타임에 읽는 값이 아니다.
+- 서버 주소가 바뀌면 환경변수만 고쳐선 소용없다 → **`vercel --prod`로 다시 빌드해야** 반영된다.
+- 페이지가 https이므로 반드시 `wss://`. `ws://`는 브라우저가 mixed content로 차단한다.
+
+### 배포 시 재빌드 범위
+
+바꾼 패키지에 따라 어느 쪽을 다시 올릴지 갈린다. **`shared`(프로토콜)를 고치면 반드시 둘 다.**
+한쪽만 올리면 서버와 클라가 서로 다른 메시지 형식을 쓰게 되어 조용히 깨진다.
+
+| 고친 곳 | 재배포 |
+|---|---|
+| `app`, `core`, `games` | `vercel --prod` |
+| `server` | `fly deploy` |
+| `shared` | **둘 다** |
