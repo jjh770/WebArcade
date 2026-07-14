@@ -55,13 +55,9 @@ export class Room {
     return true;
   }
 
-  /** 판 종료. 살아남은 사람(승자)의 생존시간을 "마지막 사망 시점"으로 근사해 둔다
-   *  (승자는 그때까지 살아있었으므로 최소 그만큼 버틴 것 — 정확한 표기는 UI 단계에서). */
+  /** 판 종료. (전원 사망 시에만 호출되므로 생존자 보정은 불필요 — 모두 자기
+   *  생존시간을 이미 보고했다.) */
   finish(): void {
-    const maxDead = this.members.reduce((mx, m) => (m.alive ? mx : Math.max(mx, m.survivalTicks)), 0);
-    for (const m of this.members) {
-      if (m.alive) m.survivalTicks = maxDead;
-    }
     this.state = "finished";
   }
 

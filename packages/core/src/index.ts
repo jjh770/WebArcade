@@ -2,7 +2,7 @@
 
 export { SeededRNG } from "./SeededRNG";
 export { GameLoop } from "./GameLoop";
-export { GameRunner } from "./GameRunner";
+export { GameRunner, type GameView } from "./GameRunner";
 export { InputManager } from "./input/InputManager";
 export { NetClient } from "./net/NetClient";
 export { Canvas2DRenderer } from "./render/Canvas2DRenderer";

@@ -79,6 +79,11 @@ export const jungnimConfig = {
     unlock: { spinner: 300, ring: 900 },
   },
 
+  /** 관전 시 남의 위치를 부드럽게 따라가는 계수(틱당 lerp, 0~1).
+   *  위치가 ~10Hz로 드문드문 오므로, 매 틱 이 비율로 목표에 다가가 점·화살이
+   *  뚝뚝 끊기지 않고 매끄럽게 움직인다. 크면 즉각적이지만 덜 부드럽다. */
+  spectateSmoothing: 0.25,
+
   /** 화살 풀 초기 크기(오브젝트 풀링). */
   poolSize: 256,
 } as const;

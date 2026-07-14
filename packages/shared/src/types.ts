@@ -24,3 +24,19 @@ export type PlayerPublic = {
   alive: boolean;
   survivalTicks: number;
 };
+
+/** 관전 대상 — 남의 화면을 그릴 때 필요한 정보(위치는 게임 좌표계).
+ *  id는 그 사람의 개인 화살 재구성(syncPeers로 넘긴 아바타)을 찾는 키. */
+export type SpectateTarget = {
+  id: string;
+  x: number;
+  y: number;
+  label: string;
+};
+
+/** 관전 재구성용 남의 상태 — 위치(게임 좌표계). syncPeers로 게임에 넘긴다. */
+export type PeerState = {
+  id: string;
+  x: number;
+  y: number;
+};

@@ -54,13 +54,6 @@ export class PersonalSpawner {
     this.nextSpawnTick = tick + p.intervalTicks;
   }
 
-  /** 재시작용: 타이머·회전각·페이즈 초기화. (rng 재시드는 JungnimGame.init 담당) */
-  reset(): void {
-    this.nextSpawnTick = 0;
-    this.spinAngle = 0;
-    this.phaseRemaining = 0;
-    this.currentKind = "aimed";
-  }
 
   /** tick 문턱으로 열린 개인 패턴 중 하나를 개인 rng로 고른다. */
   private pickKind(tick: number): PersonalKind {

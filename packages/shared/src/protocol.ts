@@ -13,6 +13,7 @@ export type ClientMessage =
   | { type: "create_room"; gameId: string; nickname: string }
   | { type: "join_room"; code: string; nickname: string }
   | { type: "start_game" } // 호스트만 유효
+  | { type: "player_state"; px: number; py: number } // 관전용 위치(주기적). 서버는 그대로 중계만.
   | { type: "player_died"; survivalTicks: number }
   | { type: "leave_room" };
 
@@ -21,6 +22,8 @@ export type ServerMessage =
   | { type: "welcome"; id: string } // 접속 직후 자기 id 통지(호스트 판별·자기 행 강조용)
   | { type: "room_state"; code: string; players: PlayerPublic[]; hostId: string }
   | { type: "game_start"; seed: number; startTime: number; gameId: string }
+  | { type: "peer_state"; id: string; px: number; py: number } // 남의 위치 중계(관전 렌더용)
+  | { type: "peer_died"; id: string } // 남이 죽음(관전 대상 교체 신호)
   | { type: "ranking_update"; alive: number; ranks: RankEntry[] }
   | { type: "game_over"; finalRanks: RankEntry[] }
   | { type: "host_changed"; newHostId: string }

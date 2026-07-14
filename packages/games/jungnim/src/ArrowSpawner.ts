@@ -54,11 +54,6 @@ export class ArrowSpawner {
     this.nextSpawnTick = tick + interval;
   }
 
-  /** 재시작용: 스폰 타이머 초기화. (rng 재시드는 JungnimGame.init이 담당) */
-  reset(): void {
-    this.nextSpawnTick = 0;
-  }
-
   /** 난이도에 따라 열린 패턴 후보 중 하나를 시드로 고른다. */
   private pickPattern(difficulty: number): PatternKind {
     const { unlock } = this.cfg.pattern;

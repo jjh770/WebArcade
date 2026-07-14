@@ -37,6 +37,10 @@ function broadcast(room: Room, msg: ServerMessage): void {
   for (const m of room.getMembers()) send(m.id, msg);
 }
 
+function broadcastExcept(room: Room, exceptId: string, msg: ServerMessage): void {
+  for (const m of room.getMembers()) if (m.id !== exceptId) send(m.id, msg);
+}
+
 function broadcastRoomState(room: Room): void {
   const hostId = room.hostId;
   if (hostId === null) return;
@@ -53,7 +57,10 @@ function broadcastRoomState(room: Room): void {
   });
 }
 
-/** 판이 끝났는지(최후 1인 또는 전원 사망) 확인하고, 끝났으면 game_over 브로드캐스트. */
+/** 사망 집계 후, 전원 사망이면 game_over 브로드캐스트.
+ *  ⚠️ 각자 자기 런을 끝까지 뛴다 — 남이 죽어도 내 판은 안 끝난다.
+ *  전원(alive===0) 죽어야 종료하고 생존시간 순으로 순위. (원래 DESIGN 4.8의
+ *  "최후 1인" 즉시 종료에서 사용자 판단으로 변경) */
 function checkGameOver(room: Room): void {
   const alive = RankingService.aliveCount(room.getMembers());
   broadcast(room, {
@@ -61,7 +68,7 @@ function checkGameOver(room: Room): void {
     alive,
     ranks: RankingService.computeRanks(room.getMembers()),
   });
-  if (alive <= 1) {
+  if (alive === 0) {
     room.finish();
     broadcast(room, { type: "game_over", finalRanks: RankingService.computeRanks(room.getMembers()) });
   }
@@ -118,10 +125,18 @@ function handleMessage(id: string, msg: ClientMessage): void {
       broadcast(room, { type: "game_start", seed, startTime, gameId: room.gameId });
       break;
     }
+    case "player_state": {
+      // 관전용 위치 중계. 서버는 좌표를 해석하지 않고 방의 다른 사람에게만 넘긴다.
+      const room = roomOf(id);
+      if (!room || room.state !== "playing") return;
+      broadcastExcept(room, id, { type: "peer_state", id, px: msg.px, py: msg.py });
+      break;
+    }
     case "player_died": {
       const room = roomOf(id);
       if (!room || room.state !== "playing") return;
       if (!room.markDied(id, msg.survivalTicks)) return;
+      broadcastExcept(room, id, { type: "peer_died", id }); // 관전자들이 대상 교체하도록.
       checkGameOver(room);
       break;
     }

@@ -55,16 +55,6 @@ export class ArrowPool {
     this.free.push(a.index);
   }
 
-  /** 재시작용: 전 화살 비활성화 + free 스택 초기화. */
-  reset(): void {
-    for (const a of this.items) {
-      a.active = false;
-      a.personal = false;
-      a.x = a.y = a.vx = a.vy = 0;
-    }
-    this.resetFreeList();
-  }
-
   /** free 스택을 [size-1 … 0]으로 채워, pop이 0,1,2… 순서로 나오게 한다. */
   private resetFreeList(): void {
     this.free = [];
