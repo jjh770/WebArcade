@@ -19,18 +19,29 @@
         font-family: system-ui, "Segoe UI", sans-serif; }
       body { display: flex; align-items: center; justify-content: center; }
 
-      /* 플레이 영역: 메인 화면 + 우측 생존자 사이드(최대 3명). 플레이 중에만 보인다.
-         모든 캔버스는 내부 해상도 800x600(게임 좌표계)이고 CSS로 축소 표시한다. */
-      #play { display: flex; gap: 14px; align-items: flex-start;
+      /* 플레이 영역: 뷰포트를 꽉 채운다. 메인 화면 + 우측 생존자 사이드(최대 3명).
+         ⚠️ 아래 padding/gap과 사이드 캔버스 폭(200px)은 AppView.layoutPlayArea의 상수와
+            반드시 일치해야 한다 — JS가 이 값으로 남는 공간을 계산한다.
+         메인 캔버스의 표시 크기는 JS가 4:3을 유지해 계산 후 인라인으로 넣고,
+         내부 해상도(백킹스토어)는 Canvas2DRenderer가 DPR에 맞춰 잡는다.
+         게임 좌표계(800x600)는 화면 크기와 무관하게 불변이다. */
+      #play { position: fixed; inset: 0; display: flex; gap: 14px; padding: 16px;
+        align-items: center; justify-content: center;
         opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility .3s; }
       #play.on { opacity: 1; visibility: visible; }
-      #game { display: block; width: 640px; height: 480px; background: #f1faee; border-radius: 6px; }
-      /* 사이드 슬롯: 켜지고 꺼질 때 높이/투명도로 부드럽게 접히고 펼쳐진다(1+3→1+1). */
-      #side-views { display: flex; flex-direction: column; }
+      #game { display: block; background: #f1faee; border-radius: 6px; }
+      /* 사이드 슬롯: 켜지고 꺼질 때 높이/투명도로 부드럽게 접히고 펼쳐진다(1+3→1+1).
+         --side-w/--side-h는 AppView.layoutPlayArea가 뷰포트에 비례해 넣는다(아래는 폴백값).
+         좁은 화면(.narrow)에선 칼럼째 사라져 메인이 공간을 전부 가져간다. */
+      /* align-self로 메인(세로 중앙)과 따로 논다 — 관전창은 위에서부터 아래로 채운다. */
+      #side-views { display: flex; flex-direction: column; align-self: flex-start;
+        --side-w: 200px; --side-h: 150px; }
+      #play.narrow #side-views { display: none; }
       .side-slot { position: relative; height: 0; opacity: 0; margin-bottom: 0; overflow: hidden;
         transition: height .32s cubic-bezier(.2,.7,.2,1), opacity .25s ease, margin-bottom .32s ease; }
-      .side-slot.on { height: 150px; opacity: 1; margin-bottom: 10px; }
-      .side-canvas { display: block; width: 200px; height: 150px; background: #f1faee; border-radius: 5px; }
+      .side-slot.on { height: var(--side-h); opacity: 1; margin-bottom: 10px; }
+      .side-canvas { display: block; width: var(--side-w); height: var(--side-h);
+        background: #f1faee; border-radius: 5px; }
       .side-label { position: absolute; top: 4px; left: 6px; font: 600 11px system-ui;
         color: #1d3557; background: rgba(241,250,238,.75); padding: 1px 6px; border-radius: 4px; }
 

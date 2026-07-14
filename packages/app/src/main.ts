@@ -3,6 +3,7 @@ import type { RankEntry, ServerMessage } from "@arcade/shared";
 import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
 import {
   byId,
+  layoutPlayArea,
   renderGameList,
   renderLobby,
   renderNotices,
@@ -17,29 +18,34 @@ import {
 import { GAME_REGISTRY, isGameId, type GameId } from "./GameRegistry";
 import { GameSession } from "./GameSession";
 
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 600;
+/** 게임 좌표계(논리) 크기. 캔버스 픽셀 크기와 별개다 — 표시 크기는 CSS/DPR이 정하고,
+ *  Canvas2DRenderer가 논리->픽셀 변환을 맡는다. 게임 로직은 항상 이 좌표만 본다. */
+const LOGICAL_WIDTH = 800;
+const LOGICAL_HEIGHT = 600;
 const WS_URL = `ws://${location.hostname || "localhost"}:8080`;
 const POSITION_SEND_MS = 100;
 
 const mainCanvas = byId<HTMLCanvasElement>("game");
-mainCanvas.width = CANVAS_WIDTH;
-mainCanvas.height = CANVAS_HEIGHT;
-const sideCanvases = Array.from({ length: 3 }, (_, index) => {
-  const canvas = byId<HTMLCanvasElement>(`side-${index}`);
-  canvas.width = CANVAS_WIDTH;
-  canvas.height = CANVAS_HEIGHT;
-  return canvas;
-});
+const sideCanvases = Array.from({ length: 3 }, (_, index) => byId<HTMLCanvasElement>(`side-${index}`));
 
 const appState = new StateMachine<AppState, AppEvent>("nickname", APP_TRANSITIONS, ({ to }) => renderState(to));
 const net = new NetClient();
 const session = new GameSession({
   mainCanvas,
   sideCanvases,
+  logicalWidth: LOGICAL_WIDTH,
+  logicalHeight: LOGICAL_HEIGHT,
   onLocalDeath,
   onSideSlot: setSideSlot,
 });
+/** 표시 크기를 먼저 정하고(레이아웃), 그 크기에 맞춰 캔버스 해상도를 잡는다(렌더러). 순서 중요. */
+function relayout(): void {
+  layoutPlayArea(LOGICAL_WIDTH / LOGICAL_HEIGHT);
+  session.resizeViews();
+}
+relayout();
+// 창 크기·모니터(DPR) 변경 시 다시 맞춘다.
+window.addEventListener("resize", relayout);
 
 let networkReady = false;
 let selectedGameId: GameId | null = null;

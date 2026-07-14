@@ -10,6 +10,9 @@ type MainViewMode = "self" | "spectating";
 export type GameSessionOptions = {
   mainCanvas: HTMLCanvasElement;
   sideCanvases: readonly HTMLCanvasElement[];
+  /** 게임 좌표계 크기. 화면 크기와 무관하게 고정 — 게임은 항상 이 좌표로만 그린다. */
+  logicalWidth: number;
+  logicalHeight: number;
   onLocalDeath: () => void;
   onSideSlot: (index: number, visible: boolean, label: string) => void;
 };
@@ -31,8 +34,27 @@ export class GameSession {
   private roundActive = false;
 
   constructor(private readonly options: GameSessionOptions) {
-    this.mainRenderer = new Canvas2DRenderer(options.mainCanvas);
-    this.sideRenderers = options.sideCanvases.map((canvas) => new Canvas2DRenderer(canvas));
+    const { logicalWidth: w, logicalHeight: h } = options;
+    this.mainRenderer = new Canvas2DRenderer(options.mainCanvas, w, h);
+    this.sideRenderers = options.sideCanvases.map((canvas) => new Canvas2DRenderer(canvas, w, h));
+    this.resizeViews();
+  }
+
+  /** 각 캔버스의 현재 표시 크기(CSS px)를 읽어 백킹스토어·변환행렬을 다시 맞춘다.
+   *  최초 1회 + 창 크기/모니터(DPR) 변경 시 호출. 렌더 전용이라 결정론과 무관하다. */
+  resizeViews(): void {
+    this.fitRenderer(this.mainRenderer, this.options.mainCanvas);
+    this.sideRenderers.forEach((renderer, index) => {
+      this.fitRenderer(renderer, this.options.sideCanvases[index]);
+    });
+  }
+
+  private fitRenderer(renderer: Canvas2DRenderer, canvas: HTMLCanvasElement): void {
+    const rect = canvas.getBoundingClientRect();
+    // 안 보이는 캔버스(좁은 화면에서 접힌 관전 칼럼 등)엔 해상도를 잡지 않는다.
+    // 다시 보이게 되면 resize 이벤트가 relayout을 부르고 여기로 돌아온다.
+    if (rect.width <= 0 || rect.height <= 0) return;
+    renderer.resize(rect.width, rect.height);
   }
 
   setRoster(players: readonly PlayerPublic[], myId: string | null): void {
@@ -130,11 +152,13 @@ export class GameSession {
     this.peers.clear();
     for (const player of this.roster) {
       if (player.id === this.myId) continue;
+      // 첫 스냅샷이 오기 전 임시 위치: 게임 좌표계 중앙.
+      // (캔버스 픽셀 크기는 DPR·화면 크기에 따라 변하므로 절대 쓰지 않는다.)
       this.peers.set(player.id, {
         nickname: player.nickname,
         alive: player.alive,
-        x: this.options.mainCanvas.width / 2,
-        y: this.options.mainCanvas.height / 2,
+        x: this.options.logicalWidth / 2,
+        y: this.options.logicalHeight / 2,
       });
     }
   }
