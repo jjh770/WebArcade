@@ -22,8 +22,13 @@ import { GameSession } from "./GameSession";
  *  Canvas2DRenderer가 논리->픽셀 변환을 맡는다. 게임 로직은 항상 이 좌표만 본다. */
 const LOGICAL_WIDTH = 800;
 const LOGICAL_HEIGHT = 600;
-const WS_URL = `ws://${location.hostname || "localhost"}:8080`;
 const POSITION_SEND_MS = 100;
+
+/** 게임 서버 주소.
+ *  - 배포: VITE_WS_URL을 반드시 지정한다(예: wss://...). HTTPS 페이지에서 ws:// 로 붙으면
+ *    브라우저가 mixed content로 차단하므로 wss:// 여야 한다.
+ *  - 로컬 개발: 값이 없으면 같은 호스트의 8080(별도로 띄운 dev:server)으로 붙는다. */
+const WS_URL = import.meta.env.VITE_WS_URL ?? `ws://${location.hostname || "localhost"}:8080`;
 
 const mainCanvas = byId<HTMLCanvasElement>("game");
 const sideCanvases = Array.from({ length: 3 }, (_, index) => byId<HTMLCanvasElement>(`side-${index}`));

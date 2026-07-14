@@ -40,7 +40,33 @@ npm test               # 결정론·FSM·방 흐름 회귀 테스트 (Vitest)
 npm run dev            # 클라이언트 개발 서버
 npm run dev:server     # WebSocket 서버 (별도 터미널)
 npm run build          # 클라이언트 정적 빌드
+npm run build:server   # 서버 빌드 (dist/index.js)
 ```
+
+## 배포
+
+프론트(정적 파일)와 게임 서버(상시 WebSocket)는 성격이 달라 **따로 올린다**.
+
+### 1. 게임 서버 → Fly.io
+
+```bash
+fly launch --no-deploy   # 최초 1회. app 이름이 겹치면 fly.toml의 app 값을 바꾼다
+fly deploy
+curl https://<app>.fly.dev/health   # {"ok":true} 나오면 성공
+```
+
+⚠️ **머신은 1대만 유지해야 한다.** 방 상태가 서버 메모리에 있어서, 2대 이상이면 같은 방
+사람들이 서로 다른 머신에 붙어 방이 갈라지고, 머신이 잠들면 진행 중인 방이 사라진다.
+`fly.toml`이 이미 `auto_stop_machines = false` / `min_machines_running = 1`로 잡아 뒀다.
+
+### 2. 프론트 → Vercel / Cloudflare Pages
+
+저장소를 연결하고 환경변수 **`VITE_WS_URL = wss://<app>.fly.dev`** 를 넣는다.
+(Vercel은 `vercel.json`이 빌드 설정을 이미 갖고 있다. Cloudflare Pages는 빌드 명령
+`npm run build`, 출력 디렉터리 `packages/app/dist`로 직접 설정한다.)
+
+⚠️ 페이지가 https면 `ws://`는 브라우저가 **mixed content로 차단**한다 — 반드시 `wss://`.
+`VITE_WS_URL`을 안 넣으면 로컬 개발 기본값(`ws://<호스트>:8080`)으로 붙으려다 실패한다.
 
 ## 새 게임 추가법
 

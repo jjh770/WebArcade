@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { createServer, type Server } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import type { ClientMessage, ServerMessage } from "@arcade/shared";
 import { RankingService } from "./RankingService.js";
@@ -12,6 +13,8 @@ const SURVIVAL_TOLERANCE_TICKS = 120;
 
 export type ArcadeServer = {
   wss: WebSocketServer;
+  /** WS를 얹은 HTTP 서버. 헬스체크(GET /health)를 받는다. */
+  http: Server;
   close(): Promise<void>;
 };
 
@@ -21,7 +24,19 @@ export function createArcadeServer(input: number | ArcadeServerOptions): ArcadeS
   const options = typeof input === "number" ? { port: input } : input;
   const countdownMs = options.countdownMs ?? COUNTDOWN_MS;
   const snapshotMs = options.snapshotMs ?? SNAPSHOT_MS;
-  const wss = new WebSocketServer({ port: options.port });
+
+  // ws가 자체 HTTP 서버를 만들게 두면 평문 GET에 400/426으로 답해 헬스체크가 실패한다.
+  // HTTP 서버를 직접 두고 그 위에 WS를 얹어, 배포 플랫폼이 "살아있음"을 확인할 수 있게 한다.
+  const http = createServer((req, res) => {
+    if (req.url === "/health") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    res.writeHead(404).end();
+  });
+  const wss = new WebSocketServer({ server: http });
+  http.listen(options.port);
   const rooms = new RoomManager();
   const idBySocket = new Map<WebSocket, string>();
   const socketById = new Map<string, WebSocket>();
@@ -190,10 +205,12 @@ export function createArcadeServer(input: number | ArcadeServerOptions): ArcadeS
 
   return {
     wss,
+    http,
     close: () => new Promise((resolve) => {
       clearInterval(snapshotTimer);
       for (const socket of wss.clients) socket.terminate();
-      wss.close(() => resolve());
+      // WS를 먼저 닫고, 그 위를 받치던 HTTP 서버를 닫는다(순서 뒤집으면 소켓이 남는다).
+      wss.close(() => http.close(() => resolve()));
     }),
   };
 }
