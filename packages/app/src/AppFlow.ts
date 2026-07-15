@@ -2,7 +2,7 @@ import type { TransitionTable } from "@arcade/core";
 
 export type AppState =
   | "nickname" | "main" | "gamelist" | "lobby" | "ready" | "countdown"
-  | "playing" | "deadChoice" | "deadResult" | "spectating" | "result"
+  | "playing" | "dying" | "deadResult" | "spectating" | "result"
   | "notice" | "about" | "community";
 
 export type AppEvent =
@@ -25,9 +25,10 @@ export const APP_TRANSITIONS = {
   lobby: { back_games: "gamelist", room_joined: "ready", start_solo: "playing", ...CONTENT_TRANSITIONS },
   ready: { game_start: "countdown", leave_room: "lobby" },
   countdown: { countdown_done: "playing" },
-  // 연습에서는 사망 즉시 결과다 — 관전할 남이 없으므로 deadChoice를 거치지 않는다.
-  playing: { local_death: "deadChoice", game_over: "result" },
-  deadChoice: { keep_result: "deadResult", watch: "spectating", game_over: "result" },
+  // 사망 → dying(화면 낙하 연출) → 자동으로 관전(watch) 또는 결과(관전할 남이 없을 때 keep_result).
+  // 선택 화면은 없앴다 — 죽으면 화면이 떨어진 뒤 살아있는 남의 화면으로 슬라이드된다.
+  playing: { local_death: "dying", game_over: "result" },
+  dying: { keep_result: "deadResult", watch: "spectating", game_over: "result" },
   deadResult: { game_over: "result" },
   spectating: { game_over: "result" },
   result: { return_ready: "ready", start_solo: "playing", leave_room: "lobby" },
@@ -37,5 +38,5 @@ export const APP_TRANSITIONS = {
 } satisfies TransitionTable<AppState, AppEvent>;
 
 export const PLAY_STATES: ReadonlySet<AppState> = new Set([
-  "playing", "deadChoice", "deadResult", "spectating", "result",
+  "playing", "dying", "deadResult", "spectating", "result",
 ]);

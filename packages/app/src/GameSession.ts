@@ -127,17 +127,33 @@ export class GameSession {
     this.rebuildViews();
   }
 
-  showOwnResult(): void {
-    this.viewMode = "self";
-    this.rebuildViews();
-  }
-
   watchRandomSurvivor(): boolean {
     this.pickMainSpectate();
     if (!this.spectateId) return false;
     this.viewMode = "spectating";
     this.rebuildViews();
     return true;
+  }
+
+  /** 관전 중 메인 대상을 다음(+1)/이전(-1) 생존자로 넘긴다. 넘어갔으면 true.
+   *  대상을 "고르는" 게 아니라 살아있는 사람들을 순환한다 — 오른쪽에 보이던 사람이
+   *  메인으로 올라오는 카드 넘기기 느낌. 생존자가 1명뿐이면 넘길 곳이 없다. */
+  cycleSpectate(direction: number): boolean {
+    if (this.viewMode !== "spectating") return false;
+    const order = this.aliveSpectateOrder();
+    if (order.length <= 1) return false;
+    const current = this.spectateId ? order.indexOf(this.spectateId) : -1;
+    const next = (((current + direction) % order.length) + order.length) % order.length;
+    this.spectateId = order[next];
+    this.rebuildViews();
+    return true;
+  }
+
+  /** 순환 순서 = 로스터(입장) 순으로 고정된 살아있는 남들. 순서가 고정돼야 ←/→가 예측 가능하다. */
+  private aliveSpectateOrder(): string[] {
+    return this.roster
+      .filter((player) => player.id !== this.myId && this.peers.get(player.id)?.alive)
+      .map((player) => player.id);
   }
 
   private ensureRunner(gameId: GameId): void {

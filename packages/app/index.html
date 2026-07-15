@@ -30,6 +30,35 @@
         opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility .3s; }
       #play.on { opacity: 1; visibility: visible; }
       #game { display: block; background: #f1faee; border-radius: 6px; }
+      /* 사망 연출: 내 화면이 살짝 튕겨 올랐다가 중력처럼 가속하며 아래로 떨어진다.
+         ease-in(가속) 커브가 "툭 떨어지는" 무게감을 준다. forwards로 떨어진 채 머문다. */
+      @keyframes screenFall {
+        0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+        12%  { transform: translateY(-18px) rotate(-1.5deg); opacity: 1; }
+        100% { transform: translateY(115vh) rotate(7deg); opacity: 0; }
+      }
+      #game.fallen { animation: screenFall .8s cubic-bezier(.5, 0, .75, 0) forwards; }
+      /* 관전 전환: 낙하가 끝나면 살아있는 남의 화면이 위에서 미끄러져 들어온다(감속 커브). */
+      @keyframes screenSlideIn {
+        0%   { transform: translateY(-115vh); opacity: 0; }
+        100% { transform: translateY(0); opacity: 1; }
+      }
+      #game.slide-in { animation: screenSlideIn .55s cubic-bezier(.2, .7, .2, 1); }
+      /* 관전 대상 넘기기: 다음/이전 생존자가 좌우에서 살짝 밀려 들어온다(카드 넘기기 느낌). */
+      @keyframes swapFromRight { from { transform: translateX(64px); opacity: .35; } to { transform: none; opacity: 1; } }
+      @keyframes swapFromLeft  { from { transform: translateX(-64px); opacity: .35; } to { transform: none; opacity: 1; } }
+      #game.swap-r { animation: swapFromRight .26s cubic-bezier(.2, .7, .2, 1); }
+      #game.swap-l { animation: swapFromLeft .26s cubic-bezier(.2, .7, .2, 1); }
+      @media (prefers-reduced-motion: reduce) {
+        #game.fallen { animation: none; opacity: 0; } /* 모션 민감 사용자는 조용히 사라지게 */
+        #game.slide-in, #game.swap-r, #game.swap-l { animation: none; } /* 전환 없이 즉시 표시 */
+      }
+
+      /* 관전 조작 힌트: 관전 중에만 하단에 뜬다. */
+      #spectate-hint { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+        z-index: 30; background: rgba(34, 36, 42, .85); color: var(--ink); padding: 7px 14px;
+        border-radius: 999px; font: 600 13px system-ui; pointer-events: none; }
+      #spectate-hint[hidden] { display: none; }
       /* 사이드 슬롯: 켜지고 꺼질 때 높이/투명도로 부드럽게 접히고 펼쳐진다(1+3→1+1).
          --side-w/--side-h는 AppView.layoutPlayArea가 뷰포트에 비례해 넣는다(아래는 폴백값).
          좁은 화면(.narrow)에선 칼럼째 사라져 메인이 공간을 전부 가져간다. */
@@ -115,9 +144,14 @@
         font-variant-numeric: tabular-nums; }
       #alive-hud[hidden] { display: none; }
 
-      #error-toast { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
-        background: #b00020; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 14px;
-        opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90%; }
+      /* 에러 토스트는 무엇에도 가리면 안 된다 — 사용자가 왜 실패했는지 알 유일한 통로다.
+         푸터(z-index 20)보다 위로 올리고, 푸터가 보일 때는 그 위쪽으로 비켜 앉는다. */
+      #error-toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+        z-index: 50; background: #b00020; color: #fff; padding: 10px 16px; border-radius: 8px;
+        font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s, bottom .2s;
+        max-width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
+      /* 플레이 중엔 푸터가 숨으므로(body.playing) 토스트는 화면 아래에 그대로 붙는다. */
+      body:not(.playing) #error-toast { bottom: 68px; }
       #error-toast.show { opacity: 1; }
 
       /* 사이트 프레임: 상단 헤더 + 하단 푸터. 플레이 중엔 숨겨 몰입감. */
@@ -247,22 +281,13 @@
           </div>
         </section>
 
-        <!-- 카운트다운 -->
-        <section id="screen-countdown" class="screen">
+        <!-- 카운트다운: 반투명 오버레이. 이 3초 동안 게임판이 위에서 내려와 자리잡는다.
+             (불투명이면 뒤의 판이 안 보여 "내려오는" 연출이 가려진다.) -->
+        <section id="screen-countdown" class="screen play-overlay">
           <div id="countdown-num">3</div>
         </section>
 
-        <!-- 결과 -->
-        <section id="screen-death" class="screen play-overlay">
-          <div class="card">
-            <h1>사망했습니다</h1>
-            <h2>내 결과를 유지하거나 생존자를 관전할 수 있습니다.</h2>
-            <div class="stack">
-              <button id="death-stay-btn" style="width:100%">내 결과 유지</button>
-              <button id="death-watch-btn" class="secondary" style="width:100%">관전하기</button>
-            </div>
-          </div>
-        </section>
+        <!-- 사망 선택 화면은 없앴다: 죽으면 화면이 떨어진 뒤 자동으로 관전으로 슬라이드된다. -->
 
         <!-- 최종 결과: 마지막 플레이 프레임 위에 표시 -->
         <section id="screen-result" class="screen play-overlay">
@@ -310,6 +335,7 @@
         </section>
 
         <div id="alive-hud" hidden></div>
+        <div id="spectate-hint" hidden>← → 다른 생존자 관전</div>
         <div id="error-toast"></div>
       </div>
 

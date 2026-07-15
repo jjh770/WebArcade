@@ -11,24 +11,33 @@ function advance(machine: StateMachine<AppState, AppEvent>, events: readonly App
 }
 
 describe("앱 FSM", () => {
-  it("사망 결과 유지 후 최종 결과와 대기실 복귀를 수행한다", () => {
+  it("사망하면 낙하(dying) 상태를 거친다 — 즉시 선택 화면이 아니다", () => {
+    const flow = createFlow();
+    advance(flow, [
+      "nickname_submit", "open_games", "select_game", "room_joined", "game_start",
+      "countdown_done", "local_death",
+    ]);
+    expect(flow.state).toBe("dying");
+  });
+
+  it("낙하 후 관전으로 자동 전환하고 최종 결과로 간다", () => {
+    const flow = createFlow();
+    advance(flow, [
+      "nickname_submit", "open_games", "select_game", "room_joined", "game_start",
+      "countdown_done", "local_death", "watch", // watch는 낙하 타이머가 자동으로 발생시킨다
+    ]);
+    expect(flow.state).toBe("spectating");
+    flow.transition("game_over");
+    expect(flow.state).toBe("result");
+  });
+
+  it("관전할 생존자가 없으면 낙하 후 결과를 기다린다", () => {
     const flow = createFlow();
     advance(flow, [
       "nickname_submit", "open_games", "select_game", "room_joined", "game_start",
       "countdown_done", "local_death", "keep_result", "game_over", "return_ready",
     ]);
     expect(flow.state).toBe("ready");
-  });
-
-  it("사망 후 관전 분기를 수행한다", () => {
-    const flow = createFlow();
-    advance(flow, [
-      "nickname_submit", "open_games", "select_game", "room_joined", "game_start",
-      "countdown_done", "local_death", "watch",
-    ]);
-    expect(flow.state).toBe("spectating");
-    flow.transition("game_over");
-    expect(flow.state).toBe("result");
   });
 
   it("결과 중 일반 room_joined 전이는 허용하지 않는다", () => {

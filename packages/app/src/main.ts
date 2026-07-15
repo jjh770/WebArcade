@@ -11,6 +11,10 @@ import {
   renderResult,
   renderState,
   setAliveHud,
+  fallScreen,
+  slideInScreen,
+  swapSpectateScreen,
+  resetScreenFx,
   setCountdown,
   setSideSlot,
   toast,
@@ -76,14 +80,42 @@ function ensureNetwork(): boolean {
   return false;
 }
 
+/** 낙하 연출 길이(ms). CSS #game.fallen 애니메이션(.8s)과 맞춘다. */
+const FALL_MS = 800;
+let fallTimer = 0;
+
 function onLocalDeath(): void {
   if (appState.state !== "playing") return;
   const score = session.getScore();
   if (score === null) return;
+  fallScreen(); // 내 화면이 아래로 떨어진다.
   // 연습은 죽는 순간이 곧 끝이다. 관전할 남도, 기다릴 서버도 없다.
   if (soloMode) return showSoloResult(score);
   net.send({ type: "player_died", survivalTicks: score });
-  transition("local_death");
+  transition("local_death"); // → dying (카드 없음, 낙하만 재생)
+  // 낙하가 끝나면 자동으로 관전 전환. 선택 화면은 없다.
+  clearTimeout(fallTimer);
+  fallTimer = window.setTimeout(autoSpectate, FALL_MS);
+}
+
+// 관전 중 ←/→로 다른 생존자로 넘긴다(대상 선택이 아니라 순환). e.repeat 무시 = 한 번 눌러 한 칸.
+window.addEventListener("keydown", (event) => {
+  if (appState.state !== "spectating" || event.repeat) return;
+  const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+  if (direction === 0) return;
+  event.preventDefault();
+  if (session.cycleSpectate(direction)) swapSpectateScreen(direction);
+});
+
+/** 낙하 후 살아있는 남의 화면으로 슬라이드 전환. 남이 없으면 결과를 기다린다. */
+function autoSpectate(): void {
+  if (appState.state !== "dying") return; // 그새 game_over가 왔으면 아무것도 안 한다.
+  if (session.watchRandomSurvivor()) {
+    slideInScreen(); // 남의 화면이 위에서 미끄러져 들어온다.
+    transition("watch");
+  } else {
+    transition("keep_result"); // 관전할 생존자가 없다 — 떨어진 내 화면 그대로 결과를 기다린다.
+  }
 }
 
 net.onMessage(handleServer);
@@ -189,6 +221,7 @@ function startSolo(): void {
   if (!transition("start_solo")) return;
   soloMode = true;
   finalRanks = [];
+  resetScreenFx(); // 떨어졌던 화면을 제자리로.
   session.setRoster([], null); // 남이 없다 → peer도, 관전 뷰도 없다.
   setAliveHud("연습");
   if (!session.start(selectedGameId, randomSeed(), performance.now())) {
@@ -227,6 +260,8 @@ byId("result-leave-btn").addEventListener("click", leaveRoom);
 function leaveRoom(): void {
   if (!soloMode) net.send({ type: "leave_room" }); // 연습은 애초에 방이 없다.
   soloMode = false;
+  clearTimeout(fallTimer);
+  resetScreenFx(); // 로비로 나가니 다음 판을 위해 복구.
   session.leaveRoom();
   finalRanks = [];
   location.hash = "";
@@ -237,6 +272,7 @@ let countdownTimer = 0;
 function startCountdown(seed: number, startTime: number, gameId: string): void {
   if (!isGameId(gameId)) return toast(`알 수 없는 게임입니다: ${gameId}`);
   if (!net.isClockSynchronized || !transition("game_start")) return;
+  slideInScreen(); // 카운트다운 3초 동안 게임판이 위에서 내려와 자리잡는다(0.55s).
   let lastNumber = -1;
   const update = (): void => {
     const remaining = startTime - net.getServerNow();
@@ -257,20 +293,12 @@ function startCountdown(seed: number, startTime: number, gameId: string): void {
 
 function beginPlay(gameId: string, seed: number, startTime: number): void {
   finalRanks = [];
+  resetScreenFx(); // 새 라운드 — 떨어졌던 화면 복구.
   setAliveHud("생존 …");
   if (!session.start(gameId, seed, net.serverTimeToPerformance(startTime))) {
     toast(`게임을 시작할 수 없습니다: ${gameId}`);
   }
 }
-
-byId("death-stay-btn").addEventListener("click", () => {
-  session.showOwnResult();
-  transition("keep_result");
-});
-byId("death-watch-btn").addEventListener("click", () => {
-  if (!session.watchRandomSurvivor()) return toast("관전할 생존자가 없습니다.");
-  transition("watch");
-});
 
 window.setInterval(() => {
   if (soloMode || appState.state !== "playing") return; // 연습: 내 위치를 볼 남이 없다.
@@ -280,6 +308,7 @@ window.setInterval(() => {
 
 function showResult(ranks: readonly RankEntry[]): void {
   if (!appState.can("game_over")) return;
+  clearTimeout(fallTimer); // 낙하 중 게임이 끝났으면 관전 전환을 취소한다.
   finalRanks = ranks;
   renderResult(ranks, myId, amHost);
   setAliveHud("", true);

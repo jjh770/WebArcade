@@ -4,7 +4,7 @@ import { PLAY_STATES, type AppState } from "./AppFlow";
 import { NOTICES } from "./siteContent";
 
 const SCREEN_NAMES = [
-  "nickname", "main", "gamelist", "lobby", "ready", "countdown", "death", "result",
+  "nickname", "main", "gamelist", "lobby", "ready", "countdown", "result",
   "notice", "about", "community",
 ] as const;
 type ScreenName = (typeof SCREEN_NAMES)[number];
@@ -19,14 +19,16 @@ export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
 
 export function renderState(state: AppState): void {
   let screen: ScreenName | null = null;
-  if (state === "deadChoice") screen = "death";
-  else if (state === "result") screen = "result";
+  // dying/deadResult/spectating은 카드 없이 플레이 영역만 — 낙하·관전 연출이 그 자리를 채운다.
+  if (state === "result") screen = "result";
   else if (!PLAY_STATES.has(state)) screen = state as ScreenName;
 
   for (const name of SCREEN_NAMES) byId(`screen-${name}`).classList.toggle("active", name === screen);
-  const showPlay = PLAY_STATES.has(state);
+  // 카운트다운 동안에도 플레이 영역을 보여준다 — 그 위에 게임판이 내려와 자리잡는다.
+  const showPlay = PLAY_STATES.has(state) || state === "countdown";
   byId("play").classList.toggle("on", showPlay);
   document.body.classList.toggle("playing", showPlay);
+  byId("spectate-hint").hidden = state !== "spectating"; // 관전 중에만 ←/→ 힌트
 
   const navKey = state === "notice" || state === "about" || state === "community" ? state : "game";
   document.querySelectorAll<HTMLElement>("#site-header .site-nav button").forEach((button) => {
@@ -196,6 +198,39 @@ export function setCountdown(number: number): void {
 export function setSideSlot(index: number, visible: boolean, label: string): void {
   byId(`slot-${index}`).classList.toggle("on", visible);
   if (visible) byId(`label-${index}`).textContent = label;
+}
+
+/* ---- 메인 화면 전환 연출 --------------------------------------------------
+   전부 메인 캔버스(#game) 하나에 건다. 살아있는 남의 사이드 뷰는 건드리지 않는다. */
+
+/** 죽는 순간: 내 화면이 아래로 떨어진다. */
+export function fallScreen(): void {
+  const el = byId("game");
+  el.classList.remove("slide-in");
+  el.classList.add("fallen");
+}
+
+/** 관전 전환: 남의 화면이 위에서 미끄러져 들어온다. 낙하가 끝난 뒤 호출한다.
+ *  같은 캔버스를 재사용하므로 클래스를 지웠다가 리플로우로 애니메이션을 재시작시킨다. */
+export function slideInScreen(): void {
+  const el = byId("game");
+  el.classList.remove("fallen");
+  el.classList.remove("slide-in");
+  void el.offsetWidth; // 리플로우 강제 — 클래스를 즉시 다시 붙여도 애니메이션이 재생된다.
+  el.classList.add("slide-in");
+}
+
+/** 관전 대상을 넘길 때: 방향(+1 다음 / -1 이전)에 맞춰 좌우에서 밀려 들어온다. */
+export function swapSpectateScreen(direction: number): void {
+  const el = byId("game");
+  el.classList.remove("swap-l", "swap-r");
+  void el.offsetWidth; // 리플로우 — 같은 클래스를 즉시 다시 붙여도 애니메이션이 재생된다.
+  el.classList.add(direction > 0 ? "swap-r" : "swap-l");
+}
+
+/** 새 라운드·로비 복귀 등 연출을 모두 지우고 캔버스를 기본 상태로. */
+export function resetScreenFx(): void {
+  byId("game").classList.remove("fallen", "slide-in", "swap-l", "swap-r");
 }
 
 function badge(text: string, className: string): HTMLElement {
