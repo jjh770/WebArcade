@@ -32,14 +32,91 @@ tests/            # Vitest — 결정론·클럭·FSM·방·서버 통합 회귀
 **의존성 규칙**: 모든 의존성은 위로만 향한다. `core`는 `games`를 import하지 않는다.
 새 게임을 추가해도 `core`는 한 줄도 바뀌지 않아야 한다.
 
-## 실행
+## 빠른 시작
+
+세 가지 시나리오로 정리한다. 대부분은 **1번(로컬)** 이면 충분하다.
+
+### 1. 로컬에서 켜기 (개발용, 배포 불필요)
+
+내 컴퓨터에서 지금 코드를 그대로 실행한다. 터미널 **두 개**가 필요하다.
 
 ```bash
+npm install            # 최초 1회 (또는 의존성 바뀐 뒤)
+
+# 터미널 A — 클라이언트
+npm run dev            # localhost 주소가 출력된다. 이 주소로 접속.
+
+# 터미널 B — 게임 서버 (멀티까지 볼 때만 필요)
+npm run dev:server     # ws://localhost:8080
+```
+
+- **혼자 연습하기**는 서버 없이 터미널 A만으로 된다.
+- **방 만들기 / 멀티**는 터미널 B(서버)도 켜야 한다.
+- 코드를 저장하면 새로고침 없이 바로 반영된다(HMR).
+
+멀티를 한 컴퓨터에서 테스트하려면 브라우저 탭을 여러 개 열고 한 탭에서 방을 만들어 코드를 공유하면 된다.
+
+### 2. 최신 버전을 라이브로 올리기
+
+바꾼 코드를 실제 배포 주소(https://web-arcade-sigma.vercel.app)에 반영한다.
+
+```bash
+# (1) 커밋 — 배포는 커밋된 상태 기준이 깔끔하다
+git add -A && git commit -m "..."
+
+# (2) 검증 — 깨진 채로 올리지 않는다
+npm run typecheck && npm test
+
+# (3) 프론트 배포 (app·core·games·shared를 고쳤을 때)
+vercel --prod
+
+# (4) 서버 배포 (server·shared를 고쳤을 때만)
+fly deploy
+
+# (5) 서버가 잠들어 있으면 깨우기 (fly scale count 0 으로 재워둔 경우)
+fly scale count 1
+```
+
+- 대부분의 변경(게임·연출·UI)은 **프론트만**이라 (3)만 하면 된다.
+- ⚠️ `server`나 `shared`(프로토콜)를 고쳤으면 (4)도 필수. 아래 [배포](#배포) 표 참조.
+- ⚠️ 서버는 **항상 1대만** 유지한다(방 상태가 메모리에 있어 2대면 방이 갈라진다).
+
+### 3. 처음부터 세팅 (빈 컴퓨터 → 배포까지)
+
+```bash
+# 사전: Node 20+ 설치 (node -v 로 확인)
+
+# 저장소 준비
+git clone <저장소 주소> && cd WebArcade
 npm install
+npm run dev            # 로컬이 뜨는지 먼저 확인
+
+# 배포 도구 (전역 설치)
+npm i -g vercel        # 프론트
+# Fly CLI 설치: PowerShell → iwr https://fly.io/install.ps1 -useb | iex
+
+# 로그인 (브라우저가 열린다)
+vercel login
+fly auth login
+
+# 게임 서버 배포 (fly.toml이 이미 있으니 launch는 기존 설정 사용)
+fly deploy
+curl https://<app>.fly.dev/health   # {"ok":true} 확인
+
+# 프론트: Vercel에 서버 주소를 환경변수로 넣고 배포
+vercel                                    # 최초 연결(프로젝트 생성)
+vercel env add VITE_WS_URL production      # 값: wss://<app>.fly.dev
+vercel --prod                              # 이 값이 번들에 박힌다
+```
+
+⚠️ `VITE_WS_URL`은 **빌드 타임에 번들에 박힌다.** 서버 주소를 바꾸면 환경변수만 고쳐선 안 되고
+`vercel --prod`로 다시 빌드해야 한다. https 페이지이므로 반드시 `wss://`(ws는 브라우저가 차단).
+
+### 참고: 개별 명령
+
+```bash
 npm run typecheck      # 전체 타입 검사 (tsc -b)
 npm test               # 결정론·FSM·방 흐름 회귀 테스트 (Vitest)
-npm run dev            # 클라이언트 개발 서버
-npm run dev:server     # WebSocket 서버 (별도 터미널)
 npm run build          # 클라이언트 정적 빌드
 npm run build:server   # 서버 빌드 (dist/index.js)
 ```
