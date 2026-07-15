@@ -25,7 +25,7 @@ import { GameSession } from "./GameSession";
 /** 게임 좌표계(논리) 크기. 캔버스 픽셀 크기와 별개다 — 표시 크기는 CSS/DPR이 정하고,
  *  Canvas2DRenderer가 논리->픽셀 변환을 맡는다. 게임 로직은 항상 이 좌표만 본다. */
 const LOGICAL_WIDTH = 800;
-const LOGICAL_HEIGHT = 600;
+const LOGICAL_HEIGHT = 800; // 정사각형 — 원형 경기장에 맞춤(죽림고수 config와 일치).
 const POSITION_SEND_MS = 100;
 
 /** 게임 서버 주소.
@@ -273,6 +273,7 @@ function startCountdown(seed: number, startTime: number, gameId: string): void {
   if (!isGameId(gameId)) return toast(`알 수 없는 게임입니다: ${gameId}`);
   if (!net.isClockSynchronized || !transition("game_start")) return;
   slideInScreen(); // 카운트다운 3초 동안 게임판이 위에서 내려와 자리잡는다(0.55s).
+  session.showReadyFrame(gameId, seed); // 내려오는 판에 원형 경기장을 미리 그려둔다.
   let lastNumber = -1;
   const update = (): void => {
     const remaining = startTime - net.getServerNow();

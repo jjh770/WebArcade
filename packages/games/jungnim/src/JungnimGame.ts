@@ -25,7 +25,13 @@ import { ArrowPool } from "./ArrowPool";
 const PLAYER_COLOR = "#e63946";
 const ARROW_COLOR = "#1d3557"; // 공통(시드) 화살 — 짙은 남색.
 const PERSONAL_COLOR = "#f77f00"; // 개인(조준) 화살 — 주황. "너를 노린다"는 신호.
-const HUD_COLOR = "#1d3557";
+const HUD_COLOR = "#e8eef2"; // HUD 텍스트 — 원 밖 어두운 영역 위라 밝게.
+
+// 원형 경기장 색: 어두운 바깥 + 얇은 테두리 + 밝은 바닥.
+const ARENA_OUTSIDE = "#15171d";
+const ARENA_BORDER = "#457b9d";
+const ARENA_FLOOR = "#f1faee";
+const ARENA_BORDER_W = 3;
 
 /** 개인 시드 = 공통 시드에서 파생(별도 스트림 보장). 값 자체는 임의의 큰 홀수 상수.
  *  ⚠️ 현재는 모든 플레이어가 같은 personalSeed → 개인 스폰 스케줄·패턴이 동일하고
@@ -69,9 +75,7 @@ export class JungnimGame implements IGame {
       if (input.right) this.me.x += s;
       if (input.up) this.me.y -= s;
       if (input.down) this.me.y += s;
-      const r = jungnimConfig.playerRadius;
-      this.me.x = clamp(this.me.x, r, jungnimConfig.screenWidth - r);
-      this.me.y = clamp(this.me.y, r, jungnimConfig.screenHeight - r);
+      clampToArena(this.me); // 사각형이 아니라 원 안으로 가둔다.
       this.me.spawner.update(tick, this.me.pool, this.me.x, this.me.y);
     }
     this.moveArrows(this.me.pool);
@@ -117,7 +121,7 @@ export class JungnimGame implements IGame {
   }
 
   render(r: IRenderer, _alpha: number): void {
-    r.clear();
+    this.drawArena(r);
     this.drawPool(r, this.commonPool); // 공통 화살
     this.drawPool(r, this.me.pool); // 내 개인 화살
     r.circle(this.me.x, this.me.y, jungnimConfig.playerRadius, PLAYER_COLOR);
@@ -131,7 +135,7 @@ export class JungnimGame implements IGame {
   }
 
   renderSpectator(r: IRenderer, target: SpectateTarget): void {
-    r.clear();
+    this.drawArena(r);
     this.drawPool(r, this.commonPool); // 공통 화살(모두 동일)
     const peer = this.peers.get(target.id);
     // 점·화살 모두 ease된 위치(peer.x,y)로 그려 부드럽게. 없으면 target 좌표 폴백.
@@ -172,6 +176,15 @@ export class JungnimGame implements IGame {
     a.y = jungnimConfig.screenHeight / 2;
   }
 
+  /** 원형 경기장: 어두운 배경을 깔고, 그 위에 테두리 원 → 밝은 바닥 원을 겹쳐 링을 만든다. */
+  private drawArena(r: IRenderer): void {
+    const { cx, cy, radius } = jungnimConfig.arena;
+    r.clear();
+    r.rect(0, 0, jungnimConfig.screenWidth, jungnimConfig.screenHeight, ARENA_OUTSIDE);
+    r.circle(cx, cy, radius, ARENA_BORDER);
+    r.circle(cx, cy, radius - ARENA_BORDER_W, ARENA_FLOOR);
+  }
+
   private drawPool(r: IRenderer, pool: ArrowPool): void {
     for (const a of pool.items) if (a.active) this.drawArrow(r, a);
   }
@@ -185,18 +198,18 @@ export class JungnimGame implements IGame {
     r.line(a.x - ux, a.y - uy, a.x + ux, a.y + uy, a.personal ? PERSONAL_COLOR : ARROW_COLOR, 3);
   }
 
-  /** 활성 화살을 한 스텝 전진시키고, 화면 밖으로 나간 것은 풀로 반납. */
+  /** 활성 화살을 한 스텝 전진시키고, 경기장 원 밖으로 나간 것은 풀로 반납. */
   private moveArrows(pool: ArrowPool): void {
-    const margin = jungnimConfig.arrowLength;
-    const w = jungnimConfig.screenWidth;
-    const h = jungnimConfig.screenHeight;
+    const { cx, cy, radius } = jungnimConfig.arena;
+    const cull = radius + jungnimConfig.arrowLength; // 둘레를 이만큼 벗어나면 사라진다.
+    const cull2 = cull * cull;
     for (const a of pool.items) {
       if (!a.active) continue;
       a.x += a.vx;
       a.y += a.vy;
-      if (a.x < -margin || a.x > w + margin || a.y < -margin || a.y > h + margin) {
-        pool.release(a);
-      }
+      const dx = a.x - cx;
+      const dy = a.y - cy;
+      if (dx * dx + dy * dy > cull2) pool.release(a);
     }
   }
 
@@ -218,7 +231,16 @@ export class JungnimGame implements IGame {
   }
 }
 
-/** 값을 [min, max]로 제한. 순수 함수(결정론과 무관하지만 부수효과 없음 선호). */
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
+/** 아바타를 원형 경기장 안으로 끌어당긴다. 중심에서 (반지름-플레이어반지름)보다 멀면
+ *  그 경계 원 위로 되돌린다. 결정론과 무관하지만 부수효과는 아바타 좌표에 국한. */
+function clampToArena(a: { x: number; y: number }): void {
+  const { cx, cy, radius } = jungnimConfig.arena;
+  const maxDist = radius - jungnimConfig.playerRadius;
+  const dx = a.x - cx;
+  const dy = a.y - cy;
+  const dist = Math.hypot(dx, dy);
+  if (dist > maxDist && dist > 0) {
+    a.x = cx + (dx / dist) * maxDist;
+    a.y = cy + (dy / dist) * maxDist;
+  }
 }

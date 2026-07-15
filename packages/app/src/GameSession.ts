@@ -62,6 +62,16 @@ export class GameSession {
     this.myId = myId;
   }
 
+  /** 카운트다운 동안 메인 화면에 빈 경기장 + 중앙 플레이어를 미리 그려둔다.
+   *  (안 그리면 러너가 아직 안 돌아 캔버스 원본 배경 = 크림색 사각형이 보인다.) */
+  showReadyFrame(gameId: string, seed: number): boolean {
+    if (!isGameId(gameId)) return false;
+    this.ensureRunner(gameId);
+    this.runner?.setViews([{ renderer: this.mainRenderer, target: null }]);
+    this.runner?.prime(seed);
+    return true;
+  }
+
   start(gameId: string, seed: number, epochPerformanceMs: number): boolean {
     if (!isGameId(gameId)) return false;
     this.ensureRunner(gameId);

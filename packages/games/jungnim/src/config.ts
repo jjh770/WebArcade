@@ -16,9 +16,15 @@ export const jungnimConfig = {
   /** 순위 방향: 생존시간이 길수록 좋음. */
   scoreDirection: "higher" as ScoreDirection,
 
-  /** 화면 크기(px). 플레이어 초기 위치·경계 클램프 기준. */
+  /** 화면(캔버스) 논리 크기(px). 렌더 좌표계 기준.
+   *  원형 경기장이라 정사각형으로 둔다 — 4:3이면 좌우에 안 쓰는 검은 여백이 크게 남는다.
+   *  ⚠️ app의 LOGICAL_WIDTH/HEIGHT(main.ts)와 반드시 일치시킬 것. */
   screenWidth: 800,
-  screenHeight: 600,
+  screenHeight: 800,
+
+  /** 원형 경기장. 플레이어는 이 원 안에서만 움직이고, 화살은 원 둘레에서 안으로 날아온다.
+   *  중심은 화면 중앙(400,400), 반지름은 사방 여백(52px)을 남기고 최대한 크게. */
+  arena: { cx: 400, cy: 400, radius: 348 },
 
   /** 플레이어 이동 속도(px/tick). */
   playerSpeed: 3,
@@ -51,8 +57,10 @@ export const jungnimConfig = {
     angleJitterDeg: 10,
     /** spread(부채꼴): 한 지점에서 count발을 totalDeg 각도 안에 펼친다. */
     spread: { count: 5, totalDeg: 55 },
-    /** wall(벽): 한 변을 count칸으로 나눠 채우되 gap칸을 안전지대로 비운다. */
+    /** wall(벽): 둘레의 한 호(wallArcDeg)를 count칸으로 나눠 채우되 gap칸을 안전지대로 비운다. */
     wall: { count: 12, gap: 3 },
+    /** wall이 덮는 둘레 호의 각도(도). 원주라 이제 "한 변" 대신 호 길이로 표현한다. */
+    wallArcDeg: 140,
     /** converge(수렴): 화면 중앙 ±지터 지점을 향해 사방에서 count발. */
     converge: { count: 6, aimJitterPx: 90 },
     /** 각 패턴이 열리는 난이도 문턱(difficulty >= 값이면 후보에 포함). */

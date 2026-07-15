@@ -22,9 +22,9 @@
       /* 플레이 영역: 뷰포트를 꽉 채운다. 메인 화면 + 우측 생존자 사이드(최대 3명).
          ⚠️ 아래 padding/gap과 사이드 캔버스 폭(200px)은 AppView.layoutPlayArea의 상수와
             반드시 일치해야 한다 — JS가 이 값으로 남는 공간을 계산한다.
-         메인 캔버스의 표시 크기는 JS가 4:3을 유지해 계산 후 인라인으로 넣고,
+         메인 캔버스의 표시 크기는 JS가 게임 비율(현재 정사각형)을 유지해 계산 후 인라인으로 넣고,
          내부 해상도(백킹스토어)는 Canvas2DRenderer가 DPR에 맞춰 잡는다.
-         게임 좌표계(800x600)는 화면 크기와 무관하게 불변이다. */
+         게임 좌표계(800x800)는 화면 크기와 무관하게 불변이다. */
       #play { position: fixed; inset: 0; display: flex; gap: 14px; padding: 16px;
         align-items: center; justify-content: center;
         opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility .3s; }

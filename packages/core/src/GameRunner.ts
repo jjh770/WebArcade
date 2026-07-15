@@ -57,6 +57,18 @@ export class GameRunner {
     this.views = views;
   }
 
+  /** 루프를 돌리지 않고 시드 초기 상태를 현재 뷰에 한 번만 그린다.
+   *  카운트다운 동안 "빈 경기장 + 중앙 플레이어"를 미리 보여주는 용도.
+   *  이후 start()가 같은 시드로 다시 init하므로 결정론엔 영향 없다. */
+  prime(seed: number): void {
+    this.game.init(seed);
+    this.deathReported = false;
+    for (const v of this.views) {
+      if (v.target) this.game.renderSpectator(v.renderer, v.target);
+      else this.game.render(v.renderer, 0);
+    }
+  }
+
   /** 시드와 예약 epoch로 라운드를 완전히 새로 시작한다. 반복 호출에도 리스너가 중복되지 않는다. */
   start(seed: number, startEpochPerformanceMs = performance.now()): void {
     this.loop.stop();

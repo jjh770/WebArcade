@@ -80,60 +80,53 @@ export class PersonalSpawner {
 
   // ---- 패턴들 (모두 플레이어를 향해 안쪽으로) --------------------------
 
-  /** 가장자리 무작위 점에서 플레이어를 향해 한 발. */
+  /** 둘레 무작위 점에서 플레이어를 향해 한 발. */
   private aimed(pool: ArrowPool, px: number, py: number): void {
-    const [sx, sy] = this.perimeterPoint();
+    const [sx, sy] = this.rimPoint();
     this.emit(pool, sx, sy, Math.atan2(py - sy, px - sx));
   }
 
-  /** 회전 스피너: 현재 회전각 방향의 가장자리에서 플레이어를 향해 한 발. */
+  /** 회전 스피너: 현재 회전각 방향의 둘레에서 플레이어를 향해 한 발. */
   private spinner(pool: ArrowPool, px: number, py: number): void {
-    const [sx, sy] = this.edgeExitPoint(px, py, this.spinAngle);
-    this.emit(pool, sx, sy, this.spinAngle + Math.PI); // 가장자리→플레이어(안쪽).
+    const [sx, sy] = this.rimExitPoint(px, py, this.spinAngle);
+    this.emit(pool, sx, sy, this.spinAngle + Math.PI); // 둘레→플레이어(안쪽).
     this.spinAngle += this.cfg.personal.spinner.stepDeg * DEG;
   }
 
-  /** 링: 플레이어를 중심으로 사방 count방향의 가장자리에서 동시에 조여든다. */
+  /** 링: 플레이어를 중심으로 사방 count방향의 둘레에서 동시에 조여든다. */
   private ring(pool: ArrowPool, px: number, py: number): void {
     const { count } = this.cfg.personal.ring;
     for (let i = 0; i < count; i++) {
       const ang = (i / count) * Math.PI * 2;
-      const [sx, sy] = this.edgeExitPoint(px, py, ang);
+      const [sx, sy] = this.rimExitPoint(px, py, ang);
       this.emit(pool, sx, sy, ang + Math.PI);
     }
   }
 
   // ---- 기하 헬퍼 ------------------------------------------------------
 
-  /** (px,py)에서 angle 방향으로 나아갈 때 화면 사각형과 만나는 가장자리 점.
-   *  개인 화살이 화면 밖이 아니라 "가장자리"에서 출발하게 해 즉시 컬링을 피한다. */
-  private edgeExitPoint(px: number, py: number, angle: number): [number, number] {
+  /** (px,py)에서 angle 방향으로 나아갈 때 경기장 원과 만나는 둘레 점(전방 교점).
+   *  플레이어는 원 안에 있으므로 어느 방향이든 전방으로 딱 하나 만난다.
+   *  개인 화살이 원 밖이 아니라 "둘레"에서 출발하게 해 즉시 컬링을 피한다.
+   *  ⚠️ rng를 소비하지 않는다 — 위치에만 의존(관전 재구성 불변식). */
+  private rimExitPoint(px: number, py: number, angle: number): [number, number] {
+    const { cx, cy, radius } = this.cfg.arena;
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
-    const { screenWidth: w, screenHeight: h } = this.cfg;
-    let t = Infinity;
-    if (dx > 1e-9) t = Math.min(t, (w - px) / dx);
-    else if (dx < -1e-9) t = Math.min(t, -px / dx);
-    if (dy > 1e-9) t = Math.min(t, (h - py) / dy);
-    else if (dy < -1e-9) t = Math.min(t, -py / dy);
-    if (!Number.isFinite(t)) t = 0;
+    const fx = px - cx;
+    const fy = py - cy;
+    // |f + t·d|² = R² 의 전방 해. b=f·d, c=|f|²-R². 플레이어가 안이면 c<0 → 전방 해 존재.
+    const b = fx * dx + fy * dy;
+    const c = fx * fx + fy * fy - radius * radius;
+    const t = -b + Math.sqrt(Math.max(0, b * b - c));
     return [px + dx * t, py + dy * t];
   }
 
-  /** 화면 네 변 중 하나의 무작위 점(개인 rng). */
-  private perimeterPoint(): [number, number] {
-    const { screenWidth: w, screenHeight: h } = this.cfg;
-    const t = this.rng.next();
-    switch (this.rng.int(4)) {
-      case 0:
-        return [0, t * h]; // 왼쪽
-      case 1:
-        return [w, t * h]; // 오른쪽
-      case 2:
-        return [t * w, 0]; // 위
-      default:
-        return [t * w, h]; // 아래
-    }
+  /** 경기장 둘레 위의 무작위 점(개인 rng). ⚠️ rng 소비는 위치와 무관(재구성 불변식). */
+  private rimPoint(): [number, number] {
+    const { cx, cy, radius } = this.cfg.arena;
+    const theta = this.rng.next() * Math.PI * 2;
+    return [cx + Math.cos(theta) * radius, cy + Math.sin(theta) * radius];
   }
 
   /** 풀에서 화살을 꺼내 개인 화살로 표시하고 발사. */

@@ -7,7 +7,7 @@ const MOVE_RIGHT: InputState = { up: false, down: false, left: false, right: tru
 
 class CaptureRenderer implements IRenderer {
   readonly width = 800;
-  readonly height = 600;
+  readonly height = 800;
   readonly commonLines: number[][] = [];
   clear(): void {}
   circle(): void {}
