@@ -11,6 +11,19 @@ const COUNTDOWN_MS = 3000;
 const SNAPSHOT_MS = 100;
 const SURVIVAL_TOLERANCE_TICKS = 120;
 
+/** 빈 방을 남겨두는 시간. 이 안에 돌아오면 같은 코드로 방이 이어진다.
+ *  짧으면 새로고침 한 번에 방이 날아가고, 길면 죽은 방이 코드를 붙들고 있는다. */
+const ROOM_GRACE_MS = 60_000;
+/** 만료된 빈 방을 회수하는 주기(상한). 유예보다 촘촘해야 만료가 제때 반영된다 —
+ *  주기가 유예보다 길면 "유예는 끝났는데 방은 아직 살아있는" 구간이 생긴다. */
+const REAP_INTERVAL_MS = 10_000;
+const MIN_REAP_INTERVAL_MS = 500;
+
+/** 회수 주기는 유예의 절반을 넘지 않게 잡는다(짧은 유예를 쓰는 테스트에서도 정확). */
+function reapIntervalFor(graceMs: number): number {
+  return Math.max(MIN_REAP_INTERVAL_MS, Math.min(REAP_INTERVAL_MS, graceMs / 2));
+}
+
 export type ArcadeServer = {
   wss: WebSocketServer;
   /** WS를 얹은 HTTP 서버. 헬스체크(GET /health)를 받는다. */
@@ -18,12 +31,19 @@ export type ArcadeServer = {
   close(): Promise<void>;
 };
 
-export type ArcadeServerOptions = { port: number; countdownMs?: number; snapshotMs?: number };
+export type ArcadeServerOptions = {
+  port: number;
+  countdownMs?: number;
+  snapshotMs?: number;
+  /** 빈 방 유예(ms). 테스트에서 짧게 줄여 만료를 검증한다. */
+  roomGraceMs?: number;
+};
 
 export function createArcadeServer(input: number | ArcadeServerOptions): ArcadeServer {
   const options = typeof input === "number" ? { port: input } : input;
   const countdownMs = options.countdownMs ?? COUNTDOWN_MS;
   const snapshotMs = options.snapshotMs ?? SNAPSHOT_MS;
+  const graceMs = options.roomGraceMs ?? ROOM_GRACE_MS;
 
   // ws가 자체 HTTP 서버를 만들게 두면 평문 GET에 400/426으로 답해 헬스체크가 실패한다.
   // HTTP 서버를 직접 두고 그 위에 WS를 얹어, 배포 플랫폼이 "살아있음"을 확인할 수 있게 한다.
@@ -91,7 +111,9 @@ export function createArcadeServer(input: number | ArcadeServerOptions): ArcadeS
     const wasRoundActive = room.state === "countdown" || room.state === "playing";
     const result = room.disconnectMember(id, Date.now());
     if (room.isEmpty()) {
-      rooms.deleteRoom(room.code);
+      // 지우지 않고 유예를 켠다. 새로고침·네트워크 끊김으로 나간 사람이 같은 코드로
+      // 돌아오면 방이 그대로 이어진다(돌아온 사람이 다시 호스트가 된다).
+      room.markEmpty(Date.now());
       return;
     }
     if (result.hostChanged) broadcast(room, { type: "host_changed", newHostId: result.hostChanged });
@@ -203,11 +225,17 @@ export function createArcadeServer(input: number | ArcadeServerOptions): ArcadeS
     }
   }, snapshotMs);
 
+  // 유예가 끝난 빈 방을 회수한다. 이게 없으면 버려진 방이 코드를 영원히 붙들고 메모리에 쌓인다.
+  const reapTimer = setInterval(() => {
+    rooms.reapExpired(Date.now(), graceMs);
+  }, reapIntervalFor(graceMs));
+
   return {
     wss,
     http,
     close: () => new Promise((resolve) => {
       clearInterval(snapshotTimer);
+      clearInterval(reapTimer);
       for (const socket of wss.clients) socket.terminate();
       // WS를 먼저 닫고, 그 위를 받치던 HTTP 서버를 닫는다(순서 뒤집으면 소켓이 남는다).
       wss.close(() => http.close(() => resolve()));

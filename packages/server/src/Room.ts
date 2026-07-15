@@ -22,6 +22,14 @@ export class Room {
   seed: number | null = null;
   startTime: number | null = null;
 
+  /** 방이 빈 채로 남아있기 시작한 시각(ms). 누군가 있으면 null.
+   *
+   *  ⚠️ 이게 없으면 호스트 연결이 1초만 끊겨도 방이 즉시 증발한다. 새로고침 한 번,
+   *  Wi-Fi 딸꾹질 한 번에 친구가 받은 코드가 무효가 된다. 방을 만들고 코드를 전달하는
+   *  몇 분 동안 아무 사고도 없어야 한다는 뜻이라 너무 취약했다.
+   *  빈 방을 잠시 살려두면 그 사이 돌아온 사람이 다시 호스트가 되어 방이 이어진다. */
+  emptySince: number | null = null;
+
   constructor(
     public readonly code: string,
     public readonly gameId: string,
@@ -43,7 +51,21 @@ export class Room {
   addMember(id: string, nickname: string): boolean {
     if (this.state !== "waiting" || this.connectedCount >= this.capacity || this.hasConnectedMember(id)) return false;
     this.members.push({ id, nickname, alive: true, survivalTicks: 0, connected: true, px: 0, py: 0, hasPosition: false });
+    this.emptySince = null; // 사람이 들어왔다 → 유예 시계를 끈다.
     return true;
+  }
+
+  /** 방이 비었음을 표시하고 유예 시계를 켠다.
+   *  라운드 중이었더라도 대기 상태로 되돌린다 — 아무도 없는 라운드를 이어갈 이유가 없고,
+   *  이렇게 해야 돌아온 사람이 같은 코드로 다시 들어와 새 판을 시작할 수 있다. */
+  markEmpty(now: number): void {
+    this.emptySince = now;
+    if (this.state !== "waiting") this.returnToWaiting();
+  }
+
+  /** 유예가 끝나 회수해도 되는 빈 방인가. */
+  isExpired(now: number, graceMs: number): boolean {
+    return this.emptySince !== null && now - this.emptySince >= graceMs;
   }
 
   startCountdown(seed: number, startTime: number): void {

@@ -28,6 +28,18 @@ export class RoomManager {
     this.rooms.delete(code);
   }
 
+  /** 유예가 끝난 빈 방을 회수한다. 주기적으로 호출. 회수된 코드를 돌려준다.
+   *  (유예 동안은 방이 남아 있어, 새로고침·네트워크 끊김으로 나갔던 사람이 같은 코드로 복귀할 수 있다.) */
+  reapExpired(now: number, graceMs: number): string[] {
+    const reaped: string[] = [];
+    for (const room of this.rooms.values()) {
+      if (!room.isExpired(now, graceMs)) continue;
+      this.rooms.delete(room.code);
+      reaped.push(room.code);
+    }
+    return reaped;
+  }
+
   private generateCode(): string {
     let code = "";
     for (let i = 0; i < CODE_LENGTH; i++) code += CODE_CHARS[randomInt(CODE_CHARS.length)];
