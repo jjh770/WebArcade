@@ -44,10 +44,11 @@ export const jungnimConfig = {
   /** 스폰 간격 곡선: 최소 간격과, tick당 얼마나 촘촘해지는지.
    *  패턴이 여러 발을 한꺼번에 쏘므로(벽·수렴 등) 간격에 숨 쉴 틈을 둔다. */
   spawn: {
-    baseIntervalTicks: 45,
-    minIntervalTicks: 15,
-    /** 난이도 1단계 오르는 데 걸리는 tick (difficulty = floor(tick / rampTicks)). */
-    rampTicks: 360,
+    baseIntervalTicks: 54, // 45→54: 전체적으로 스폰 간격을 늘려 밀도↓
+    minIntervalTicks: 20, // 15→20: 후반에도 최소 숨 쉴 틈 확보
+    /** 난이도 1단계 오르는 데 걸리는 tick (difficulty = floor(tick / rampTicks)).
+     *  600 = 10초. 공통 패턴이 10초 간격으로 열린다: spread 10s, wall 20s, converge 30s. */
+    rampTicks: 600,
   },
 
   /** 화살 패턴 튜닝. 전부 시드/tick에서만 파생된다 — 플레이어 위치는 절대 참조 안 함.
@@ -73,16 +74,18 @@ export const jungnimConfig = {
   personal: {
     /** 이 tick 이후부터 개인 화살 등장(초반 유예). */
     unlockTick: 300,
-    /** 스폰 이벤트 간격(tick). */
-    intervalTicks: 30,
+    /** 스폰 이벤트 간격(tick). 30→48(0.8s)로 늘려 전체 밀도를 낮춤. */
+    intervalTicks: 48,
     /** 개인 화살 속도(px/tick). 공통 arrowSpeed와 달리 둬 체감 구분. */
     speed: 3.5,
-    /** 한 패턴을 몇 번 연속 발사한 뒤 다른 패턴으로 바꿀지(페이즈 길이). */
-    phaseSpawns: 9,
+    /** 한 패턴을 몇 번 연속 발사한 뒤 다른 패턴으로 바꿀지(페이즈 길이).
+     *  9→6으로 줄여 링 페이즈가 오래 지속되며 화면을 뒤덮는 것을 완화. */
+    phaseSpawns: 6,
     /** 스피너: 매 발사마다 각도를 stepDeg만큼 돌려 가장자리에서 플레이어를 조준. */
     spinner: { stepDeg: 40 },
-    /** 링: 플레이어를 중심으로 사방 count방향에서 동시에 조여든다. */
-    ring: { count: 8 },
+    /** 링: 플레이어를 중심으로 사방 count방향에서 동시에 조여든다.
+     *  8→6으로 줄여 링 한 방의 밀도를 낮춤(피할 틈을 남김). */
+    ring: { count: 6 },
     /** 각 개인 패턴이 열리는 tick 문턱(aimed는 unlockTick부터 항상). */
     unlock: { spinner: 300, ring: 900 },
   },
