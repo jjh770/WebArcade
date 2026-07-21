@@ -28,11 +28,16 @@ const LOGICAL_WIDTH = 800;
 const LOGICAL_HEIGHT = 800; // 정사각형 — 원형 경기장에 맞춤(죽림고수 config와 일치).
 const POSITION_SEND_MS = 100;
 
-/** 게임 서버 주소.
+/** 게임 서버 주소(호스트까지만. 경로는 용도별로 붙인다).
  *  - 배포: VITE_WS_URL을 반드시 지정한다(예: wss://...). HTTPS 페이지에서 ws:// 로 붙으면
  *    브라우저가 mixed content로 차단하므로 wss:// 여야 한다.
- *  - 로컬 개발: 값이 없으면 같은 호스트의 8080(별도로 띄운 dev:server)으로 붙는다. */
-const WS_URL = import.meta.env.VITE_WS_URL ?? `ws://${location.hostname || "localhost"}:8080`;
+ *  - 로컬 개발: 값이 없으면 같은 호스트의 8787(`npm run dev:edge`)로 붙는다. */
+const WS_URL = import.meta.env.VITE_WS_URL ?? `ws://${location.hostname || "localhost"}:8787`;
+
+/** 방 만들기만 HTTP다. WebSocket은 붙는 순간 방이 정해지므로(방 하나 = 서버 인스턴스 하나),
+ *  "접속한 뒤 방을 만든다"가 불가능하다. 코드를 먼저 받고 그 코드로 접속한다.
+ *  주소는 하나만 설정하면 되도록 ws→http, wss→https로 유도한다. */
+const HTTP_URL = WS_URL.replace(/^ws/, "http");
 
 const mainCanvas = byId<HTMLCanvasElement>("game");
 const sideCanvases = Array.from({ length: 3 }, (_, index) => byId<HTMLCanvasElement>(`side-${index}`));
@@ -56,7 +61,9 @@ relayout();
 // 창 크기·모니터(DPR) 변경 시 다시 맞춘다.
 window.addEventListener("resize", relayout);
 
-let networkReady = false;
+/** 방에 연결된 상태인가. 서버 연결은 방에 들어갈 때 맺고 나올 때 끊는다
+ *  — 앱 시작 시점에는 연결하지 않는다(연습 모드는 서버가 없어도 돌아간다). */
+let inRoom = false;
 let selectedGameId: GameId | null = null;
 let myId: string | null = null;
 let myNickname = "";
@@ -75,7 +82,7 @@ function transition(event: AppEvent): boolean {
 }
 
 function ensureNetwork(): boolean {
-  if (networkReady && net.isClockSynchronized) return true;
+  if (inRoom && net.isClockSynchronized) return true;
   toast("서버 연결과 시각 동기화가 아직 준비되지 않았습니다.");
   return false;
 }
@@ -240,15 +247,42 @@ function showSoloResult(score: number): void {
 
 byId("solo-btn").addEventListener("click", startSolo);
 
+/** 방 코드로 접속하고 참가까지 마친다.
+ *  ⚠️ 서버는 방마다 인스턴스가 따로다(Durable Object). 그래서 "접속 후 방 선택"이 아니라
+ *     "방을 정하고 접속"하는 순서다. 방을 옮기려면 연결부터 새로 맺어야 한다. */
+async function enterRoom(code: string): Promise<void> {
+  try {
+    await net.connect(`${WS_URL}/ws?code=${code}`);
+  } catch {
+    inRoom = false;
+    return toast("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+  }
+  inRoom = true;
+  net.send({ type: "join_room", code, nickname: myNickname });
+}
+
 byId("create-btn").addEventListener("click", () => {
-  if (!selectedGameId || !ensureNetwork()) return;
-  net.send({ type: "create_room", gameId: selectedGameId, nickname: myNickname });
+  // 클릭 시점의 선택을 고정한다 — 아래는 비동기라, 그 사이 선택이 바뀌면 엉뚱한 방이 생긴다.
+  const gameId = selectedGameId;
+  if (!gameId) return;
+  // 방 만들기는 HTTP로 코드를 먼저 받는다 — WebSocket은 붙는 순간 방이 정해지므로
+  // 방이 없는 상태로는 접속할 곳이 없다.
+  void (async () => {
+    let code: string;
+    try {
+      const response = await fetch(`${HTTP_URL}/rooms?gameId=${encodeURIComponent(gameId)}`, { method: "POST" });
+      if (!response.ok) return toast("방을 만들 수 없습니다. 잠시 후 다시 시도해 주세요.");
+      ({ code } = (await response.json()) as { code: string });
+    } catch {
+      return toast("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+    }
+    await enterRoom(code);
+  })();
 });
 byId("join-btn").addEventListener("click", () => {
-  if (!ensureNetwork()) return;
   const code = byId<HTMLInputElement>("join-code").value.trim().toUpperCase();
   if (!/^[A-HJ-NP-Z]{4}$/.test(code)) return toast("유효한 방 코드 4자리를 입력하세요.");
-  net.send({ type: "join_room", code, nickname: myNickname });
+  void enterRoom(code);
 });
 byId("lobby-back").addEventListener("click", () => transition("back_games"));
 byId("start-btn").addEventListener("click", () => {
@@ -258,7 +292,13 @@ byId("leave-btn").addEventListener("click", leaveRoom);
 byId("result-leave-btn").addEventListener("click", leaveRoom);
 
 function leaveRoom(): void {
-  if (!soloMode) net.send({ type: "leave_room" }); // 연습은 애초에 방이 없다.
+  if (!soloMode) {
+    net.send({ type: "leave_room" }); // 연습은 애초에 방이 없다.
+    // 연결은 방에 매여 있다 — 방을 나가면 소켓도 닫는다. 다음 방은 새로 연결한다.
+    net.close();
+    inRoom = false;
+    myId = null;
+  }
   soloMode = false;
   clearTimeout(fallTimer);
   resetScreenFx(); // 로비로 나가니 다음 판을 위해 복구.
@@ -326,20 +366,16 @@ byId("again-btn").addEventListener("click", () => {
 const hashCode = location.hash.slice(1).toUpperCase();
 let autoJoinPending = /^[A-HJ-NP-Z]{4}$/.test(hashCode);
 function tryAutoJoin(): void {
-  if (!autoJoinPending || !myNickname || !networkReady || appState.state !== "main") return;
+  if (!autoJoinPending || !myNickname || appState.state !== "main") return;
   autoJoinPending = false;
   const defaultGame = Object.keys(GAME_REGISTRY)[0] as GameId;
   renderGameList(selectGame);
   transition("open_games");
   selectGame(defaultGame);
   byId<HTMLInputElement>("join-code").value = hashCode;
-  net.send({ type: "join_room", code: hashCode, nickname: myNickname });
+  void enterRoom(hashCode);
 }
 
+// 시작 시점에는 서버에 연결하지 않는다. 연결은 방에 들어갈 때 맺는다
+// — 덕분에 서버가 자고 있어도 연습 모드는 그대로 돌아간다.
 renderState(appState.state);
-net.connect(WS_URL).then(() => {
-  networkReady = true;
-  tryAutoJoin();
-}).catch(() => {
-  toast("서버에 연결하거나 시각을 동기화할 수 없습니다. 'npm run dev:server'를 확인하세요.");
-});

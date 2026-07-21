@@ -47,11 +47,15 @@ npm install            # 최초 1회 (또는 의존성 바뀐 뒤)
 npm run dev            # localhost 주소가 출력된다. 이 주소로 접속.
 
 # 터미널 B — 게임 서버 (멀티까지 볼 때만 필요)
-npm run dev:server     # ws://localhost:8080
+npm run dev:edge       # localhost:8787 (Cloudflare Workers, 계정 없이 로컬 실행)
 ```
 
 - **혼자 연습하기**는 서버 없이 터미널 A만으로 된다.
 - **방 만들기 / 멀티**는 터미널 B(서버)도 켜야 한다.
+
+> ⚠️ 서버를 Cloudflare Workers로 이식하는 중이다. 구 서버(`npm run dev:server`, 8080)도
+> 아직 저장소에 있지만 **클라이언트는 8787(`dev:edge`)에 붙는다.** 구 서버는 이식 검증이
+> 끝나면 지운다. 자세한 배경은 [`DESIGN.md`](./DESIGN.md) 10절 참조.
 - 코드를 저장하면 새로고침 없이 바로 반영된다(HMR).
 
 멀티를 한 컴퓨터에서 테스트하려면 브라우저 탭을 여러 개 열고 한 탭에서 방을 만들어 코드를 공유하면 된다.

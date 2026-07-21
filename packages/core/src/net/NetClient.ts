@@ -22,9 +22,14 @@ export class NetClient {
   private syncSequence = 0;
   private clockAnchor: ClockAnchor | null = null;
 
-  /** 서버에 연결. open되면 resolve, 실패하면 reject. */
+  /** 서버에 연결. open되면 resolve, 실패하면 reject.
+   *
+   *  ⚠️ 연결은 **방 단위**다. 방 하나가 서버 인스턴스 하나(Durable Object)라
+   *     URL로 방이 정해지고, 붙은 뒤에는 다른 방으로 옮길 수 없다.
+   *     방을 바꾸려면 close() 후 새 URL로 다시 connect 한다. */
   connect(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
+      this.ws?.close(); // 방을 옮기는 경우 이전 연결을 먼저 정리한다.
       const ws = new WebSocket(url);
       this.ws = ws;
       ws.onopen = () => {
@@ -77,8 +82,9 @@ export class NetClient {
   close(): void {
     this.ws?.close();
     this.ws = null;
-    this.handlers.clear();
     this.clockAnchor = null;
+    // ⚠️ handlers는 지우지 않는다. 앱은 시작할 때 한 번 구독하고, 방을 드나들 때마다
+    //    연결만 새로 맺는다 — 여기서 지우면 두 번째 방부터 메시지를 못 받는다.
     for (const pending of this.syncRequests.values()) {
       clearTimeout(pending.timeout);
       pending.reject(new Error("WebSocket 연결이 종료되었습니다."));
