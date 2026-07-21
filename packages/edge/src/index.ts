@@ -20,6 +20,7 @@
 
 import { RoomObject } from "./RoomObject";
 import { generateRoomCode } from "./roomCode";
+import { GAME_ID } from "./validation";
 
 /** wrangler.toml의 durable_objects 바인딩과 이름이 일치해야 한다. */
 export type Env = {
@@ -28,9 +29,6 @@ export type Env = {
 
 // wrangler가 마이그레이션에서 이 이름을 찾는다 — 반드시 export.
 export { RoomObject };
-
-/** 기존 validation.ts와 같은 규칙. 서버는 게임 내용을 모르므로 형식만 본다. */
-const GAME_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** 코드가 겹치면 다시 뽑는다. 24^4 = 331,776가지라 실제로는 거의 안 겹친다. */
 const MAX_CODE_ATTEMPTS = 8;
