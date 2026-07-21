@@ -21,10 +21,23 @@
    ============================================================ */
 
 import type { ServerMessage } from "@arcade/shared";
+import { RankingService } from "./RankingService";
 import { Room, ROOM_CAPACITY, type RoomSnapshot } from "./Room";
 import { parseClientMessage } from "./validation";
 
 const ROOM_KEY = "room";
+
+/** 시작 버튼을 누르고 실제로 tick 0이 되기까지의 여유. 기존 서버와 같은 값.
+ *  이 시간 안에 모든 클라가 game_start를 받고 카운트다운 연출을 마쳐야 한다. */
+const COUNTDOWN_MS = 3000;
+
+/** 관전용 위치를 방 전체에 묶어 내보내는 최소 간격. 기존 서버와 같은 10Hz. */
+const SNAPSHOT_MS = 100;
+
+/** 자기신고 생존시간의 허용 오차(tick). 이보다 더 오래 버텼다는 주장은 거부한다.
+ *  ⚠️ 상한만 막을 뿐 "일찍 죽고 늦게 신고"는 못 막는다 — 서버가 게임을 모르기 때문.
+ *     리플레이 검증을 하지 않기로 한 이유는 DESIGN 10절 참조. */
+const SURVIVAL_TOLERANCE_TICKS = 120;
 
 /** 소켓에 붙여 두는 신원. 하이버네이션을 건너 살아남는다. */
 type SocketMeta = { id: string };
@@ -32,6 +45,10 @@ type SocketMeta = { id: string };
 export class RoomObject {
   /** 스토리지의 캐시. 하이버네이션에서 깨면 비어 있으므로 생성자에서 되살린다. */
   private room: Room | null = null;
+
+  /** 마지막으로 peer_snapshot을 내보낸 시각. 기존 서버의 setInterval을 대신하는 스로틀.
+   *  ⚠️ 일부러 스토리지에 넣지 않는다 — 날아가도 스냅샷 한 번 더 나가는 게 전부다. */
+  private lastSnapshotAt = 0;
 
   constructor(private readonly ctx: DurableObjectState) {
     // blockConcurrencyWhile: 이 안의 작업이 끝나기 전에는 어떤 요청도 처리되지 않는다.
@@ -133,12 +150,76 @@ export class RoomObject {
         return;
       }
 
+      case "start_game": {
+        if (this.room.hostId !== id) {
+          return this.send(ws, { type: "error", reason: "호스트만 시작할 수 있습니다." });
+        }
+        if (this.room.state !== "waiting") {
+          return this.send(ws, { type: "error", reason: "대기 상태에서만 시작할 수 있습니다." });
+        }
+
+        // 시드는 **서버가 한 번만** 뽑아 방 전체에 같은 값을 뿌린다. 이게 모두가 같은
+        // 세계를 겪는 근거다. node의 randomBytes를 Web Crypto로 바꿨을 뿐 의미는 같다
+        // (게임 로직의 난수가 아니라 게임의 씨앗이므로 결정론과 무관한 자리).
+        const seed = crypto.getRandomValues(new Uint32Array(1))[0]!;
+        const startTime = Date.now() + COUNTDOWN_MS;
+
+        this.room.startCountdown(seed, startTime);
+        await this.persist();
+        this.broadcastRoomState();
+        this.broadcast({ type: "game_start", seed, startTime, gameId: this.room.gameId });
+        return;
+      }
+
+      case "return_to_ready": {
+        if (this.room.hostId !== id) {
+          return this.send(ws, { type: "error", reason: "호스트만 다시 대기실로 이동할 수 있습니다." });
+        }
+        if (this.room.state !== "finished") {
+          return this.send(ws, { type: "error", reason: "종료된 게임에서만 다시 할 수 있습니다." });
+        }
+        this.room.returnToWaiting();
+        await this.persist();
+        this.broadcastRoomState();
+        return;
+      }
+
+      case "player_state": {
+        const now = Date.now();
+        if (!this.room.ensurePlaying(now)) return;
+        this.room.updatePosition(id, msg.px, msg.py);
+
+        // ⚠️ 여기서 persist() 하지 않는다. 위치는 10Hz × 인원수로 들어오므로
+        //    매번 저장하면 무료 티어의 하루 쓰기 한도(10만)를 한 시간에 태운다.
+        //    위치는 관전용 근사치라 날아가도 다음 갱신이 곧 채운다.
+        //    (state 전이도 startTime에서 다시 계산되므로 저장할 필요가 없다.)
+
+        // 기존 서버는 setInterval로 100ms마다 뿌렸다. DO에서 살아있는 타이머는
+        // 오브젝트를 메모리에 붙들어 하이버네이션을 막으므로(=유휴에도 과금),
+        // 들어오는 위치에 얹어 같은 주기로 내보낸다. 아무도 안 보내면 안 나가고
+        // 오브젝트는 잠들 수 있다.
+        if (now - this.lastSnapshotAt >= SNAPSHOT_MS) {
+          this.lastSnapshotAt = now;
+          this.broadcast({ type: "peer_snapshot", peers: this.room.getPeerSnapshot() });
+        }
+        return;
+      }
+
+      case "player_died": {
+        const now = Date.now();
+        if (!this.room.ensurePlaying(now)) return;
+        if (msg.survivalTicks > this.room.elapsedTicks(now) + SURVIVAL_TOLERANCE_TICKS) {
+          return this.send(ws, { type: "error", reason: "유효하지 않은 생존시간입니다." });
+        }
+        if (!this.room.markDied(id, msg.survivalTicks)) return;
+        await this.persist(); // 사망은 라운드당 한 번뿐이라 저장해도 싸다.
+        this.broadcastExcept(id, { type: "peer_died", id });
+        await this.checkGameOver();
+        return;
+      }
+
       case "leave_room":
         await this.handleLeave(id);
-        return;
-
-      default:
-        // start_game / player_state / player_died는 다음 단계에서 붙는다.
         return;
     }
   }
@@ -156,6 +237,8 @@ export class RoomObject {
    *  새로고침·네트워크 끊김으로 나간 사람이 같은 코드로 돌아올 수 있게. */
   private async handleLeave(id: string): Promise<void> {
     if (!this.room) return;
+    // 나가면서 disconnectMember가 상태를 바꿀 수 있으므로 먼저 읽어 둔다.
+    const wasRoundActive = this.room.state === "countdown" || this.room.state === "playing";
     const result = this.room.disconnectMember(id, Date.now());
 
     if (this.room.isEmpty()) {
@@ -167,8 +250,24 @@ export class RoomObject {
 
     await this.persist();
     if (result.hostChanged) this.broadcast({ type: "host_changed", newHostId: result.hostChanged });
-    // result.died에 따른 peer_died 통지와 게임 종료 판정은 다음 단계에.
+    // 라운드 중 이탈은 사망으로 처리된다 — 남은 사람의 관전 대상 교체 신호가 필요하다.
+    if (result.died) this.broadcastExcept(id, { type: "peer_died", id });
     this.broadcastRoomState();
+    if (wasRoundActive) await this.checkGameOver();
+  }
+
+  /** 순위를 갱신해 알리고, 전원 사망이면 라운드를 끝낸다.
+   *  서버는 게임을 모른다 — 생존시간만 모아 순서를 매길 뿐이다. */
+  private async checkGameOver(): Promise<void> {
+    if (!this.room || this.room.state === "finished") return;
+    const members = this.room.getRankingMembers();
+    const alive = RankingService.aliveCount(members);
+    this.broadcast({ type: "ranking_update", alive, ranks: RankingService.computeRanks(members) });
+    if (alive > 0) return;
+
+    this.room.finish();
+    await this.persist();
+    this.broadcast({ type: "game_over", finalRanks: RankingService.computeRanks(members) });
   }
 
   private async persist(): Promise<void> {
@@ -196,6 +295,15 @@ export class RoomObject {
       // 아직 참가하지 않았거나 이미 나간 소켓은 건너뛴다. 나가는 소켓은 이 시점에도
       // getWebSockets()에 남아 있을 수 있어, 멤버 목록을 기준으로 걸러야 한다.
       if (id !== null && this.room.hasConnectedMember(id)) this.send(ws, msg);
+    }
+  }
+
+  /** 한 명만 빼고 알린다. 자기 사망은 자기가 이미 아는 사실이라 되돌려 보내지 않는다. */
+  private broadcastExcept(exceptId: string, msg: ServerMessage): void {
+    if (!this.room) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      const id = this.idOf(ws);
+      if (id !== null && id !== exceptId && this.room.hasConnectedMember(id)) this.send(ws, msg);
     }
   }
 
