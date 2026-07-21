@@ -1,0 +1,10 @@
+# Cloudflare Workers 설정 (이식 중 — DESIGN 10절 참조)
+#
+# 로컬 실행:  npm run dev:edge      (계정 없이 로컬에서만 돈다)
+# 배포:       npm run deploy:edge   (Cloudflare 로그인 필요)
+
+name = "webarcade"
+main = "src/index.ts"
+compatibility_date = "2026-07-21"
+
+# Durable Objects 바인딩은 2단계에서 추가한다. 지금은 헬스체크만.

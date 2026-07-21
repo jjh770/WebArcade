@@ -5,3 +5,5 @@ dist/
 .env
 
 .vercel
+# wrangler 로컬 상태(miniflare 캐시·임시 번들). 재생성되므로 커밋하지 않는다.
+.wrangler/

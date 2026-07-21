@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "noEmit": false,
+    // wrangler가 src에서 직접 번들한다 — tsc는 타입 검사용이라 JS를 낼 필요가 없다.
+    "emitDeclarationOnly": true,
+    // Workers 런타임 타입. node도 DOM도 아니다(fetch/Request는 있고 fs는 없다).
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["src"]
+}
