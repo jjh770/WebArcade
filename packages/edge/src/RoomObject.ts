@@ -21,6 +21,7 @@
    ============================================================ */
 
 import type { ServerMessage } from "@arcade/shared";
+import { roomGraceMs, type Env } from "./env";
 import { RankingService } from "./RankingService";
 import { Room, ROOM_CAPACITY, type RoomSnapshot } from "./Room";
 import { parseClientMessage } from "./validation";
@@ -50,7 +51,10 @@ export class RoomObject {
    *  ⚠️ 일부러 스토리지에 넣지 않는다 — 날아가도 스냅샷 한 번 더 나가는 게 전부다. */
   private lastSnapshotAt = 0;
 
-  constructor(private readonly ctx: DurableObjectState) {
+  constructor(
+    private readonly ctx: DurableObjectState,
+    private readonly env: Env,
+  ) {
     // blockConcurrencyWhile: 이 안의 작업이 끝나기 전에는 어떤 요청도 처리되지 않는다.
     // 하이버네이션에서 깨어난 직후 빈 상태로 요청을 받는 사고를 막는 유일한 장치다.
     ctx.blockConcurrencyWhile(async () => {
@@ -83,6 +87,8 @@ export class RoomObject {
     // 메모리보다 스토리지가 먼저다 — 쓰기가 실패하면 방이 있다고 착각하면 안 된다.
     await this.ctx.storage.put(ROOM_KEY, room.snapshot());
     this.room = room;
+    // 만들어놓고 아무도 안 들어오는 방도 유예 뒤에 회수되어야 한다.
+    await this.armReaper();
     return Response.json({ code: room.code, gameId: room.gameId });
   }
 
@@ -145,6 +151,8 @@ export class RoomObject {
         if (!this.room.addMember(id, msg.nickname)) {
           return this.send(ws, { type: "error", reason: `방 정원은 최대 ${ROOM_CAPACITY}명입니다.` });
         }
+        // 사람이 있는 방은 회수 대상이 아니다 — 걸어둔 알람을 끈다.
+        await this.ctx.storage.deleteAlarm();
         await this.persist();
         this.broadcastRoomState();
         return;
@@ -244,7 +252,7 @@ export class RoomObject {
     if (this.room.isEmpty()) {
       this.room.markEmpty(Date.now());
       await this.persist();
-      // 유예가 끝난 빈 방의 회수(기존 reapExpired)는 alarm()으로 다음 단계에.
+      await this.armReaper();
       return;
     }
 
@@ -268,6 +276,43 @@ export class RoomObject {
     this.room.finish();
     await this.persist();
     this.broadcast({ type: "game_over", finalRanks: RankingService.computeRanks(members) });
+  }
+
+  /** 유예가 끝나면 스스로를 회수하도록 알람을 건다.
+   *
+   *  기존 서버는 `setInterval`로 10초마다 **모든 방**을 훑어 만료된 것을 지웠다
+   *  (`RoomManager.reapExpired`). DO에는 훑을 중앙 목록이 없어서 방마다 자기
+   *  알람을 건다. 이쪽이 오히려 정확하다 — 훑는 주기가 유예보다 길면 "유예는
+   *  끝났는데 방은 아직 살아있는" 구간이 생겼는데, 알람은 제 시각에 울린다. */
+  private async armReaper(): Promise<void> {
+    await this.ctx.storage.setAlarm(Date.now() + roomGraceMs(this.env));
+  }
+
+  /** 유예 만료 시각에 런타임이 부른다(하이버네이션 중이면 깨워서 부른다). */
+  async alarm(): Promise<void> {
+    if (!this.room || !this.room.isEmpty()) return; // 그새 누가 들어왔다 → 회수 안 함
+
+    const grace = roomGraceMs(this.env);
+    if (!this.room.isExpired(Date.now(), grace)) {
+      // 들어왔다 다시 나가며 유예 시계가 갱신됐다 → 남은 시간만큼 다시 건다.
+      await this.ctx.storage.setAlarm((this.room.emptySince ?? Date.now()) + grace);
+      return;
+    }
+
+    // 참가하지 않고 붙어만 있던 소켓이 남아 있을 수 있다. 방이 사라지면
+    // 이 소켓들은 갈 곳이 없으므로 닫아 준다.
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        ws.close(1000, "room expired");
+      } catch {
+        /* 이미 닫힌 소켓은 무시 */
+      }
+    }
+
+    // 스토리지를 비우면 이 오브젝트는 다시 "없는 방"이 된다 —
+    // 같은 코드를 나중에 다른 방이 재사용할 수 있다(기존 deleteRoom과 같은 효과).
+    await this.ctx.storage.deleteAll();
+    this.room = null;
   }
 
   private async persist(): Promise<void> {

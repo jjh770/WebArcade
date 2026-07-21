@@ -18,14 +18,12 @@
    방 하나 = 오브젝트 하나라 그 제약이 사라진다.
    ============================================================ */
 
+import type { Env } from "./env";
 import { RoomObject } from "./RoomObject";
 import { generateRoomCode } from "./roomCode";
 import { GAME_ID } from "./validation";
 
-/** wrangler.toml의 durable_objects 바인딩과 이름이 일치해야 한다. */
-export type Env = {
-  ROOMS: DurableObjectNamespace;
-};
+export type { Env };
 
 // wrangler가 마이그레이션에서 이 이름을 찾는다 — 반드시 export.
 export { RoomObject };
