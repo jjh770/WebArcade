@@ -7,4 +7,14 @@ name = "webarcade"
 main = "src/index.ts"
 compatibility_date = "2026-07-21"
 
-# Durable Objects 바인딩은 2단계에서 추가한다. 지금은 헬스체크만.
+# 방 하나 = 오브젝트 하나. 방 코드로 idFromName 하면 전 세계에서 같은
+# 오브젝트로 라우팅된다 → 기존의 "서버 머신 1대" 제약이 사라진다.
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "RoomObject"
+
+# ⚠️ 무료 플랜은 SQLite 백엔드 DO만 쓸 수 있다 (KV 백엔드는 유료).
+#    그래서 new_classes가 아니라 new_sqlite_classes로 만든다.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomObject"]
