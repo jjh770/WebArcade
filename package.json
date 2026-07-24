@@ -7,17 +7,14 @@
     "packages/shared",
     "packages/core",
     "packages/games/*",
-    "packages/server",
     "packages/edge",
     "packages/app"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @arcade/app",
-    "dev:server": "npm run dev --workspace @arcade/server",
-    "dev:edge": "npm run dev --workspace @arcade/edge",
+    "dev:server": "npm run dev --workspace @arcade/edge",
     "build": "tsc -b && npm run build --workspace @arcade/app",
-    "build:server": "npm run build --workspace @arcade/server",
-    "deploy:edge": "npm run deploy --workspace @arcade/edge",
+    "deploy:server": "npm run deploy --workspace @arcade/edge",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "preview": "npm run preview --workspace @arcade/app"

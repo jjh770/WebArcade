@@ -13,7 +13,7 @@
 
 - TypeScript(strict) 모노레포 (npm workspaces)
 - 클라이언트: Canvas 2D + Vite (`IRenderer` 추상 → 필요 시 PixiJS 교체)
-- 서버: Node.js + `ws` WebSocket (방·시드·순위만 관리. 게임 내용을 모름)
+- 서버: Cloudflare Workers + Durable Objects (**방 하나 = 오브젝트 하나**. 방·시드·순위만 관리하고 게임 내용을 모름)
 - 게임 루프: 고정 타임스텝 누산기 (결정론 보장)
 
 ## 구조
@@ -24,9 +24,10 @@ packages/
 ├─ core/          # 엔진: GameLoop · SeededRNG · StateMachine · ClockSync · 렌더러 (게임을 모름)
 ├─ games/
 │  └─ jungnim/    # 죽림고수 (IGame 구현)
-├─ server/        # WebSocket 서버 (방·시드·순위. 게임 내용을 모름)
+├─ edge/          # 게임 서버 (Workers + DO). 방·시드·순위. 게임 내용을 모름
 └─ app/           # 진입점 + GameRegistry (게임 등록)
-tests/            # Vitest — 결정론·클럭·FSM·방·서버 통합 회귀
+tests/            # Vitest(Node) — 결정론·클럭·FSM·방 로직 회귀
+packages/edge/test/  # Vitest(workerd) — DO·WebSocket·알람 통합
 ```
 
 **의존성 규칙**: 모든 의존성은 위로만 향한다. `core`는 `games`를 import하지 않는다.
@@ -47,15 +48,11 @@ npm install            # 최초 1회 (또는 의존성 바뀐 뒤)
 npm run dev            # localhost 주소가 출력된다. 이 주소로 접속.
 
 # 터미널 B — 게임 서버 (멀티까지 볼 때만 필요)
-npm run dev:edge       # localhost:8787 (Cloudflare Workers, 계정 없이 로컬 실행)
+npm run dev:server     # localhost:8787 — Cloudflare 계정 없이 로컬에서 돈다
 ```
 
 - **혼자 연습하기**는 서버 없이 터미널 A만으로 된다.
 - **방 만들기 / 멀티**는 터미널 B(서버)도 켜야 한다.
-
-> ⚠️ 서버를 Cloudflare Workers로 이식하는 중이다. 구 서버(`npm run dev:server`, 8080)도
-> 아직 저장소에 있지만 **클라이언트는 8787(`dev:edge`)에 붙는다.** 구 서버는 이식 검증이
-> 끝나면 지운다. 자세한 배경은 [`DESIGN.md`](./DESIGN.md) 10절 참조.
 - 코드를 저장하면 새로고침 없이 바로 반영된다(HMR).
 
 멀티를 한 컴퓨터에서 테스트하려면 브라우저 탭을 여러 개 열고 한 탭에서 방을 만들어 코드를 공유하면 된다.
@@ -74,16 +71,13 @@ npm run typecheck && npm test
 # (3) 프론트 배포 (app·core·games·shared를 고쳤을 때)
 vercel --prod
 
-# (4) 서버 배포 (server·shared를 고쳤을 때만)
-fly deploy
-
-# (5) 서버가 잠들어 있으면 깨우기 (fly scale count 0 으로 재워둔 경우)
-fly scale count 1
+# (4) 서버 배포 (edge·shared를 고쳤을 때만)
+npm run deploy:server
 ```
 
 - 대부분의 변경(게임·연출·UI)은 **프론트만**이라 (3)만 하면 된다.
-- ⚠️ `server`나 `shared`(프로토콜)를 고쳤으면 (4)도 필수. 아래 [배포](#배포) 표 참조.
-- ⚠️ 서버는 **항상 1대만** 유지한다(방 상태가 메모리에 있어 2대면 방이 갈라진다).
+- ⚠️ `edge`나 `shared`(프로토콜)를 고쳤으면 (4)도 필수. 아래 [배포](#배포) 표 참조.
+- 서버는 쓰지 않을 때 잠들고 요청이 오면 깨어난다 — 따로 켜고 끌 일이 없다.
 
 ### 3. 처음부터 세팅 (빈 컴퓨터 → 배포까지)
 
@@ -95,23 +89,26 @@ git clone <저장소 주소> && cd WebArcade
 npm install
 npm run dev            # 로컬이 뜨는지 먼저 확인
 
-# 배포 도구 (전역 설치)
+# 배포 도구 (wrangler는 이미 devDependency라 전역 설치가 필요 없다)
 npm i -g vercel        # 프론트
-# Fly CLI 설치: PowerShell → iwr https://fly.io/install.ps1 -useb | iex
 
-# 로그인 (브라우저가 열린다)
+# 로그인 (둘 다 브라우저가 열린다)
 vercel login
-fly auth login
+npx wrangler login
 
-# 게임 서버 배포 (fly.toml이 이미 있으니 launch는 기존 설정 사용)
-fly deploy
-curl https://<app>.fly.dev/health   # {"ok":true} 확인
+# 게임 서버 배포 (wrangler.toml의 설정을 그대로 쓴다)
+npm run deploy:server
+curl https://webarcade.<서브도메인>.workers.dev/health   # {"ok":true} 확인
 
 # 프론트: Vercel에 서버 주소를 환경변수로 넣고 배포
-vercel                                    # 최초 연결(프로젝트 생성)
-vercel env add VITE_WS_URL production      # 값: wss://<app>.fly.dev
+vercel                                     # 최초 연결(프로젝트 생성)
+vercel env add VITE_WS_URL production      # 값: wss://webarcade.<서브도메인>.workers.dev
 vercel --prod                              # 이 값이 번들에 박힌다
 ```
+
+> 첫 배포 때 workers.dev 서브도메인 등록을 묻는다. **계정 전체에 하나**뿐이라
+> 프로젝트명이 아니라 본인 식별자로 정하는 편이 낫다. Cloudflare 계정의
+> **이메일 인증**을 마치지 않으면 배포가 거부된다.
 
 ⚠️ `VITE_WS_URL`은 **빌드 타임에 번들에 박힌다.** 서버 주소를 바꾸면 환경변수만 고쳐선 안 되고
 `vercel --prod`로 다시 빌드해야 한다. https 페이지이므로 반드시 `wss://`(ws는 브라우저가 차단).
@@ -120,16 +117,17 @@ vercel --prod                              # 이 값이 번들에 박힌다
 
 ```bash
 npm run typecheck      # 전체 타입 검사 (tsc -b)
-npm test               # 결정론·FSM·방 흐름 회귀 테스트 (Vitest)
+npm test               # 전체 테스트 (Node 단위 + workerd 통합)
+npx vitest run --project unit   # 순수 로직만 (빠름)
+npx vitest run --project edge   # 서버 전송 계층만 (workerd 안에서 실행)
 npm run build          # 클라이언트 정적 빌드
-npm run build:server   # 서버 빌드 (dist/index.js)
 ```
 
 ## 배포
 
-**라이브**: https://web-arcade-sigma.vercel.app (서버: `wss://webarcade.fly.dev`)
+**라이브**: https://web-arcade-sigma.vercel.app (서버: `wss://webarcade.leon770.workers.dev`)
 
-프론트(정적 파일)와 게임 서버(상시 WebSocket)는 성격이 달라 **따로 올린다**.
+프론트(정적 파일)와 게임 서버(WebSocket)는 성격이 달라 **따로 올린다**.
 자세한 근거와 제약은 [`DESIGN.md` 9절](./DESIGN.md) 참조.
 
 **바꾼 패키지에 따라 재배포 대상이 다르다. `shared`(프로토콜)를 고치면 반드시 둘 다** —
@@ -138,22 +136,24 @@ npm run build:server   # 서버 빌드 (dist/index.js)
 | 고친 곳 | 재배포 |
 |---|---|
 | `app` · `core` · `games` | `vercel --prod` |
-| `server` | `fly deploy` |
+| `edge` | `npm run deploy:server` |
 | `shared` | **둘 다** |
 
-### 게임 서버 → Fly.io
+### 게임 서버 → Cloudflare Workers
 
 ```bash
-fly deploy
-curl https://<app>.fly.dev/health   # {"ok":true} 나오면 성공
+npm run deploy:server
+curl https://webarcade.<서브도메인>.workers.dev/health   # {"ok":true} 나오면 성공
 ```
 
-⚠️ **머신은 1대만 유지해야 한다** (`fly scale count 1`). 방 상태가 서버 메모리(`RoomManager`의
-`Map`)에만 있어서, 2대 이상이면 같은 방 코드를 쳐도 다른 머신에 붙은 사람은 방을 못 찾는다.
-`fly.toml`이 `auto_stop_machines = 'off'` / `min_machines_running = 1`로 고정해 뒀다.
+**방 하나 = Durable Object 하나**라 인스턴스 수를 신경 쓸 필요가 없다. 방 코드로 라우팅되므로
+어느 지역에서 접속하든 같은 방으로 모인다. 쓰지 않을 때는 잠들어 비용이 들지 않는다.
 
-⚠️ **`fly deploy`는 서버를 재시작한다 = 진행 중인 방이 전부 사라지고 접속자가 튕긴다.**
+⚠️ **배포하면 진행 중인 방의 오브젝트가 새 코드로 갈아탄다 = 접속자가 튕긴다.**
 사람들이 플레이 중일 때 배포하지 않는다.
+
+⚠️ 무료 플랜은 **SQLite 백엔드 Durable Object만** 쓸 수 있다. `wrangler.toml`의 마이그레이션이
+`new_sqlite_classes`인 이유이고, 바꾸면 배포가 거부된다.
 
 ### 프론트 → Vercel
 
@@ -161,8 +161,9 @@ curl https://<app>.fly.dev/health   # {"ok":true} 나오면 성공
 vercel --prod
 ```
 
-환경변수 **`VITE_WS_URL = wss://<app>.fly.dev`** 가 Production에 등록돼 있어야 한다
-(`vercel env add VITE_WS_URL production`). 빌드 설정은 `vercel.json`에 있다.
+환경변수 **`VITE_WS_URL = wss://webarcade.<서브도메인>.workers.dev`** 가 Production에 등록돼
+있어야 한다 (`vercel env add VITE_WS_URL production`). 빌드 설정은 `vercel.json`에 있다.
+방 만들기용 HTTP 주소는 클라가 `ws→http`로 유도하므로 따로 설정하지 않는다.
 
 ⚠️ 이 값은 **빌드 타임에 번들에 박힌다.** 서버 주소를 바꾸면 환경변수만 고쳐선 소용없고
 `vercel --prod`로 다시 빌드해야 반영된다. 페이지가 https이므로 반드시 `wss://` —

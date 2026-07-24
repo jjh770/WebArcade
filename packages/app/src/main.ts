@@ -31,7 +31,7 @@ const POSITION_SEND_MS = 100;
 /** 게임 서버 주소(호스트까지만. 경로는 용도별로 붙인다).
  *  - 배포: VITE_WS_URL을 반드시 지정한다(예: wss://...). HTTPS 페이지에서 ws:// 로 붙으면
  *    브라우저가 mixed content로 차단하므로 wss:// 여야 한다.
- *  - 로컬 개발: 값이 없으면 같은 호스트의 8787(`npm run dev:edge`)로 붙는다. */
+ *  - 로컬 개발: 값이 없으면 같은 호스트의 8787(`npm run dev:server`)로 붙는다. */
 const WS_URL = import.meta.env.VITE_WS_URL ?? `ws://${location.hostname || "localhost"}:8787`;
 
 /** 방 만들기만 HTTP다. WebSocket은 붙는 순간 방이 정해지므로(방 하나 = 서버 인스턴스 하나),

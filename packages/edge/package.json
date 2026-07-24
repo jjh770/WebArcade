@@ -12,6 +12,7 @@
     "@arcade/shared": "*"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
     "@cloudflare/workers-types": "^5.20260721.1",
     "wrangler": "^4.112.0"
   }

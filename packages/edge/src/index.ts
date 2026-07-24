@@ -1,21 +1,17 @@
 /* ============================================================
-   edge — Cloudflare Workers 진입점 (이식 중)
+   edge — 게임 서버 (Cloudflare Workers + Durable Objects)
    ------------------------------------------------------------
-   기존 `packages/server`(node + ws)를 Workers + Durable Objects로 옮기는 작업.
-   현재까지: 헬스체크 / 방 코드 발급 / WebSocket을 방 오브젝트로 라우팅.
+   헬스체크 / 방 코드 발급 / WebSocket을 방 오브젝트로 라우팅한다.
+   서버는 게임 내용을 모른다 — 방·시드·순위만 다룬다.
 
-   ⚠️ 이식이 끝나기 전까지 `packages/server`가 여전히 현역이다.
-      로컬 개발(`npm run dev:server`)과 테스트가 그쪽을 쓴다. 지우지 말 것.
+   ⚠️ **방 코드를 연결 시점에 알아야 한다.** WebSocket이 어느 오브젝트로 갈지는
+      URL로 정해지고, 한번 붙은 소켓은 다른 오브젝트로 옮길 수 없다. 그래서
+      "연결한 뒤 방을 만든다"가 불가능하고, 방 만들기는 HTTP(`POST /rooms`)로
+      코드를 먼저 받아 그 코드로 접속하는 2단계다. (DESIGN 10절)
 
-   ⚠️ 기존 서버와 달리 **방 코드를 연결 시점에 알아야 한다.** WebSocket이 어느
-      오브젝트로 갈지는 URL로 정해지고, 한번 붙은 소켓은 다른 오브젝트로 옮길 수
-      없다. 기존처럼 "연결한 뒤 create_room 메시지로 방을 만든다"가 불가능해서,
-      방 만들기는 HTTP(`POST /rooms`)로 코드를 먼저 받고 그 코드로 접속한다.
-      → 클라(NetClient)도 이 흐름에 맞춰 바뀌어야 한다. (DESIGN 10절)
-
-   왜 옮기는가: 방 상태가 `RoomManager`의 Map(프로세스 메모리)에 있어
-   "서버 머신은 반드시 1대"라는 제약이 있다(DESIGN 9절). Durable Objects는
-   방 하나 = 오브젝트 하나라 그 제약이 사라진다.
+   방 하나 = Durable Object 하나이므로 인스턴스를 몇 개 띄우든 같은 코드는 같은
+   방으로 모인다 — 방 상태를 프로세스 메모리에 두던 시절의 "서버는 반드시 1대"
+   제약이 없다.
    ============================================================ */
 
 import type { Env } from "./env";
@@ -71,8 +67,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    // 배포 플랫폼이 "살아있음"을 확인하는 경로. 기존 서버와 같은 응답을 유지한다
-    // — 이식 전후로 헬스체크 방식이 달라지지 않게.
+    // 배포 플랫폼과 모니터링이 "살아있음"을 확인하는 경로.
     if (url.pathname === "/health") {
       return json({ ok: true });
     }

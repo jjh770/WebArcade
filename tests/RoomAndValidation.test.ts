@@ -1,7 +1,6 @@
-/* 방 상태·검증 순수 로직 테스트.
-   ⚠️ 대상은 `packages/edge`다 — 서버를 Cloudflare Workers로 이식하면서
-      packages/server의 같은 파일들은 폐기된다(DESIGN 10절).
-      전송 계층(WebSocket·DO) 테스트는 Workers 런타임에서 따로 돈다. */
+/* 방 상태·검증 순수 로직 테스트 — 평범한 Node에서 돈다.
+   전송 계층(Durable Object·WebSocket·알람)은 workerd가 필요해서
+   `packages/edge/test/`에서 따로 돈다. (`npm test`가 둘 다 실행한다) */
 import { describe, expect, it } from "vitest";
 import { RankingService } from "../packages/edge/src/RankingService";
 import { Room, ROOM_CAPACITY } from "../packages/edge/src/Room";

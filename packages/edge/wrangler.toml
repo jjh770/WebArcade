@@ -1,14 +1,14 @@
-# Cloudflare Workers 설정 (이식 중 — DESIGN 10절 참조)
+# 게임 서버 배포 설정 (Cloudflare Workers + Durable Objects)
 #
-# 로컬 실행:  npm run dev:edge      (계정 없이 로컬에서만 돈다)
-# 배포:       npm run deploy:edge   (Cloudflare 로그인 필요)
+# 로컬 실행:  npm run dev:server    (Cloudflare 계정 없이 로컬에서만 돈다)
+# 배포:       npm run deploy:server (Cloudflare 로그인 필요)
 
 name = "webarcade"
 main = "src/index.ts"
 compatibility_date = "2026-07-21"
 
 # 방 하나 = 오브젝트 하나. 방 코드로 idFromName 하면 전 세계에서 같은
-# 오브젝트로 라우팅된다 → 기존의 "서버 머신 1대" 제약이 사라진다.
+# 오브젝트로 라우팅되므로 인스턴스 수를 신경 쓸 필요가 없다. (DESIGN 9·10절)
 [[durable_objects.bindings]]
 name = "ROOMS"
 class_name = "RoomObject"

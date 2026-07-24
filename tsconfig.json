@@ -4,7 +4,6 @@
     { "path": "./packages/shared" },
     { "path": "./packages/core" },
     { "path": "./packages/games/jungnim" },
-    { "path": "./packages/server" },
     { "path": "./packages/edge" },
     { "path": "./packages/app" }
   ]
