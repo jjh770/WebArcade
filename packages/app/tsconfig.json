@@ -10,6 +10,7 @@
   "references": [
     { "path": "../shared" },
     { "path": "../core" },
-    { "path": "../games/jungnim" }
+    { "path": "../games/jungnim" },
+    { "path": "../games/curve" }
   ]
 }

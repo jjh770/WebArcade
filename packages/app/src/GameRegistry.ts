@@ -11,6 +11,7 @@
 
 import type { IGame, ScoreDirection } from "@arcade/shared";
 import { JungnimGame, jungnimConfig } from "@arcade/game-jungnim";
+import { CurveGame, curveConfig } from "@arcade/game-curve";
 
 export type GameEntry = {
   id: string;
@@ -29,8 +30,13 @@ export const GAME_REGISTRY = {
     scoreDirection: jungnimConfig.scoreDirection,
     factory: () => new JungnimGame(),
   },
-  // 두 번째 게임은 여기에 추가:
-  // tetris: { id: "tetris", title: "...", ..., factory: () => new TetrisGame() },
+  curve: {
+    id: curveConfig.id,
+    title: curveConfig.title,
+    description: curveConfig.description,
+    scoreDirection: curveConfig.scoreDirection,
+    factory: () => new CurveGame(),
+  },
 } satisfies Record<string, GameEntry>;
 
 /** 등록된 게임 id의 유니온 타입 — 친구의 Platform 유니온 기법 차용.

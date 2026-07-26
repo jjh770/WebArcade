@@ -10,7 +10,8 @@
   "dependencies": {
     "@arcade/shared": "*",
     "@arcade/core": "*",
-    "@arcade/game-jungnim": "*"
+    "@arcade/game-jungnim": "*",
+    "@arcade/game-curve": "*"
   },
   "devDependencies": {
     "vite": "^7.2.7"
