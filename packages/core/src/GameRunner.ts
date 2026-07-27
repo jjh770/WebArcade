@@ -31,6 +31,10 @@ export class GameRunner {
     /** 로컬 사망이 처음 감지된 순간 한 번 호출(멀티에서 player_died 전송용).
      *  게임이 뭔지는 모른다 — IGame.isPlayerDead()만 관찰. */
     private readonly onDeath?: () => void,
+    /** 매 렌더 프레임마다 로컬 플레이어 HUD 값을 앱에 흘려보낸다(캔버스 밖 DOM 헤더용).
+     *  score=getScore(생존 tick), gauge=getGauge()가 있으면 그 값(0~1) 없으면 null.
+     *  게임이 뭔지는 모른다 — HUD 표시는 앱이 정한다. */
+    private readonly onHud?: (score: number, gauge: number | null) => void,
   ) {
     this.loop = new GameLoop(
       // 고정 스텝: 현재 입력 스냅샷과 tick만 게임에 전달.
@@ -47,6 +51,7 @@ export class GameRunner {
           if (v.target) this.game.renderSpectator(v.renderer, v.target);
           else this.game.render(v.renderer, alpha);
         }
+        this.onHud?.(this.game.getScore(), this.game.getGauge?.() ?? null);
       },
     );
   }

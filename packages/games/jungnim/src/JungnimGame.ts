@@ -126,7 +126,7 @@ export class JungnimGame implements IGame {
     this.drawPool(r, this.me.pool); // 내 개인 화살
     r.circle(this.me.x, this.me.y, jungnimConfig.playerRadius, PLAYER_COLOR);
 
-    r.text(`${(this.survivalTicks / 60).toFixed(1)}s`, 12, 28, HUD_COLOR, 22);
+    // 생존 시간은 캔버스 밖 DOM HUD가 보여준다(getScore로 전달). 여기선 안 그린다.
     if (this.dead) {
       const cx = jungnimConfig.screenWidth / 2;
       const cy = jungnimConfig.screenHeight / 2;

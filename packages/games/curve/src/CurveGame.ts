@@ -28,11 +28,7 @@ const WALL_COLOR = "#457b9d";
 const MY_COLOR = "#e63946";
 const HEAD_COLOR = "#ffd166";
 const HUD_COLOR = "#e6e6e6";
-const GRAZE_COLOR = "#ffd166"; // 스치는 순간(니어 미스) 강조
-const GAUGE_BG_COLOR = "#20242f";
-const GAUGE_BORDER_COLOR = "#556070"; // 게이지 테두리(세련된 프레임)
-const GAUGE_FILL_COLOR = "#48cae4"; // 채워지는 게이지(평소)
-const GAUGE_NEARFULL_COLOR = "#ff9f1c"; // 거의 찼을 때 — 곧 발사 경고색
+const GRAZE_COLOR = "#ffd166"; // 스치는 순간(니어 미스) 강조 팝업
 const FIRE_COLOR = "#fff3b0"; // 발사 순간 번쩍임 + 총알 트레이서
 /** 발사 연출이 지속되는 tick 수(≈0.33초). 이 동안 게이지 번쩍 + 트레이서. */
 const FIRE_FLASH_TICKS = 20;
@@ -73,6 +69,8 @@ export class CurveGame implements IGame {
   private fireCount = 0;
   // 발사 연출 잔여 tick(>0이면 게이지 번쩍 + 총알 트레이서). tick마다 준다.
   private fireFlash = 0;
+  // 마지막으로 방향을 튼 뒤 흐른 tick. 오래 직진만 하면(벽타기) 충전을 끊는 데 쓴다.
+  private ticksSinceTurn = 0;
 
   init(seed: number, self?: SpawnContext): void {
     const rng = new SeededRNG(seed);
@@ -99,6 +97,7 @@ export class CurveGame implements IGame {
     this.grazing = false;
     this.fireCount = 0;
     this.fireFlash = 0;
+    this.ticksSinceTurn = 0;
   }
 
   /** 장애물을 시드에서 뽑는다. 벽붙은 선분 → 떠 있는 선분 → 원 기둥 순.
@@ -307,8 +306,16 @@ export class CurveGame implements IGame {
     if (this.dead) return; // 죽으면 내 선은 멈춘다(꼬리는 그대로 남아 장애물).
 
     // 좌/우 입력이 있을 때만 방향을 튼다. 둘 다거나 없으면 직진.
-    if (input.left && !input.right) this.angle -= C.turnRate;
-    else if (input.right && !input.left) this.angle += C.turnRate;
+    // 방향을 틀면 "스침 충전" 유예 시계를 리셋한다(직진만 하면 시계가 흘러 충전이 끊긴다).
+    if (input.left && !input.right) {
+      this.angle -= C.turnRate;
+      this.ticksSinceTurn = 0;
+    } else if (input.right && !input.left) {
+      this.angle += C.turnRate;
+      this.ticksSinceTurn = 0;
+    } else {
+      this.ticksSinceTurn++;
+    }
 
     this.x += Math.cos(this.angle) * C.speed;
     this.y += Math.sin(this.angle) * C.speed;
@@ -328,7 +335,12 @@ export class CurveGame implements IGame {
    *  상대에게 방해 이벤트를 쏜다). 판정은 순수 기하라 클라마다 어긋나지 않는다. */
   private accrueNearMiss(): void {
     if (this.fireFlash > 0) this.fireFlash--; // 발사 연출 시간 경과
-    const { grazeBand, gaugeGain } = C.nearMiss;
+    const { grazeBand, gaugeGain, turnGraceTicks } = C.nearMiss;
+    // 벽타기(오래 직진) 무한 충전 방지: 최근에 방향을 튼 적이 있어야 스침이 충전된다.
+    if (this.ticksSinceTurn >= turnGraceTicks) {
+      this.grazing = false;
+      return;
+    }
     const gap = this.nearestHazardGap();
     this.grazing = gap > 0 && gap <= grazeBand;
     if (!this.grazing) return;
@@ -399,14 +411,14 @@ export class CurveGame implements IGame {
   render(r: IRenderer, _alpha: number): void {
     this.drawArena(r);
     this.drawTrail(r, this.trailX, this.trailY, MY_COLOR);
-    // 발사 순간: 머리에서 진행 방향으로 총알 트레이서가 뻗어나간다(쏘는 손맛).
-    if (!this.dead && this.fireFlash > 0) this.drawFireTracer(r);
-    // 스치는 순간을 머리 옆에 즉시 알려 스릴 손맛을 준다(게이지가 차는 니어 미스).
-    if (!this.dead && this.grazing) r.text("스릴!", this.x + 10, this.y - 10, GRAZE_COLOR, 14);
+    // 발사/스침 손맛은 머리 옆에 위치성으로 남긴다(게이지·시간은 캔버스 밖 DOM HUD).
+    if (!this.dead && this.fireFlash > 0) {
+      this.drawFireTracer(r); // 진행 방향으로 총알 트레이서
+      r.text("발사!", this.x + 10, this.y - 26, FIRE_COLOR, 16);
+    } else if (!this.dead && this.grazing) {
+      r.text("스릴!", this.x + 10, this.y - 10, GRAZE_COLOR, 14); // 게이지가 차는 니어 미스
+    }
     if (!this.dead) r.circle(this.x, this.y, C.lineWidth, HEAD_COLOR);
-    // 생존 시간(60tick=1초). 죽림고수와 같은 위치·형식으로 좌상단에.
-    r.text(`${(this.survivalTicks / 60).toFixed(1)}s`, 12, 28, HUD_COLOR, 22);
-    this.drawGauge(r);
     // 사망 피드백 — 죽림고수와 같은 중앙 문구(그동안 머리만 사라져 죽은 줄 몰랐다).
     if (this.dead) {
       const cx = C.screenWidth / 2;
@@ -441,29 +453,6 @@ export class CurveGame implements IGame {
     const x1 = this.x + cos * start;
     const y1 = this.y + sin * start;
     r.line(x1, y1, x1 + cos * len, y1 + sin * len, FIRE_COLOR, 3);
-  }
-
-  /** 「스릴 게이지」 바(좌상단, 타이머 아래). 테두리 프레임 + 칸 분할로 세련되게,
-   *  거의 차면 경고색, 발사 순간엔 번쩍이며 "발사!"를 띄운다. */
-  private drawGauge(r: IRenderer): void {
-    const x = 14;
-    const y = 46;
-    const w = 190;
-    const h = 16;
-    const firing = this.fireFlash > 0;
-    // 프레임(테두리) → 배경 → 채움 순으로 겹쳐 그린다.
-    r.rect(x - 2, y - 2, w + 4, h + 4, firing ? FIRE_COLOR : GAUGE_BORDER_COLOR);
-    r.rect(x, y, w, h, GAUGE_BG_COLOR);
-    const fill = Math.max(0, Math.min(1, this.gauge)) * w;
-    if (firing) {
-      r.rect(x, y, w, h, FIRE_COLOR); // 발사 순간 — 가득 번쩍
-    } else if (fill > 0) {
-      const color = this.grazing ? GRAZE_COLOR : this.gauge >= 0.85 ? GAUGE_NEARFULL_COLOR : GAUGE_FILL_COLOR;
-      r.rect(x, y, fill, h, color);
-    }
-    // 칸 분할선 6칸 — 충전 진행이 눈에 들어오는 "차지 미터" 느낌.
-    for (let i = 1; i < 6; i++) r.line(x + (w * i) / 6, y, x + (w * i) / 6, y + h, GAUGE_BG_COLOR, 2);
-    r.text(firing ? "발사!" : "스릴", x, y + h + 16, firing ? FIRE_COLOR : HUD_COLOR, 13);
   }
 
   private drawTrail(r: IRenderer, xs: readonly number[], ys: readonly number[], color: string): void {

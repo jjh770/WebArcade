@@ -27,6 +27,7 @@ export function renderState(state: AppState): void {
   // 카운트다운 동안에도 플레이 영역을 보여준다 — 그 위에 게임판이 내려와 자리잡는다.
   const showPlay = PLAY_STATES.has(state) || state === "countdown";
   byId("play").classList.toggle("on", showPlay);
+  byId("game-hud").hidden = !showPlay; // 시간·스릴 게이지 HUD는 플레이 중에만(맵 밖 헤더)
   document.body.classList.toggle("playing", showPlay);
   byId("spectate-hint").hidden = state !== "spectating"; // 관전 중에만 ←/→ 힌트
 

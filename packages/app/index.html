@@ -64,6 +64,20 @@
         background: radial-gradient(circle at center, rgba(230,57,70,0) 45%, rgba(230,57,70,.5) 100%); }
       #death-flash.flash { animation: deathFlash .4s ease-out; }
       @keyframes deathFlash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+      /* 게임 HUD — 캔버스(맵) 밖 좌측 상단. 플레이 중엔 헤더가 숨으므로 그 자리를 쓴다. */
+      #game-hud { position: fixed; top: 16px; left: 20px; z-index: 40;
+        display: flex; flex-direction: column; gap: 8px; color: var(--ink); pointer-events: none; }
+      #game-hud[hidden] { display: none; }
+      #hud-time { font: 700 26px system-ui; font-variant-numeric: tabular-nums;
+        text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+      #hud-gauge { display: flex; flex-direction: column; gap: 3px; }
+      #hud-gauge[hidden] { display: none; }
+      #hud-gauge-label { font-size: 12px; letter-spacing: .05em; opacity: .8; }
+      #hud-gauge-track { width: 190px; height: 14px; background: #20242f;
+        border: 1px solid #556070; border-radius: 4px; overflow: hidden; }
+      #hud-gauge-fill { height: 100%; width: 0%; background: #48cae4;
+        transition: width .08s linear, background-color .12s; }
+      #hud-gauge-fill.near { background: #ff9f1c; } /* 거의 참 — 곧 발사 경고색 */
       @media (prefers-reduced-motion: reduce) {
         #game.fallen { animation: none; opacity: 0; } /* 모션 민감 사용자는 조용히 사라지게 */
         #game.slide-in, #game.swap-r, #game.swap-l { animation: none; } /* 전환 없이 즉시 표시 */
@@ -211,6 +225,14 @@
   <body>
     <!-- 사망 임팩트용 붉은 섬광 오버레이(항상 존재, 평소 투명·클릭 통과) -->
     <div id="death-flash"></div>
+    <!-- 게임 HUD: 맵(캔버스) 밖 좌측 상단에 시간 + 스릴 게이지. 플레이 중에만 보인다. -->
+    <div id="game-hud" hidden>
+      <div id="hud-time">0.0s</div>
+      <div id="hud-gauge" hidden>
+        <div id="hud-gauge-label">스릴</div>
+        <div id="hud-gauge-track"><div id="hud-gauge-fill"></div></div>
+      </div>
+    </div>
     <!-- 사이트 헤더: 로고 + 내비 -->
     <header id="site-header">
       <button class="brand" data-nav="game">🎯 Arcade</button>

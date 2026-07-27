@@ -44,4 +44,9 @@ export interface IGame {
 
   /** 순위 기준값. 죽림고수는 생존시간(tick). scoreDirection과 함께 해석된다. */
   getScore(): number;
+
+  /** (선택) 게임 고유의 게이지 값(0~1) — 캔버스 밖 DOM HUD에 바로 표시된다.
+   *  커브 피버의 「스릴 게이지」가 이걸 구현한다. 게이지가 없는 게임은 구현 안 하면
+   *  된다(그러면 HUD가 게이지 줄을 숨긴다). (잠정 IGame 확장) */
+  getGauge?(): number;
 }

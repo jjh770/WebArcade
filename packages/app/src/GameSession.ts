@@ -15,6 +15,8 @@ export type GameSessionOptions = {
   logicalHeight: number;
   onLocalDeath: () => void;
   onSideSlot: (index: number, visible: boolean, label: string) => void;
+  /** 매 프레임 로컬 플레이어 HUD 값(생존 tick, 게이지 0~1 또는 없으면 null). 캔버스 밖 DOM 헤더용. */
+  onHud: (score: number, gauge: number | null) => void;
 };
 
 /** 한 라운드의 게임 인스턴스, 입력, 관전 대상과 멀티 뷰를 소유한다. */
@@ -179,7 +181,7 @@ export class GameSession {
     if (this.activeGameId === gameId) return;
     this.runner?.stop();
     this.game = GAME_REGISTRY[gameId].factory();
-    this.runner = new GameRunner(this.game, this.input, this.options.onLocalDeath);
+    this.runner = new GameRunner(this.game, this.input, this.options.onLocalDeath, this.options.onHud);
     this.activeGameId = gameId;
   }
 

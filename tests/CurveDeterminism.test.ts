@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import type { IRenderer, InputState } from "@arcade/shared";
 import { CurveGame, nearMissGain } from "../packages/games/curve/src/CurveGame";
+import { curveConfig } from "../packages/games/curve/src/config";
 import { obstacleBlocks, obstacleClearance, type Obstacle } from "../packages/games/curve/src/obstacles";
 
 const IDLE: InputState = { up: false, down: false, left: false, right: false };
@@ -327,16 +328,16 @@ describe("멀티 스폰 분리 (C-2 — 플레이어별 다른 시작점)", () =
   });
 });
 
-describe("커브 HUD·사망 피드백 (A-1·A-2)", () => {
-  it("생존 시간을 초 단위로 그린다(죽림고수와 같은 형식)", () => {
+describe("커브 사망 피드백·HUD (A-2, 시간·게이지는 DOM으로 이동)", () => {
+  it("생존 시간은 getScore로 노출되고, 캔버스에는 더 이상 타이머를 그리지 않는다", () => {
     const game = new CurveGame();
     game.init(999);
     for (let t = 1; t <= 90; t++) game.update(t, IDLE);
+    expect(game.getScore()).toBeGreaterThan(0); // HUD(DOM)가 이 값을 표시한다
     const cap = new TextCapture();
     game.render(cap, 0);
-    // 죽든 살든 getScore(생존 tick) 기준으로 표기 — X.Xs 형식.
-    expect(cap.texts).toContain(`${(game.getScore() / 60).toFixed(1)}s`);
-    expect(cap.texts.some((s) => /^\d+\.\d+s$/.test(s))).toBe(true);
+    // 타이머는 캔버스 밖 DOM 헤더로 옮겼으니 render엔 "X.Xs" 단독 텍스트가 없다.
+    expect(cap.texts.some((s) => /^\d+\.\d+s$/.test(s))).toBe(false);
   });
 
   it("죽으면 중앙에 '사망 — 생존 X초' 문구를 그린다(살아있을 땐 없다)", () => {
@@ -404,6 +405,23 @@ describe("스릴 게이지 (1단계 — 니어 미스로 로컬 충전)", () => 
     for (let t = 1; t <= 200 && !game.isPlayerDead(); t++) game.update(t, TURN_RIGHT);
     game.init(43);
     expect(game.getGauge()).toBe(0);
+  });
+
+  it("오래 직진만 하면(마지막 회전 후 유예 초과) 게이지가 더는 안 찬다 (벽타기 무한충전 방지)", () => {
+    const GRACE = curveConfig.nearMiss.turnGraceTicks;
+    for (const seed of [1, 42, 999, 2024]) {
+      const game = new CurveGame();
+      game.init(seed);
+      // 잠깐 꺾어 유예 시계를 리셋(살아있는 동안) → 그 뒤 직진만.
+      let tick = 1;
+      for (; tick <= 30 && !game.isPlayerDead(); tick++) game.update(tick, TURN_RIGHT);
+      // 유예가 지날 때까지 직진.
+      for (let k = 0; k <= GRACE && !game.isPlayerDead(); k++, tick++) game.update(tick, IDLE);
+      const afterGrace = game.getGauge();
+      // 유예 후 직진으로 스치더라도 충전이 멈춰야 한다 — 증가 없음.
+      for (let k = 0; k < 150 && !game.isPlayerDead(); k++, tick++) game.update(tick, IDLE);
+      expect(game.getGauge()).toBeLessThanOrEqual(afterGrace + 1e-9);
+    }
   });
 });
 

@@ -56,7 +56,24 @@ const session = new GameSession({
   logicalHeight: LOGICAL_HEIGHT,
   onLocalDeath,
   onSideSlot: setSideSlot,
+  onHud: updateHud,
 });
+
+/** 매 프레임 로컬 플레이어 HUD 갱신 — 캔버스 밖 좌측 상단 헤더(시간 + 스릴 게이지).
+ *  gauge가 null이면(게이지 없는 게임=죽림고수) 게이지 줄을 숨긴다. */
+function updateHud(score: number, gauge: number | null): void {
+  byId("hud-time").textContent = `${(score / 60).toFixed(1)}s`;
+  const gaugeEl = byId("hud-gauge");
+  if (gauge === null) {
+    gaugeEl.hidden = true;
+    return;
+  }
+  gaugeEl.hidden = false;
+  const clamped = Math.max(0, Math.min(1, gauge));
+  const fill = byId("hud-gauge-fill");
+  fill.style.width = `${clamped * 100}%`;
+  fill.classList.toggle("near", clamped >= 0.85);
+}
 /** 표시 크기를 먼저 정하고(레이아웃), 그 크기에 맞춰 캔버스 해상도를 잡는다(렌더러). 순서 중요. */
 function relayout(): void {
   layoutPlayArea(LOGICAL_WIDTH / LOGICAL_HEIGHT);
