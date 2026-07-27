@@ -21,8 +21,9 @@ export const APP_TRANSITIONS = {
   nickname: { nickname_submit: "main", nav_game_nickname: "nickname", ...CONTENT_TRANSITIONS },
   main: { open_games: "gamelist", nav_game_main: "main", ...CONTENT_TRANSITIONS },
   gamelist: { back_main: "main", select_game: "lobby", ...CONTENT_TRANSITIONS },
-  // start_solo: 서버 없이 로컬 시드로 바로 플레이(연습). 방·카운트다운을 거치지 않는다.
-  lobby: { back_games: "gamelist", room_joined: "ready", start_solo: "playing", ...CONTENT_TRANSITIONS },
+  // start_solo: 서버 없이 로컬 시드로 플레이(연습). 방은 안 거치지만 카운트다운은 거친다
+  // (멀티는 서버시각 기준, 솔로는 로컬시각 기준 — 둘 다 countdown 상태를 지난다).
+  lobby: { back_games: "gamelist", room_joined: "ready", start_solo: "countdown", ...CONTENT_TRANSITIONS },
   ready: { game_start: "countdown", leave_room: "lobby" },
   countdown: { countdown_done: "playing" },
   // 사망 → dying(화면 낙하 연출) → 자동으로 관전(watch) 또는 결과(관전할 남이 없을 때 keep_result).
@@ -31,7 +32,7 @@ export const APP_TRANSITIONS = {
   dying: { keep_result: "deadResult", watch: "spectating", game_over: "result" },
   deadResult: { game_over: "result" },
   spectating: { game_over: "result" },
-  result: { return_ready: "ready", start_solo: "playing", leave_room: "lobby" },
+  result: { return_ready: "ready", start_solo: "countdown", leave_room: "lobby" },
   notice: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
   about: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
   community: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },

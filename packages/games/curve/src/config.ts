@@ -58,6 +58,22 @@ export const curveConfig = {
      *  랜덤 방향이면 벽·장애물을 정면으로 향해 즉사할 수 있어, 주변에서 제일
      *  먼 방향으로 출발시킨다. */
     headingSamples: 24,
+
+    /** 꽉 찬 원 기둥 개수. 선분과 달리 원 안 전체가 죽음 지대다(닿으면 죽음). */
+    circleCount: 3,
+    /** 원 기둥 반지름 범위(px). */
+    circleMinRadius: 22,
+    circleMaxRadius: 46,
+
+    /** 다각형 테두리(속 빈 도형) 개수. 원과 달리 **윤곽선만** 벽이라 안으로
+     *  들어갔다 나올 수 있다("도형 안에 갇히지 마"). 변을 선분으로 쪼개 판정한다. */
+    polygonCount: 2,
+    /** 다각형 반지름(중심~꼭짓점) 범위(px). */
+    polygonMinRadius: 40,
+    polygonMaxRadius: 72,
+    /** 다각형 변 개수 범위(3=삼각형 ~ 5=오각형). */
+    polygonMinSides: 3,
+    polygonMaxSides: 5,
   },
 
   /** 장애물 선 두께(px). 꼬리보다 굵게 두어 "벽"으로 읽히게. */

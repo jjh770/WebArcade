@@ -27,6 +27,8 @@ import { GameSession } from "./GameSession";
 const LOGICAL_WIDTH = 800;
 const LOGICAL_HEIGHT = 800; // 정사각형 — 원형 경기장에 맞춤(죽림고수 config와 일치).
 const POSITION_SEND_MS = 100;
+/** 카운트다운 길이(ms). 멀티는 서버가 이 값으로 startTime을 잡고, 솔로는 로컬로 센다. */
+const COUNTDOWN_MS = 3000;
 
 /** 게임 서버 주소(호스트까지만. 경로는 용도별로 붙인다).
  *  - 배포: VITE_WS_URL을 반드시 지정한다(예: wss://...). HTTPS 페이지에서 ws:// 로 붙으면
@@ -224,16 +226,48 @@ function randomSeed(): number {
 }
 
 function startSolo(): void {
-  if (!selectedGameId) return;
-  if (!transition("start_solo")) return;
+  const gameId = selectedGameId;
+  if (!gameId) return;
+  if (!transition("start_solo")) return; // → countdown
   soloMode = true;
   finalRanks = [];
-  resetScreenFx(); // 떨어졌던 화면을 제자리로.
   session.setRoster([], null); // 남이 없다 → peer도, 관전 뷰도 없다.
   setAliveHud("연습");
-  if (!session.start(selectedGameId, randomSeed(), performance.now())) {
-    toast(`게임을 시작할 수 없습니다: ${selectedGameId}`);
-  }
+  // 멀티처럼 카운트다운 3초 뒤 시작. 멀티는 서버시각 기준이지만 솔로는 서버가
+  // 없으므로 로컬시각으로 센다. 시드도 여기서 정해 카운트다운/플레이가 공유한다.
+  const seed = randomSeed();
+  runLocalCountdown(gameId, seed, () => {
+    resetScreenFx(); // 새 라운드 — 떨어졌던 화면 복구.
+    setAliveHud("연습");
+    if (!session.start(gameId, seed, performance.now())) {
+      toast(`게임을 시작할 수 없습니다: ${gameId}`);
+    }
+  });
+}
+
+/** 솔로용 로컬 카운트다운. 멀티의 startCountdown과 같은 연출(판이 내려오고 숫자가
+ *  줄어듦)이지만 서버시각 대신 performance.now()로 센다. */
+function runLocalCountdown(gameId: GameId, seed: number, onDone: () => void): void {
+  slideInScreen(); // 카운트다운 동안 게임판이 위에서 내려와 자리잡는다.
+  session.showReadyFrame(gameId, seed); // 내려오는 판에 경기장을 미리 그려둔다.
+  const start = performance.now();
+  let lastNumber = -1;
+  const step = (): void => {
+    const remaining = COUNTDOWN_MS - (performance.now() - start);
+    if (remaining <= 0) {
+      clearInterval(countdownTimer);
+      if (transition("countdown_done")) onDone();
+      return;
+    }
+    const number = Math.ceil(remaining / 1000);
+    if (number !== lastNumber) {
+      lastNumber = number;
+      setCountdown(number);
+    }
+  };
+  clearInterval(countdownTimer);
+  countdownTimer = window.setInterval(step, 50);
+  step();
 }
 
 function showSoloResult(score: number): void {

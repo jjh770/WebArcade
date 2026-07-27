@@ -54,30 +54,35 @@ describe("앱 FSM", () => {
 describe("연습(싱글) 모드 흐름", () => {
   const toLobby: readonly AppEvent[] = ["nickname_submit", "open_games", "select_game"];
 
-  it("로비에서 방·카운트다운을 건너뛰고 바로 플레이한다", () => {
+  it("로비에서 방은 건너뛰되 카운트다운을 거쳐 플레이한다", () => {
     const flow = createFlow();
     advance(flow, [...toLobby, "start_solo"]);
+    expect(flow.state).toBe("countdown"); // 솔로도 카운트다운을 지난다
+    flow.transition("countdown_done");
     expect(flow.state).toBe("playing");
   });
 
-  it("결과에서 새 라운드를 바로 시작할 수 있다", () => {
+  it("결과에서 새 라운드를 시작하면 카운트다운부터 다시 시작한다", () => {
     const flow = createFlow();
-    advance(flow, [...toLobby, "start_solo", "game_over"]);
+    advance(flow, [...toLobby, "start_solo", "countdown_done", "game_over"]);
     expect(flow.state).toBe("result");
     flow.transition("start_solo");
+    expect(flow.state).toBe("countdown");
+    flow.transition("countdown_done");
     expect(flow.state).toBe("playing");
   });
 
   it("결과에서 로비로 나갈 수 있다", () => {
     const flow = createFlow();
-    advance(flow, [...toLobby, "start_solo", "game_over", "leave_room"]);
+    advance(flow, [...toLobby, "start_solo", "countdown_done", "game_over", "leave_room"]);
     expect(flow.state).toBe("lobby");
   });
 
   it("플레이 중에는 연습을 다시 시작할 수 없다", () => {
     // 진행 중인 라운드를 버튼 하나로 갈아엎지 못하게 막는다.
     const flow = createFlow();
-    advance(flow, [...toLobby, "start_solo"]);
+    advance(flow, [...toLobby, "start_solo", "countdown_done"]);
+    expect(flow.state).toBe("playing");
     expect(flow.can("start_solo")).toBe(false);
   });
 

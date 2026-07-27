@@ -1,17 +1,20 @@
 /* ============================================================
    CurveGame — 커브 피버 (IGame 구현)
    ------------------------------------------------------------
-   1단계: 내 선 하나. 좌/우 회전, 꼬리 기록, 자기 꼬리·벽 충돌.
-   남의 꼬리와의 충돌(관전 재구성)은 3단계에서 붙는다.
+   내 선 하나. 좌/우 회전, 꼬리 기록, 자기 꼬리·벽·장애물 충돌.
+   남의 꼬리와의 충돌(관전 재구성)은 다음 단계에서 붙는다.
 
-   결정론 불변식: update는 tick + input에서만 파생된다. Math.random 없음
-   (spawn 위치만 시드에서 뽑고, 그 뒤로는 난수를 소비하지 않는다).
+   장애물은 선분 벽 + 꽉 찬 원 기둥 두 종류(obstacles.ts). 전부 시드에서만
+   파생되는 공통 월드라, 스폰보다 먼저 뽑아 모든 클라에서 같은 판이 나온다.
+
+   결정론 불변식: update는 tick + input에서만 파생된다. Math.random 없음.
    같은 시드 + 같은 입력이면 어느 클라에서 돌려도 꼬리가 픽셀 단위로 같다.
    ============================================================ */
 
 import type { IGame, IRenderer, InputState, PeerState, SpectateTarget } from "@arcade/shared";
 import { SeededRNG } from "@arcade/core";
 import { curveConfig as C } from "./config";
+import { drawObstacle, obstacleBlocks, obstacleClearance, type Obstacle } from "./obstacles";
 
 const TAU = Math.PI * 2;
 
@@ -19,6 +22,11 @@ const ARENA_FLOOR = "#1e2230";
 const WALL_COLOR = "#457b9d";
 const MY_COLOR = "#e63946";
 const HEAD_COLOR = "#ffd166";
+
+/** 플레이어 머리 반경 = 선 절반 두께. 충돌·탐침의 pad로 쓴다. */
+const HEAD_R = C.lineWidth / 2;
+/** 선분 장애물의 반 두께. */
+const SEG_HALF = C.obstacleWidth / 2;
 
 export class CurveGame implements IGame {
   // 머리(현재 위치)와 진행 방향.
@@ -31,8 +39,8 @@ export class CurveGame implements IGame {
   private trailX: number[] = [];
   private trailY: number[] = [];
 
-  // 장애물(선분 벽). 각 항목 [x1, y1, x2, y2]. 시드에서만 파생 → 모두가 같은 판.
-  private obstacles: number[][] = [];
+  // 장애물(선분 벽 + 원 기둥). 시드에서만 파생 → 모두가 같은 판.
+  private obstacles: Obstacle[] = [];
 
   private dead = false;
   private survivalTicks = 0;
@@ -56,26 +64,32 @@ export class CurveGame implements IGame {
     this.survivalTicks = 0;
   }
 
-  /** 선분 벽들을 시드에서 뽑는다. 일부는 바깥 벽에 붙여 안쪽으로 뻗게 하고
-   *  (벽 따라 도는 "고속도로"를 끊는다), 나머지는 판 안쪽에 띄운다. */
-  private generateObstacles(rng: SeededRNG): number[][] {
-    const { count, wallAttachedCount, minLength, maxLength, edgeMargin } = C.obstacles;
-    const out: number[][] = [];
+  /** 장애물을 시드에서 뽑는다. 벽붙은 선분 → 떠 있는 선분 → 원 기둥 순.
+   *  ⚠️ 이 고정 순서를 지켜야 클라마다 같은 판이 나온다. */
+  private generateObstacles(rng: SeededRNG): Obstacle[] {
+    const { count, wallAttachedCount, minLength, maxLength, edgeMargin, circleCount, polygonCount } = C.obstacles;
+    const out: Obstacle[] = [];
     const attached = Math.min(wallAttachedCount, count);
-    // ⚠️ 벽붙은 것부터 고정 순서로 뽑아야 클라마다 같은 판이 나온다.
-    for (let i = 0; i < attached; i++) out.push(this.wallAttachedSegment(rng));
+    // 처음 4개는 네 변(0=위 1=오른쪽 2=아래 3=왼쪽)에 하나씩 배정해 모든 변이
+    // 최소 하나는 갖게 한다(둘레 어디로도 그냥 돌 수 없게). 나머지는 랜덤 변.
+    for (let i = 0; i < attached; i++) {
+      const wall = i < 4 ? i : rng.int(4);
+      out.push(this.wallAttachedSegment(rng, wall));
+    }
     for (let i = attached; i < count; i++) out.push(this.floatingSegment(rng, minLength, maxLength, edgeMargin));
+    for (let i = 0; i < circleCount; i++) out.push(this.circlePillar(rng));
+    for (let i = 0; i < polygonCount; i++) out.push(this.polygonRing(rng));
     return out;
   }
 
-  /** 바깥 벽 한 곳에 한쪽 끝을 붙이고 안쪽으로 뻗는 선분(벽에서 자란 돌기). */
-  private wallAttachedSegment(rng: SeededRNG): number[] {
+  /** 바깥 벽 한 곳(wall: 0=위 1=오른쪽 2=아래 3=왼쪽)에 한쪽 끝을 붙이고
+   *  안쪽으로 뻗는 선분(벽에서 자란 돌기). */
+  private wallAttachedSegment(rng: SeededRNG, wall: number): Obstacle {
     const { minLength, maxLength } = C.obstacles;
     const m = C.wallMargin;
     const W = C.screenWidth;
     const H = C.screenHeight;
     const pad = 80; // 벽을 따라 모서리에서 이만큼 떨어진 구간에만 붙인다.
-    const wall = rng.int(4); // 0=위 1=오른쪽 2=아래 3=왼쪽
     let bx = 0;
     let by = 0;
     let inward = 0; // 안쪽을 향하는 기준 각도
@@ -89,11 +103,11 @@ export class CurveGame implements IGame {
     const length = rng.range(minLength, maxLength);
     const fx = clamp(bx + Math.cos(angle) * length, m, W - m);
     const fy = clamp(by + Math.sin(angle) * length, m, H - m);
-    return [bx, by, fx, fy];
+    return { kind: "segment", x1: bx, y1: by, x2: fx, y2: fy };
   }
 
   /** 판 안쪽에 떠 있는 선분. 끝점은 바깥 벽에서 edgeMargin만큼 안쪽. */
-  private floatingSegment(rng: SeededRNG, minLength: number, maxLength: number, edgeMargin: number): number[] {
+  private floatingSegment(rng: SeededRNG, minLength: number, maxLength: number, edgeMargin: number): Obstacle {
     const lo = C.wallMargin + edgeMargin;
     const hiX = C.screenWidth - C.wallMargin - edgeMargin;
     const hiY = C.screenHeight - C.wallMargin - edgeMargin;
@@ -103,33 +117,63 @@ export class CurveGame implements IGame {
     const length = rng.range(minLength, maxLength);
     const x2 = clamp(x1 + Math.cos(angle) * length, lo, hiX);
     const y2 = clamp(y1 + Math.sin(angle) * length, lo, hiY);
-    return [x1, y1, x2, y2];
+    return { kind: "segment", x1, y1, x2, y2 };
   }
 
-  /** 장애물에서 spawnClearance만큼 떨어진 시작 위치를 뽑는다.
-   *  못 찾으면 마지막 후보를 그냥 쓴다(장애물이 많아 꽉 찬 극단적 경우). */
+  /** 꽉 찬 원 기둥. 원 전체가 안전 영역 안에 들어오도록 중심을 반지름만큼 띄운다. */
+  private circlePillar(rng: SeededRNG): Obstacle {
+    const { circleMinRadius, circleMaxRadius } = C.obstacles;
+    const r = rng.range(circleMinRadius, circleMaxRadius);
+    const cx = rng.range(C.wallMargin + r, C.screenWidth - C.wallMargin - r);
+    const cy = rng.range(C.wallMargin + r, C.screenHeight - C.wallMargin - r);
+    return { kind: "circle", cx, cy, r };
+  }
+
+  /** 속 빈 다각형(정다각형 + 전체 회전). 윤곽선만 벽이라 안에 들어갔다 나올 수 있다. */
+  private polygonRing(rng: SeededRNG): Obstacle {
+    const { polygonMinRadius, polygonMaxRadius, polygonMinSides, polygonMaxSides } = C.obstacles;
+    const sides = polygonMinSides + rng.int(polygonMaxSides - polygonMinSides + 1);
+    const radius = rng.range(polygonMinRadius, polygonMaxRadius);
+    // 도형 전체가 안전 영역에 들어오도록 중심을 반지름만큼 띄운다.
+    const cx = rng.range(C.wallMargin + radius, C.screenWidth - C.wallMargin - radius);
+    const cy = rng.range(C.wallMargin + radius, C.screenHeight - C.wallMargin - radius);
+    const rot = rng.next() * TAU;
+    const pts: number[] = [];
+    for (let i = 0; i < sides; i++) {
+      const a = rot + (i * TAU) / sides;
+      pts.push(cx + Math.cos(a) * radius, cy + Math.sin(a) * radius);
+    }
+    return { kind: "polygon", pts };
+  }
+
+  /** 시작 위치를 뽑는다. spawnClearance를 만족하는 자리를 찾으면 즉시 쓰고,
+   *  못 찾으면(밀도가 높아 꽉 찬 경우) **그나마 가장 트인** 후보를 쓴다.
+   *  ⚠️ 예전엔 못 찾으면 마지막 랜덤 후보를 그대로 써서, 밀도가 오르자
+   *     벽·장애물 코앞에 스폰돼 즉사하는 일이 생겼다. */
   private pickSafeSpawn(rng: SeededRNG): { x: number; y: number } {
     const minX = C.wallMargin + C.spawnInset;
     const maxX = C.screenWidth - C.wallMargin - C.spawnInset;
     const minY = C.wallMargin + C.spawnInset;
     const maxY = C.screenHeight - C.wallMargin - C.spawnInset;
-    const clear2 = C.obstacles.spawnClearance * C.obstacles.spawnClearance;
 
-    let x = 0;
-    let y = 0;
+    let best = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    let bestClear = -Infinity;
     for (let attempt = 0; attempt < C.obstacles.maxSpawnAttempts; attempt++) {
-      x = rng.range(minX, maxX);
-      y = rng.range(minY, maxY);
-      let safe = true;
-      for (const [ox1, oy1, ox2, oy2] of this.obstacles) {
-        if (segPointDist2(x, y, ox1!, oy1!, ox2!, oy2!) < clear2) {
-          safe = false;
-          break;
-        }
+      const x = rng.range(minX, maxX);
+      const y = rng.range(minY, maxY);
+      // 이 후보에서 가장 가까운 장애물까지의 여유거리.
+      let minClear = Infinity;
+      for (const ob of this.obstacles) {
+        const c = obstacleClearance(ob, x, y, SEG_HALF);
+        if (c < minClear) minClear = c;
       }
-      if (safe) break;
+      if (minClear >= C.obstacles.spawnClearance) return { x, y }; // 충분히 트임 → 확정
+      if (minClear > bestClear) {
+        bestClear = minClear;
+        best = { x, y };
+      }
     }
-    return { x, y };
+    return best; // 기준 미달이지만 표본 중 가장 트인 자리
   }
 
   /** 시작 위치에서 사방을 훑어 "가장 트인 방향"을 고른다. 각 후보 방향으로 짧은
@@ -139,8 +183,6 @@ export class CurveGame implements IGame {
     const { headingSamples, spawnClearance } = C.obstacles;
     const offset = rng.next() * TAU;
     const step = 8; // 탐침 간격(px)
-    const reach = C.lineWidth / 2 + C.obstacleWidth / 2;
-    const reach2 = reach * reach;
     const maxProbe = spawnClearance + 40;
 
     let bestAngle = offset;
@@ -151,9 +193,7 @@ export class CurveGame implements IGame {
       const sin = Math.sin(a);
       let clear = maxProbe;
       for (let d = step; d <= maxProbe; d += step) {
-        const px = x + cos * d;
-        const py = y + sin * d;
-        if (this.blockedAt(px, py, reach2)) {
+        if (this.blockedAt(x + cos * d, y + sin * d)) {
           clear = d;
           break;
         }
@@ -166,13 +206,13 @@ export class CurveGame implements IGame {
     return bestAngle;
   }
 
-  /** 탐침용: (px,py)가 벽 밖이거나 장애물에 닿는가. */
-  private blockedAt(px: number, py: number, reach2: number): boolean {
+  /** 탐침용: (px,py)가 벽 밖이거나 장애물에 닿는가(머리 반경 기준). */
+  private blockedAt(px: number, py: number): boolean {
     if (px < C.wallMargin || px > C.screenWidth - C.wallMargin || py < C.wallMargin || py > C.screenHeight - C.wallMargin) {
       return true;
     }
-    for (const [x1, y1, x2, y2] of this.obstacles) {
-      if (segPointDist2(px, py, x1!, y1!, x2!, y2!) < reach2) return true;
+    for (const ob of this.obstacles) {
+      if (obstacleBlocks(ob, px, py, HEAD_R, SEG_HALF)) return true;
     }
     return false;
   }
@@ -197,12 +237,11 @@ export class CurveGame implements IGame {
   }
 
   private hitWall(): boolean {
-    const r = C.lineWidth / 2;
     return (
-      this.x - r < C.wallMargin ||
-      this.x + r > C.screenWidth - C.wallMargin ||
-      this.y - r < C.wallMargin ||
-      this.y + r > C.screenHeight - C.wallMargin
+      this.x - HEAD_R < C.wallMargin ||
+      this.x + HEAD_R > C.screenWidth - C.wallMargin ||
+      this.y - HEAD_R < C.wallMargin ||
+      this.y + HEAD_R > C.screenHeight - C.wallMargin
     );
   }
 
@@ -219,13 +258,10 @@ export class CurveGame implements IGame {
     return false;
   }
 
-  /** 머리가 장애물 선분에 닿았나. 점-선분 거리로 판정. */
+  /** 머리가 장애물(선분·원)에 닿았나. */
   private hitObstacle(): boolean {
-    // 머리 반경 + 장애물 반두께. 이 거리 안이면 충돌.
-    const reach = C.lineWidth / 2 + C.obstacleWidth / 2;
-    const threshold = reach * reach;
-    for (const [x1, y1, x2, y2] of this.obstacles) {
-      if (segPointDist2(this.x, this.y, x1!, y1!, x2!, y2!) < threshold) return true;
+    for (const ob of this.obstacles) {
+      if (obstacleBlocks(ob, this.x, this.y, HEAD_R, SEG_HALF)) return true;
     }
     return false;
   }
@@ -247,10 +283,8 @@ export class CurveGame implements IGame {
       C.screenHeight - C.wallMargin * 2,
       ARENA_FLOOR,
     );
-    // 장애물 선분. 바깥 벽과 같은 색이라 "부딪히면 죽는 벽"으로 읽힌다.
-    for (const [x1, y1, x2, y2] of this.obstacles) {
-      r.line(x1!, y1!, x2!, y2!, WALL_COLOR, C.obstacleWidth);
-    }
+    // 장애물. 바깥 벽과 같은 색이라 "부딪히면 죽는 벽"으로 읽힌다.
+    for (const ob of this.obstacles) drawObstacle(r, ob, WALL_COLOR, C.obstacleWidth);
   }
 
   private drawTrail(r: IRenderer, xs: readonly number[], ys: readonly number[], color: string): void {
@@ -271,32 +305,18 @@ export class CurveGame implements IGame {
     return this.survivalTicks;
   }
 
-  // --- 관전 계약: 3단계에서 남의 꼬리 이력으로 채운다. 지금은 no-op. ---
+  // --- 관전 계약: 다음 단계에서 남의 꼬리 이력으로 채운다. 지금은 no-op. ---
   syncPeers(_peers: readonly PeerState[]): void {
-    /* 3단계: 위치 이력을 모아 남의 꼬리를 재구성한다. */
+    /* 위치 이력을 모아 남의 꼬리를 재구성한다. */
   }
 
   renderSpectator(r: IRenderer, _target: SpectateTarget): void {
-    // 3단계 전까지는 경기장 + 장애물만 그린다. 장애물은 시드 공유라 이 로컬
-    // 인스턴스 것이 방 전체와 같다(남의 꼬리 재구성은 3단계).
+    // 아직은 경기장 + 장애물만 그린다. 장애물은 시드 공유라 이 로컬 인스턴스
+    // 것이 방 전체와 같다(남의 꼬리 재구성은 다음 단계).
     this.drawArena(r);
   }
 }
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
-}
-
-/** 점 (px,py)에서 선분 (x1,y1)-(x2,y2)까지 거리의 제곱. sqrt 회피용. */
-function segPointDist2(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const lenSq = dx * dx + dy * dy;
-  // 선분이 사실상 한 점이면 끝점까지 거리.
-  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
-  const cx = x1 + t * dx;
-  const cy = y1 + t * dy;
-  const ex = px - cx;
-  const ey = py - cy;
-  return ex * ex + ey * ey;
 }
