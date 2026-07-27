@@ -28,6 +28,14 @@ const WALL_COLOR = "#457b9d";
 const MY_COLOR = "#e63946";
 const HEAD_COLOR = "#ffd166";
 const HUD_COLOR = "#e6e6e6";
+const GRAZE_COLOR = "#ffd166"; // 스치는 순간(니어 미스) 강조
+const GAUGE_BG_COLOR = "#20242f";
+const GAUGE_BORDER_COLOR = "#556070"; // 게이지 테두리(세련된 프레임)
+const GAUGE_FILL_COLOR = "#48cae4"; // 채워지는 게이지(평소)
+const GAUGE_NEARFULL_COLOR = "#ff9f1c"; // 거의 찼을 때 — 곧 발사 경고색
+const FIRE_COLOR = "#fff3b0"; // 발사 순간 번쩍임 + 총알 트레이서
+/** 발사 연출이 지속되는 tick 수(≈0.33초). 이 동안 게이지 번쩍 + 트레이서. */
+const FIRE_FLASH_TICKS = 20;
 /** 남 꼬리 색 — 입장 순서대로 돌려 쓴다(관전 화면에서 서로 구분되게). */
 const PEER_COLORS = ["#f4a261", "#2a9d8f", "#e9c46a", "#a8dadc", "#c77dff", "#90be6d"];
 
@@ -57,6 +65,15 @@ export class CurveGame implements IGame {
   private dead = false;
   private survivalTicks = 0;
 
+  // 「스릴 게이지」(0~1). 벽·꼬리·장애물을 아슬아슬하게 스칠 때(니어 미스)마다 찬다.
+  // 꽉 차면 자동 발사(지금은 로컬 리셋만) → 0으로. grazing은 이번 tick 스치는 중인지(HUD용).
+  private gauge = 0;
+  private grazing = false;
+  // 이번 라운드에 게이지가 꽉 차 발사된 횟수. 2단계에서 방해 이벤트 전송에 쓴다.
+  private fireCount = 0;
+  // 발사 연출 잔여 tick(>0이면 게이지 번쩍 + 총알 트레이서). tick마다 준다.
+  private fireFlash = 0;
+
   init(seed: number, self?: SpawnContext): void {
     const rng = new SeededRNG(seed);
     // ⚠️ 순서가 중요하다: 장애물을 **먼저** 뽑는다. 장애물은 플레이어와 무관한
@@ -78,6 +95,10 @@ export class CurveGame implements IGame {
     this.peerTrails.clear(); // 새 라운드 — 지난 판의 남 꼬리를 비운다.
     this.dead = false;
     this.survivalTicks = 0;
+    this.gauge = 0;
+    this.grazing = false;
+    this.fireCount = 0;
+    this.fireFlash = 0;
   }
 
   /** 장애물을 시드에서 뽑는다. 벽붙은 선분 → 떠 있는 선분 → 원 기둥 순.
@@ -299,6 +320,50 @@ export class CurveGame implements IGame {
       return;
     }
     this.survivalTicks = tick;
+    this.accrueNearMiss();
+  }
+
+  /** 「니어 미스」: 살아남았지만 벽·꼬리·장애물에 충돌 직전까지 스쳤으면 게이지를 채운다.
+   *  가까울수록 빨리 차고, 꽉 차면(=1) 자동 발사되고 0으로 리셋된다(2단계에서 이 순간에
+   *  상대에게 방해 이벤트를 쏜다). 판정은 순수 기하라 클라마다 어긋나지 않는다. */
+  private accrueNearMiss(): void {
+    if (this.fireFlash > 0) this.fireFlash--; // 발사 연출 시간 경과
+    const { grazeBand, gaugeGain } = C.nearMiss;
+    const gap = this.nearestHazardGap();
+    this.grazing = gap > 0 && gap <= grazeBand;
+    if (!this.grazing) return;
+    this.gauge += nearMissGain(gap, grazeBand, gaugeGain);
+    if (this.gauge >= 1) {
+      this.gauge = 0;
+      this.fireCount++;
+      this.fireFlash = FIRE_FLASH_TICKS; // 발사! — 연출 시작
+    }
+  }
+
+  /** 머리에서 가장 가까운 죽음의 경계까지의 여유(px). 벽·장애물·자기 꼬리 중 최소.
+   *  음수면 이미 충돌(죽음)이지만, 이 함수는 살아있을 때만 불린다. */
+  private nearestHazardGap(): number {
+    // 벽: 머리 가장자리와 안쪽 벽 경계 사이 간격.
+    let gap = Math.min(
+      this.x - HEAD_R - C.wallMargin,
+      C.screenWidth - C.wallMargin - (this.x + HEAD_R),
+      this.y - HEAD_R - C.wallMargin,
+      C.screenHeight - C.wallMargin - (this.y + HEAD_R),
+    );
+    // 장애물: 표면까지 거리에서 머리 반경을 뺀 값(obstacleBlocks와 같은 기준).
+    for (const ob of this.obstacles) {
+      const g = obstacleClearance(ob, this.x, this.y, SEG_HALF) - HEAD_R;
+      if (g < gap) gap = g;
+    }
+    // 자기 꼬리: 면제 구간 밖에서 가장 가까운 점까지 거리 - 선 두께(hitOwnTrail과 같은 기준).
+    const last = this.trailX.length - 1 - C.selfImmuneTrailPoints;
+    for (let i = 0; i <= last; i++) {
+      const dx = this.x - this.trailX[i]!;
+      const dy = this.y - this.trailY[i]!;
+      const g = Math.hypot(dx, dy) - C.lineWidth;
+      if (g < gap) gap = g;
+    }
+    return gap;
   }
 
   private hitWall(): boolean {
@@ -334,9 +399,14 @@ export class CurveGame implements IGame {
   render(r: IRenderer, _alpha: number): void {
     this.drawArena(r);
     this.drawTrail(r, this.trailX, this.trailY, MY_COLOR);
+    // 발사 순간: 머리에서 진행 방향으로 총알 트레이서가 뻗어나간다(쏘는 손맛).
+    if (!this.dead && this.fireFlash > 0) this.drawFireTracer(r);
+    // 스치는 순간을 머리 옆에 즉시 알려 스릴 손맛을 준다(게이지가 차는 니어 미스).
+    if (!this.dead && this.grazing) r.text("스릴!", this.x + 10, this.y - 10, GRAZE_COLOR, 14);
     if (!this.dead) r.circle(this.x, this.y, C.lineWidth, HEAD_COLOR);
     // 생존 시간(60tick=1초). 죽림고수와 같은 위치·형식으로 좌상단에.
     r.text(`${(this.survivalTicks / 60).toFixed(1)}s`, 12, 28, HUD_COLOR, 22);
+    this.drawGauge(r);
     // 사망 피드백 — 죽림고수와 같은 중앙 문구(그동안 머리만 사라져 죽은 줄 몰랐다).
     if (this.dead) {
       const cx = C.screenWidth / 2;
@@ -360,6 +430,42 @@ export class CurveGame implements IGame {
     for (const ob of this.obstacles) drawObstacle(r, ob, WALL_COLOR, C.obstacleWidth);
   }
 
+  /** 발사 순간 총알 트레이서 — 머리에서 진행 방향으로 밝은 선이 뻗었다 사그라든다.
+   *  fireFlash가 줄수록 더 길고 멀리 나간 뒤 사라져 "쏜" 느낌을 준다. */
+  private drawFireTracer(r: IRenderer): void {
+    const progress = 1 - this.fireFlash / FIRE_FLASH_TICKS; // 0(막 발사) → 1(끝)
+    const cos = Math.cos(this.angle);
+    const sin = Math.sin(this.angle);
+    const start = C.lineWidth + progress * 60; // 머리에서 점점 앞으로 밀려나며
+    const len = 46 * (1 - progress); // 점점 짧아진다(잔상처럼 흩어짐)
+    const x1 = this.x + cos * start;
+    const y1 = this.y + sin * start;
+    r.line(x1, y1, x1 + cos * len, y1 + sin * len, FIRE_COLOR, 3);
+  }
+
+  /** 「스릴 게이지」 바(좌상단, 타이머 아래). 테두리 프레임 + 칸 분할로 세련되게,
+   *  거의 차면 경고색, 발사 순간엔 번쩍이며 "발사!"를 띄운다. */
+  private drawGauge(r: IRenderer): void {
+    const x = 14;
+    const y = 46;
+    const w = 190;
+    const h = 16;
+    const firing = this.fireFlash > 0;
+    // 프레임(테두리) → 배경 → 채움 순으로 겹쳐 그린다.
+    r.rect(x - 2, y - 2, w + 4, h + 4, firing ? FIRE_COLOR : GAUGE_BORDER_COLOR);
+    r.rect(x, y, w, h, GAUGE_BG_COLOR);
+    const fill = Math.max(0, Math.min(1, this.gauge)) * w;
+    if (firing) {
+      r.rect(x, y, w, h, FIRE_COLOR); // 발사 순간 — 가득 번쩍
+    } else if (fill > 0) {
+      const color = this.grazing ? GRAZE_COLOR : this.gauge >= 0.85 ? GAUGE_NEARFULL_COLOR : GAUGE_FILL_COLOR;
+      r.rect(x, y, fill, h, color);
+    }
+    // 칸 분할선 6칸 — 충전 진행이 눈에 들어오는 "차지 미터" 느낌.
+    for (let i = 1; i < 6; i++) r.line(x + (w * i) / 6, y, x + (w * i) / 6, y + h, GAUGE_BG_COLOR, 2);
+    r.text(firing ? "발사!" : "스릴", x, y + h + 16, firing ? FIRE_COLOR : HUD_COLOR, 13);
+  }
+
   private drawTrail(r: IRenderer, xs: readonly number[], ys: readonly number[], color: string): void {
     for (let i = 1; i < xs.length; i++) {
       r.line(xs[i - 1]!, ys[i - 1]!, xs[i]!, ys[i]!, color, C.lineWidth);
@@ -376,6 +482,11 @@ export class CurveGame implements IGame {
 
   getScore(): number {
     return this.survivalTicks;
+  }
+
+  /** 현재 「스릴 게이지」 값(0~1). HUD·테스트용. */
+  getGauge(): number {
+    return this.gauge;
   }
 
   /** 관전용: 남들의 10Hz 위치를 이어 붙여 꼬리를 재구성한다. 매 스냅샷마다
@@ -419,4 +530,11 @@ export class CurveGame implements IGame {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
+}
+
+/** 이번 tick의 「니어 미스」 게이지 증가량. gap이 밴드 밖이거나 음수(충돌)면 0,
+ *  경계에 붙을수록(gap→0) maxGain에 가깝고 밴드 끝(gap→band)이면 0에 가깝다. */
+export function nearMissGain(gap: number, band: number, maxGain: number): number {
+  if (gap <= 0 || gap > band) return 0;
+  return (maxGain * (band - gap)) / band;
 }

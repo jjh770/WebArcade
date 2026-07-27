@@ -6,7 +6,7 @@
    "내 화면엔 안 부딪혔는데 죽었다"가 된다. */
 import { describe, expect, it } from "vitest";
 import type { IRenderer, InputState } from "@arcade/shared";
-import { CurveGame } from "../packages/games/curve/src/CurveGame";
+import { CurveGame, nearMissGain } from "../packages/games/curve/src/CurveGame";
 import { obstacleBlocks, obstacleClearance, type Obstacle } from "../packages/games/curve/src/obstacles";
 
 const IDLE: InputState = { up: false, down: false, left: false, right: false };
@@ -351,6 +351,59 @@ describe("커브 HUD·사망 피드백 (A-1·A-2)", () => {
     const dead = new TextCapture();
     game.render(dead, 0);
     expect(dead.texts.some((s) => s.startsWith("사망 — 생존"))).toBe(true);
+  });
+});
+
+describe("스릴 게이지 (1단계 — 니어 미스로 로컬 충전)", () => {
+  it("nearMissGain: 밴드 밖·충돌은 0, 경계에 붙을수록 최대에 가깝다", () => {
+    const band = 14;
+    const g = 0.02;
+    expect(nearMissGain(-1, band, g)).toBe(0); // 충돌(음수)
+    expect(nearMissGain(0, band, g)).toBe(0); // 경계선 = 아직 충돌 취급
+    expect(nearMissGain(20, band, g)).toBe(0); // 밴드 밖
+    expect(nearMissGain(0.001, band, g)).toBeCloseTo(g, 3); // 거의 붙음 → 최대
+    expect(nearMissGain(7, band, g)).toBeCloseTo(g / 2, 5); // 중간 → 절반
+    // 가까울수록 크다(단조 감소)
+    expect(nearMissGain(3, band, g)).toBeGreaterThan(nearMissGain(10, band, g));
+  });
+
+  it("게이지는 항상 0~1 미만으로 유지된다(꽉 차면 리셋 — 절대 갇히지 않는다)", () => {
+    for (const seed of [1, 42, 999, 2024, 7, 55555]) {
+      const game = new CurveGame();
+      game.init(seed);
+      for (let t = 1; t <= 400; t++) {
+        game.update(t, TURN_RIGHT); // 돌면서 벽·꼬리·장애물을 스치게 된다
+        const gauge = game.getGauge();
+        expect(gauge).toBeGreaterThanOrEqual(0);
+        expect(gauge).toBeLessThan(1); // 1에 닿는 순간 리셋되므로 항상 1 미만
+      }
+    }
+  });
+
+  it("스치며 도는 판에서는 게이지가 실제로 찬다(니어 미스가 일어난다)", () => {
+    // 여러 시드 중 하나라도 도는 동안 게이지가 오르면 기능이 살아있는 것.
+    let anyCharge = false;
+    for (const seed of [1, 42, 999, 2024, 7, 55555, 31337, 8888]) {
+      const game = new CurveGame();
+      game.init(seed);
+      for (let t = 1; t <= 300 && !game.isPlayerDead(); t++) {
+        game.update(t, TURN_RIGHT);
+        if (game.getGauge() > 0) {
+          anyCharge = true;
+          break;
+        }
+      }
+      if (anyCharge) break;
+    }
+    expect(anyCharge).toBe(true);
+  });
+
+  it("새 라운드(init)면 게이지가 0으로 리셋된다", () => {
+    const game = new CurveGame();
+    game.init(42);
+    for (let t = 1; t <= 200 && !game.isPlayerDead(); t++) game.update(t, TURN_RIGHT);
+    game.init(43);
+    expect(game.getGauge()).toBe(0);
   });
 });
 
