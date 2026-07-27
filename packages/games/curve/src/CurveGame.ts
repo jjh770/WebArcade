@@ -2,7 +2,12 @@
    CurveGame — 커브 피버 (IGame 구현)
    ------------------------------------------------------------
    내 선 하나. 좌/우 회전, 꼬리 기록, 자기 꼬리·벽·장애물 충돌.
-   남의 꼬리와의 충돌(관전 재구성)은 다음 단계에서 붙는다.
+
+   남의 꼬리는 관전 뷰에서 재구성해 그린다(syncPeers로 오는 10Hz 위치를
+   이어 붙인 폴리라인 = 시각적 근사). ⚠️ 판정엔 쓰지 않는다 — 이 프레임워크는
+   "같은 시드 → 각자 독립 시뮬 + 위치는 관전용 중계"라, 남 꼬리 충돌은 락스텝
+   입력 동기가 있어야 결정론이 유지된다(DESIGN 10절). 그래서 죽림고수와 똑같이
+   내 화면(render)은 나만, 남은 renderSpectator에서만 보인다.
 
    장애물은 선분 벽 + 꽉 찬 원 기둥 두 종류(obstacles.ts). 전부 시드에서만
    파생되는 공통 월드라, 스폰보다 먼저 뽑아 모든 클라에서 같은 판이 나온다.
@@ -22,6 +27,9 @@ const ARENA_FLOOR = "#1e2230";
 const WALL_COLOR = "#457b9d";
 const MY_COLOR = "#e63946";
 const HEAD_COLOR = "#ffd166";
+const HUD_COLOR = "#e6e6e6";
+/** 남 꼬리 색 — 입장 순서대로 돌려 쓴다(관전 화면에서 서로 구분되게). */
+const PEER_COLORS = ["#f4a261", "#2a9d8f", "#e9c46a", "#a8dadc", "#c77dff", "#90be6d"];
 
 /** 플레이어 머리 반경 = 선 절반 두께. 충돌·탐침의 pad로 쓴다. */
 const HEAD_R = C.lineWidth / 2;
@@ -42,6 +50,10 @@ export class CurveGame implements IGame {
   // 장애물(선분 벽 + 원 기둥). 시드에서만 파생 → 모두가 같은 판.
   private obstacles: Obstacle[] = [];
 
+  // 남들의 꼬리(관전용 재구성). syncPeers로 오는 10Hz 위치를 병렬 배열로 쌓아
+  // 폴리라인으로 잇는다. 판정에는 절대 쓰지 않는다(시각 근사).
+  private peerTrails = new Map<string, { xs: number[]; ys: number[]; color: string }>();
+
   private dead = false;
   private survivalTicks = 0;
 
@@ -60,6 +72,7 @@ export class CurveGame implements IGame {
 
     this.trailX = [this.x];
     this.trailY = [this.y];
+    this.peerTrails.clear(); // 새 라운드 — 지난 판의 남 꼬리를 비운다.
     this.dead = false;
     this.survivalTicks = 0;
   }
@@ -305,15 +318,37 @@ export class CurveGame implements IGame {
     return this.survivalTicks;
   }
 
-  // --- 관전 계약: 다음 단계에서 남의 꼬리 이력으로 채운다. 지금은 no-op. ---
-  syncPeers(_peers: readonly PeerState[]): void {
-    /* 위치 이력을 모아 남의 꼬리를 재구성한다. */
+  /** 관전용: 남들의 10Hz 위치를 이어 붙여 꼬리를 재구성한다. 매 스냅샷마다
+   *  피어당 점 하나가 들어오므로, 직전 점과 다르면 이어 붙인다(중복 방지 —
+   *  사망 통지 등 위치 변화 없이 다시 불릴 수 있다). 목록에서 빠진 피어(사망·이탈)의
+   *  꼬리는 지우지 않고 그대로 남긴다 = 그 자리에 멈춘 선(다음 라운드 init에서 비움). */
+  syncPeers(peers: readonly PeerState[]): void {
+    for (const p of peers) {
+      let trail = this.peerTrails.get(p.id);
+      if (!trail) {
+        trail = { xs: [], ys: [], color: PEER_COLORS[this.peerTrails.size % PEER_COLORS.length]! };
+        this.peerTrails.set(p.id, trail);
+      }
+      const n = trail.xs.length;
+      if (n === 0 || trail.xs[n - 1] !== p.x || trail.ys[n - 1] !== p.y) {
+        trail.xs.push(p.x);
+        trail.ys.push(p.y);
+      }
+    }
   }
 
-  renderSpectator(r: IRenderer, _target: SpectateTarget): void {
-    // 아직은 경기장 + 장애물만 그린다. 장애물은 시드 공유라 이 로컬 인스턴스
-    // 것이 방 전체와 같다(남의 꼬리 재구성은 다음 단계).
-    this.drawArena(r);
+  renderSpectator(r: IRenderer, target: SpectateTarget): void {
+    this.drawArena(r); // 장애물은 시드 공유라 이 로컬 인스턴스 것이 방 전체와 같다.
+    // 남들의 재구성된 꼬리를 모두 그린다 — 관전 화면에서 판 전체가 읽히도록.
+    for (const trail of this.peerTrails.values()) {
+      this.drawTrail(r, trail.xs, trail.ys, trail.color);
+    }
+    // 관전 대상의 머리를 강조. 재구성 꼬리의 끝점을 쓰되, 없으면 target 좌표 폴백.
+    const focus = this.peerTrails.get(target.id);
+    const hx = focus && focus.xs.length ? focus.xs[focus.xs.length - 1]! : target.x;
+    const hy = focus && focus.ys.length ? focus.ys[focus.ys.length - 1]! : target.y;
+    r.circle(hx, hy, C.lineWidth, HEAD_COLOR);
+    r.text(`관전: ${target.label}`, 12, 28, HUD_COLOR, 22);
   }
 }
 

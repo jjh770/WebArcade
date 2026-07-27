@@ -198,6 +198,67 @@ describe("장애물 판정 (obstacles.ts)", () => {
   });
 });
 
+describe("관전용 남 꼬리 재구성 (C-1 — 판정엔 안 쓰는 시각 근사)", () => {
+  const PEER0 = "#f4a261"; // PEER_COLORS[0] — 첫 피어 꼬리 색
+  const PEER1 = "#2a9d8f"; // PEER_COLORS[1] — 둘째 피어
+
+  /** 스냅샷 위치들을 순서대로 syncPeers에 흘려 넣는다(매 스냅샷 = 점 하나). */
+  function feed(game: CurveGame, id: string, pts: readonly [number, number][]): void {
+    for (const [x, y] of pts) game.syncPeers([{ id, x, y }]);
+  }
+
+  it("흘려 넣은 위치들이 그 순서대로 꼬리 폴리라인이 된다", () => {
+    const game = new CurveGame();
+    game.init(1);
+    feed(game, "p1", [[100, 100], [110, 105], [122, 118]]);
+
+    const cap = new LineCapture(PEER0);
+    game.renderSpectator(cap, { id: "p1", x: 122, y: 118, label: "고수" });
+    // 점 3개 → 선분 2개, 이어지는 좌표가 맞아야 한다.
+    expect(cap.segments.map((s) => s.slice(0, 4))).toEqual([
+      [100, 100, 110, 105],
+      [110, 105, 122, 118],
+    ]);
+  });
+
+  it("위치 변화 없이 다시 불려도 점을 중복으로 쌓지 않는다", () => {
+    // 사망 통지(markPeerDead)처럼 위치 그대로 syncPeers가 또 불릴 수 있다.
+    const game = new CurveGame();
+    game.init(1);
+    feed(game, "p1", [[200, 200], [200, 200], [210, 205], [210, 205]]);
+
+    const cap = new LineCapture(PEER0);
+    game.renderSpectator(cap, { id: "p1", x: 210, y: 205, label: "고수" });
+    expect(cap.segments.map((s) => s.slice(0, 4))).toEqual([[200, 200, 210, 205]]); // 선분 1개뿐
+  });
+
+  it("여러 피어는 서로 다른 색으로, 입장 순서대로 배정된다", () => {
+    const game = new CurveGame();
+    game.init(1);
+    game.syncPeers([{ id: "a", x: 10, y: 10 }, { id: "b", x: 20, y: 20 }]);
+    game.syncPeers([{ id: "a", x: 12, y: 10 }, { id: "b", x: 22, y: 20 }]);
+
+    const target = { id: "a", x: 12, y: 10, label: "A" };
+    const capA = new LineCapture(PEER0);
+    const capB = new LineCapture(PEER1);
+    game.renderSpectator(capA, target);
+    game.renderSpectator(capB, target);
+    expect(capA.segments.map((s) => s.slice(0, 4))).toEqual([[10, 10, 12, 10]]); // a = 첫 색
+    expect(capB.segments.map((s) => s.slice(0, 4))).toEqual([[20, 20, 22, 20]]); // b = 둘째 색
+  });
+
+  it("새 라운드(init)면 지난 판 남 꼬리를 비운다", () => {
+    const game = new CurveGame();
+    game.init(1);
+    feed(game, "p1", [[100, 100], [110, 105]]);
+    game.init(2); // 재시작
+
+    const cap = new LineCapture(PEER0);
+    game.renderSpectator(cap, { id: "p1", x: 0, y: 0, label: "고수" });
+    expect(cap.segments).toHaveLength(0);
+  });
+});
+
 /** 점-선분 거리(테스트용). */
 function segDist(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1;
