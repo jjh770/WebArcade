@@ -110,11 +110,11 @@ describe("방 격리 (방 하나 = Durable Object 하나)", () => {
     const roomB = await createRoom();
     expect(roomA).not.toBe(roomB);
 
-    await join(roomA, "가희");
-    const second = await join(roomA, "종혁");
+    await join(roomA, "고수");
+    const second = await join(roomA, "초심자");
     // A 방에 둘이 모였다
     expect(second.roster.code).toBe(roomA);
-    expect(second.roster.players.map((p) => p.nickname)).toEqual(["가희", "종혁"]);
+    expect(second.roster.players.map((p) => p.nickname)).toEqual(["고수", "초심자"]);
 
     // B 방은 완전히 별개다 — 방금 들어온 한 명뿐이어야 한다
     const other = await join(roomB, "혼자");
@@ -204,7 +204,7 @@ describe("전체 방 흐름", () => {
 describe("입력 검증", () => {
   it("깨진 JSON과 규칙 위반을 구분해 알린다", async () => {
     const code = await createRoom();
-    const client = await join(code, "가희");
+    const client = await join(code, "고수");
 
     client.ws.send("{{{");
     expect((await client.wait("error")).reason).toBe("잘못된 메시지 형식입니다.");
@@ -228,7 +228,7 @@ describe("입력 검증", () => {
 
   it("클럭 동기화 요청에 같은 requestId로 답한다", async () => {
     const code = await createRoom();
-    const client = await join(code, "가희");
+    const client = await join(code, "고수");
 
     client.send({ type: "time_sync_request", requestId: "abc-1" });
     const response = await client.wait("time_sync_response");

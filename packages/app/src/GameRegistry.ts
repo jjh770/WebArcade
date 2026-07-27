@@ -1,9 +1,8 @@
 /* ============================================================
    GameRegistry — 등록된 게임 목록 (단일 출처)
    ------------------------------------------------------------
-   친구(gahee) 코드의 content.ts `games` 배열 패턴 차용:
-   여기에 항목을 추가하면 게임 선택 화면이 자동 반영된다.
-   차이점: 친구 건 "보여줄 데이터", 이건 "실행할 게임"(factory 포함).
+   데이터 배열로 게임을 등록한다. 여기에 항목을 추가하면 게임 선택 화면이
+   자동 반영된다(단순 표시 데이터가 아니라 factory까지 담아 "실행"한다).
 
    ⭐ 새 게임 추가 시 건드리는 파일은 사실상 이 파일 하나다.
       core는 한 줄도 바뀌지 않는다.
@@ -18,7 +17,7 @@ export type GameEntry = {
   title: string;
   description: string;
   scoreDirection: ScoreDirection;
-  /** 게임 인스턴스를 만드는 팩토리 — 친구 코드엔 없는, 실행 중심 요소. */
+  /** 게임 인스턴스를 만드는 팩토리 — 목록이 표시용이 아니라 실행용인 이유. */
   factory: () => IGame;
 };
 
@@ -39,8 +38,8 @@ export const GAME_REGISTRY = {
   },
 } satisfies Record<string, GameEntry>;
 
-/** 등록된 게임 id의 유니온 타입 — 친구의 Platform 유니온 기법 차용.
- *  존재하지 않는 게임 id를 참조하면 컴파일 타임에 걸린다. */
+/** 등록된 게임 id의 유니온 타입. 문자열 유니온이라 존재하지 않는 게임 id를
+ *  참조하면 컴파일 타임에 걸린다. */
 export type GameId = keyof typeof GAME_REGISTRY;
 
 export function isGameId(value: string): value is GameId {

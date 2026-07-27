@@ -99,8 +99,8 @@ describe("방 상태 직렬화 (하이버네이션 복원 경로)", () => {
     // Durable Object가 잠들면 메모리가 날아간다. 이 왕복이 깨지면 깨어난 방이
     // 빈손이 되어 참가자가 통째로 사라진다.
     const room = new Room("ABCD", "jungnim", ROOM_CAPACITY);
-    room.addMember("a", "가희");
-    room.addMember("b", "종혁");
+    room.addMember("a", "고수");
+    room.addMember("b", "초심자");
     room.startCountdown(4242, 9999);
     room.ensurePlaying(10_000);
     room.updatePosition("a", 12, 34);
@@ -120,7 +120,7 @@ describe("방 상태 직렬화 (하이버네이션 복원 경로)", () => {
 
   it("복원본은 원본과 독립이다 — 한쪽 변경이 다른 쪽에 새지 않는다", () => {
     const room = new Room("ABCD", "jungnim", 32);
-    room.addMember("a", "가희");
+    room.addMember("a", "고수");
     const restored = Room.restore(room.snapshot(), 32);
 
     restored.markDied("a", 5);
