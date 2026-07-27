@@ -12,6 +12,10 @@ import type { ClientMessage } from "@arcade/shared";
 
 const ROOM_CODE = /^[A-HJ-NP-Z]{4}$/;
 export const GAME_ID = /^[A-Za-z0-9_-]{1,64}$/;
+/** 방해 효과 종류 식별자. 서버는 의미를 모르므로 형식(짧은 슬러그)만 본다. */
+const EFFECT_KIND = /^[a-z0-9_-]{1,32}$/;
+/** 방해 효과 지속시간 상한(ms). 무한·비상식적 값으로 상대를 마비시키는 걸 막는다. */
+const MAX_EFFECT_MS = 10000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -41,6 +45,14 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
     case "player_died":
       return Number.isSafeInteger(value.survivalTicks) && Number(value.survivalTicks) >= 0
         ? { type: value.type, survivalTicks: Number(value.survivalTicks) }
+        : null;
+    case "fire_effect":
+      // 서버는 효과의 의미를 모른다 — kind는 짧은 식별자 문자열, durationMs는 상한만 막는다.
+      return EFFECT_KIND.test(String(value.kind ?? "")) &&
+        isFiniteNumber(value.durationMs) &&
+        value.durationMs > 0 &&
+        value.durationMs <= MAX_EFFECT_MS
+        ? { type: value.type, kind: String(value.kind), durationMs: value.durationMs }
         : null;
     case "start_game":
     case "return_to_ready":

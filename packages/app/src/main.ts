@@ -57,6 +57,7 @@ const session = new GameSession({
   onLocalDeath,
   onSideSlot: setSideSlot,
   onHud: updateHud,
+  onFire: (kind, durationMs) => net.send({ type: "fire_effect", kind, durationMs }),
 });
 
 /** 매 프레임 로컬 플레이어 HUD 갱신 — 캔버스 밖 좌측 상단 헤더(시간 + 스릴 게이지).
@@ -176,6 +177,10 @@ function handleServer(message: ServerMessage): void {
       break;
     case "peer_died":
       session.markPeerDead(message.id);
+      break;
+    case "effect_hit":
+      // 누군가 스릴 게이지를 채워 나에게 방해 효과를 쐈다. 게임이 아는 효과면 적용.
+      session.applyEffect(message.kind, message.durationMs);
       break;
     case "ranking_update":
       setAliveHud(`생존 ${message.alive} / ${message.ranks.length}`);

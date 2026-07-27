@@ -226,6 +226,15 @@ export class RoomObject {
         return;
       }
 
+      case "fire_effect": {
+        // 스릴 게이지 발사. 서버는 효과 내용을 모른다 — 라운드가 진행 중일 때만,
+        // 발사자를 뺀 나머지에게 kind를 그대로 중계한다(순수 릴레이). 저장하지 않는다:
+        // 순간적 이벤트라 하이버네이션을 건너 살아남을 필요가 없다.
+        if (!this.room.ensurePlaying(Date.now())) return;
+        this.broadcastExcept(id, { type: "effect_hit", from: id, kind: msg.kind, durationMs: msg.durationMs });
+        return;
+      }
+
       case "leave_room":
         await this.handleLeave(id);
         return;

@@ -17,6 +17,7 @@ export type ClientMessage =
   | { type: "time_sync_request"; requestId: string }
   | { type: "player_state"; px: number; py: number } // 관전용 위치(주기적). 서버가 최신값을 방 스냅샷으로 묶는다.
   | { type: "player_died"; survivalTicks: number }
+  | { type: "fire_effect"; kind: string; durationMs: number } // 스릴 게이지 발사 — 상대에게 방해 효과. 서버는 내용 모르고 중계만.
   | { type: "leave_room" };
 
 /** 서버 → 클라이언트 */
@@ -27,6 +28,7 @@ export type ServerMessage =
   | { type: "time_sync_response"; requestId: string; serverTime: number }
   | { type: "peer_snapshot"; peers: PeerSnapshot[] } // 관전 위치를 방 단위로 일괄 전달
   | { type: "peer_died"; id: string } // 남이 죽음(관전 대상 교체 신호)
+  | { type: "effect_hit"; from: string; kind: string; durationMs: number } // 누군가의 발사에 맞음(방해 효과 적용). 서버는 kind를 그대로 중계.
   | { type: "ranking_update"; alive: number; ranks: RankEntry[] }
   | { type: "game_over"; finalRanks: RankEntry[] }
   | { type: "host_changed"; newHostId: string }

@@ -153,4 +153,16 @@ describe("프로토콜 런타임 검증", () => {
     expect(parseClientMessage({ type: "player_died", survivalTicks: -1 })).toBeNull();
     expect(parseClientMessage({ type: "join_room", code: "AIO1", nickname: "고수" })).toBeNull();
   });
+
+  it("fire_effect은 kind 슬러그와 durationMs 범위를 검사한다", () => {
+    // 정상: 짧은 슬러그 + 유한한 지속시간
+    expect(parseClientMessage({ type: "fire_effect", kind: "invert", durationMs: 2500 }))
+      .toEqual({ type: "fire_effect", kind: "invert", durationMs: 2500 });
+    // kind 형식 위반(대문자/공백/과길이)·durationMs 상한/0·비유한은 거부
+    expect(parseClientMessage({ type: "fire_effect", kind: "INVERT", durationMs: 2500 })).toBeNull();
+    expect(parseClientMessage({ type: "fire_effect", kind: "a".repeat(33), durationMs: 2500 })).toBeNull();
+    expect(parseClientMessage({ type: "fire_effect", kind: "invert", durationMs: 0 })).toBeNull();
+    expect(parseClientMessage({ type: "fire_effect", kind: "invert", durationMs: 999999 })).toBeNull();
+    expect(parseClientMessage({ type: "fire_effect", kind: "invert", durationMs: Infinity })).toBeNull();
+  });
 });

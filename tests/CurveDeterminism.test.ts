@@ -425,6 +425,95 @@ describe("스릴 게이지 (1단계 — 니어 미스로 로컬 충전)", () => 
   });
 });
 
+const TURN_LEFT: InputState = { up: false, down: false, left: true, right: false };
+
+describe("스릴 게이지 발사 → 상대 방해 (2단계)", () => {
+  it("발사 대기가 없으면 consumePendingFire는 null이다", () => {
+    const game = new CurveGame();
+    game.init(1);
+    expect(game.consumePendingFire?.()).toBeNull();
+  });
+
+  it("게이지가 꽉 차면 발사 내용(invert·2500ms)을 한 번 내주고 소비한다", () => {
+    // 적극적으로 벽·꼬리를 스치며 위빙(좌우 번갈아)하면 게이지가 꽉 차 발사가 나온다.
+    // (단순 회전만으론 잘 안 찬다 — 능동적으로 스치는 플레이만 보상하는 튜닝.)
+    const weave = (t: number): InputState => (t % 6 < 3 ? TURN_LEFT : TURN_RIGHT);
+    let fired: { kind: string; durationMs: number } | null = null;
+    for (const seed of [1, 42, 999, 2024, 7, 55555, 31337, 8888]) {
+      const game = new CurveGame();
+      game.init(seed);
+      for (let t = 1; t <= 1200 && !game.isPlayerDead(); t++) {
+        game.update(t, weave(t));
+        const f = game.consumePendingFire?.() ?? null;
+        if (f) { fired = f; break; }
+      }
+      if (fired) break;
+    }
+    expect(fired).toEqual({ kind: curveConfig.fire.kind, durationMs: curveConfig.fire.durationMs });
+  });
+
+  it("invert 피격 중엔 좌/우가 뒤집힌다 — 같은 시드에서 LEFT(반전)가 RIGHT(정상)와 같은 궤적", () => {
+    for (const seed of [1, 42, 999, 2024]) {
+      const inverted = new CurveGame();
+      inverted.init(seed);
+      inverted.applyEffect?.("invert", 2500); // 150tick 반전
+      const normal = new CurveGame();
+      normal.init(seed);
+      // 반전된 쪽이 LEFT를 넣으면 정상 쪽이 RIGHT를 넣은 것과 같아야 한다(안전 구간만 비교).
+      for (let t = 1; t <= 15; t++) {
+        inverted.update(t, TURN_LEFT);
+        normal.update(t, TURN_RIGHT);
+        expect(inverted.getPosition()).toEqual(normal.getPosition());
+      }
+    }
+  });
+
+  it("invert는 지속시간만큼만 간다 — 만료 뒤엔 정상 조작으로 돌아온다", () => {
+    // 50ms = 3tick. 3tick 동안은 LEFT가 RIGHT처럼 굴지만, 그 뒤엔 다시 LEFT가 LEFT다.
+    const inverted = new CurveGame();
+    inverted.init(1);
+    inverted.applyEffect?.("invert", 50);
+    const normal = new CurveGame();
+    normal.init(1);
+    for (let t = 1; t <= 3; t++) { inverted.update(t, TURN_LEFT); normal.update(t, TURN_RIGHT); }
+    expect(inverted.getPosition()).toEqual(normal.getPosition()); // 반전 구간 = 같음
+    for (let t = 4; t <= 6; t++) { inverted.update(t, TURN_LEFT); normal.update(t, TURN_RIGHT); }
+    expect(inverted.getPosition()).not.toEqual(normal.getPosition()); // 만료 후 = 서로 반대로 갈림
+  });
+
+  it("모르는 효과 kind는 무시한다(옛 클라 안전)", () => {
+    const hit = new CurveGame();
+    hit.init(7);
+    hit.applyEffect?.("nonsense", 2500);
+    const plain = new CurveGame();
+    plain.init(7);
+    for (let t = 1; t <= 15; t++) { hit.update(t, TURN_LEFT); plain.update(t, TURN_LEFT); }
+    expect(hit.getPosition()).toEqual(plain.getPosition()); // 아무 변화 없음
+  });
+
+  it("새 라운드(init)면 반전 효과가 사라진다", () => {
+    const game = new CurveGame();
+    game.init(1);
+    game.applyEffect?.("invert", 2500);
+    game.init(1); // 재시작 — 효과 리셋
+    const plain = new CurveGame();
+    plain.init(1);
+    for (let t = 1; t <= 15; t++) { game.update(t, TURN_LEFT); plain.update(t, TURN_LEFT); }
+    expect(game.getPosition()).toEqual(plain.getPosition()); // 반전 없음 = 정상 LEFT
+  });
+
+  it("이미 죽었으면 발사에 맞아도 아무 일 없다", () => {
+    const game = new CurveGame();
+    game.init(777);
+    for (let t = 1; t <= 500; t++) game.update(t, IDLE); // 벽에 박혀 죽는다
+    expect(game.isPlayerDead()).toBe(true);
+    const pos = game.getPosition();
+    game.applyEffect?.("invert", 2500);
+    for (let t = 501; t <= 520; t++) game.update(t, TURN_LEFT);
+    expect(game.getPosition()).toEqual(pos); // 죽은 뒤엔 움직임 없음
+  });
+});
+
 /** 점-선분 거리(테스트용). */
 function segDist(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1;

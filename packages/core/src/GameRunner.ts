@@ -35,6 +35,9 @@ export class GameRunner {
      *  score=getScore(생존 tick), gauge=getGauge()가 있으면 그 값(0~1) 없으면 null.
      *  게임이 뭔지는 모른다 — HUD 표시는 앱이 정한다. */
     private readonly onHud?: (score: number, gauge: number | null) => void,
+    /** 게임이 상대에게 쏠 방해 발사를 냈을 때 호출(멀티에서 fire_effect 전송용).
+     *  kind/지속시간은 게임이 정한 값을 그대로 넘길 뿐 — 러너는 의미를 모른다. */
+    private readonly onFire?: (kind: string, durationMs: number) => void,
   ) {
     this.loop = new GameLoop(
       // 고정 스텝: 현재 입력 스냅샷과 tick만 게임에 전달.
@@ -44,6 +47,9 @@ export class GameRunner {
           this.deathReported = true;
           this.onDeath?.();
         }
+        // 이번 스텝에 상대에게 쏠 발사가 있으면 앱으로 흘려보낸다(네트워크 전송).
+        const fire = this.game.consumePendingFire?.();
+        if (fire) this.onFire?.(fire.kind, fire.durationMs);
       },
       // 렌더: 각 뷰마다 자기 화면(render) 또는 관전(renderSpectator).
       (alpha) => {
@@ -87,6 +93,12 @@ export class GameRunner {
   /** 현재 게임이 로컬 사망 판정을 냈는지 위임. 앱이 재시작 시점을 정하는 데 쓴다. */
   isPlayerDead(): boolean {
     return this.game.isPlayerDead();
+  }
+
+  /** 남의 발사에 맞았을 때 앱이 호출. 게임이 아는 효과면 로컬에 적용한다.
+   *  게임이 뭔지는 모른다 — IGame.applyEffect에 그대로 위임. */
+  applyEffect(kind: string, durationMs: number): void {
+    this.game.applyEffect?.(kind, durationMs);
   }
 
   /** 루프와 입력 리스너를 멈춘다. */

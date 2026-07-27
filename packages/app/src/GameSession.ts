@@ -17,6 +17,8 @@ export type GameSessionOptions = {
   onSideSlot: (index: number, visible: boolean, label: string) => void;
   /** 매 프레임 로컬 플레이어 HUD 값(생존 tick, 게이지 0~1 또는 없으면 null). 캔버스 밖 DOM 헤더용. */
   onHud: (score: number, gauge: number | null) => void;
+  /** 게임이 상대에게 쏠 방해 발사를 냈을 때(멀티에서 fire_effect로 서버에 전송). */
+  onFire: (kind: string, durationMs: number) => void;
 };
 
 /** 한 라운드의 게임 인스턴스, 입력, 관전 대상과 멀티 뷰를 소유한다. */
@@ -140,6 +142,12 @@ export class GameSession {
     this.rebuildViews();
   }
 
+  /** 남의 발사에 맞았다 — 라운드 중일 때만 게임에 방해 효과를 적용한다.
+   *  (관전·대기 중이면 무시. 죽은 뒤 도착한 효과도 게임이 알아서 무시한다.) */
+  applyEffect(kind: string, durationMs: number): void {
+    if (this.roundActive) this.runner?.applyEffect(kind, durationMs);
+  }
+
   markPeerDead(id: string): void {
     const peer = this.peers.get(id);
     if (peer) peer.alive = false;
@@ -181,7 +189,7 @@ export class GameSession {
     if (this.activeGameId === gameId) return;
     this.runner?.stop();
     this.game = GAME_REGISTRY[gameId].factory();
-    this.runner = new GameRunner(this.game, this.input, this.options.onLocalDeath, this.options.onHud);
+    this.runner = new GameRunner(this.game, this.input, this.options.onLocalDeath, this.options.onHud, this.options.onFire);
     this.activeGameId = gameId;
   }
 
