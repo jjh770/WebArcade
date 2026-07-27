@@ -16,7 +16,7 @@
    같은 시드 + 같은 입력이면 어느 클라에서 돌려도 꼬리가 픽셀 단위로 같다.
    ============================================================ */
 
-import type { IGame, IRenderer, InputState, PeerState, SpectateTarget } from "@arcade/shared";
+import type { IGame, IRenderer, InputState, PeerState, SpawnContext, SpectateTarget } from "@arcade/shared";
 import { SeededRNG } from "@arcade/core";
 import { curveConfig as C } from "./config";
 import { drawObstacle, obstacleBlocks, obstacleClearance, type Obstacle } from "./obstacles";
@@ -57,13 +57,16 @@ export class CurveGame implements IGame {
   private dead = false;
   private survivalTicks = 0;
 
-  init(seed: number): void {
+  init(seed: number, self?: SpawnContext): void {
     const rng = new SeededRNG(seed);
     // ⚠️ 순서가 중요하다: 장애물을 **먼저** 뽑는다. 장애물은 플레이어와 무관한
     //    공통 월드라, 스폰(플레이어별로 달라질 수 있음)보다 앞서 정해져야
     //    모든 클라에서 같은 판이 나온다. (멀티에서 스폰이 갈려도 판은 안 갈린다)
     this.obstacles = this.generateObstacles(rng);
-    const spawn = this.pickSafeSpawn(rng);
+    // 솔로(self 없음)면 기존 단일 스폰 그대로 — 동작·RNG 소비가 바이트 단위로 동일.
+    // 멀티면 인원수만큼 서로 떨어진 스폰을 결정론적으로 뽑아(모든 클라 동일 집합)
+    // 내 순번의 자리를 고른다 → 시작점이 겹치지 않는다.
+    const spawn = self && self.count > 1 ? this.generateSpawns(rng, self.count)[clamp(self.index, 0, self.count - 1)]! : this.pickSafeSpawn(rng);
     this.x = spawn.x;
     this.y = spawn.y;
     // 랜덤 방향이면 벽·장애물을 정면으로 향해 즉사할 수 있다. 주변을 훑어
@@ -187,6 +190,55 @@ export class CurveGame implements IGame {
       }
     }
     return best; // 기준 미달이지만 표본 중 가장 트인 자리
+  }
+
+  /** 멀티용: 서로 떨어진 스폰 count개를 순서대로 뽑는다. 앞서 정한 자리들과도
+   *  멀어지도록 골라 시작점이 겹치지 않게 한다. 결정론적이라 모든 클라가 같은
+   *  집합을 얻고, 각자 자기 순번(index)의 자리를 쓴다. */
+  private generateSpawns(rng: SeededRNG, count: number): { x: number; y: number }[] {
+    const chosen: { x: number; y: number }[] = [];
+    for (let i = 0; i < count; i++) chosen.push(this.pickSpreadSpawn(rng, chosen));
+    return chosen;
+  }
+
+  /** 장애물에서 충분히 트이면서 already(이미 고른 스폰들)에서 가장 먼 자리를 고른다.
+   *  트인 후보가 하나라도 있으면 그중 남들과 가장 먼 것을, 하나도 없으면(꽉 참)
+   *  그나마 장애물 여유가 가장 큰 자리를 쓴다. */
+  private pickSpreadSpawn(rng: SeededRNG, already: readonly { x: number; y: number }[]): { x: number; y: number } {
+    const minX = C.wallMargin + C.spawnInset;
+    const maxX = C.screenWidth - C.wallMargin - C.spawnInset;
+    const minY = C.wallMargin + C.spawnInset;
+    const maxY = C.screenHeight - C.wallMargin - C.spawnInset;
+
+    let bestGood: { x: number; y: number } | null = null;
+    let bestGoodDist = -Infinity; // 트인 후보 중 남들과의 최소거리 최대화
+    let bestBad = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    let bestBadClear = -Infinity; // 트인 후보가 없을 때의 폴백(장애물 여유 최대)
+
+    for (let attempt = 0; attempt < C.obstacles.maxSpawnAttempts; attempt++) {
+      const x = rng.range(minX, maxX);
+      const y = rng.range(minY, maxY);
+      let obClear = Infinity;
+      for (const ob of this.obstacles) {
+        const c = obstacleClearance(ob, x, y, SEG_HALF);
+        if (c < obClear) obClear = c;
+      }
+      if (obClear >= C.obstacles.spawnClearance) {
+        let peerDist = Infinity;
+        for (const o of already) {
+          const d = Math.hypot(x - o.x, y - o.y);
+          if (d < peerDist) peerDist = d;
+        }
+        if (peerDist > bestGoodDist) {
+          bestGoodDist = peerDist;
+          bestGood = { x, y };
+        }
+      } else if (obClear > bestBadClear) {
+        bestBadClear = obClear;
+        bestBad = { x, y };
+      }
+    }
+    return bestGood ?? bestBad;
   }
 
   /** 시작 위치에서 사방을 훑어 "가장 트인 방향"을 고른다. 각 후보 방향으로 짧은

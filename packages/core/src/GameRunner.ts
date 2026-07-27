@@ -11,7 +11,7 @@
    메인(자기/관전) + 사이드(생존자들)를 매 프레임 각자 렌더한다.
    ============================================================ */
 
-import type { IGame, IRenderer, SpectateTarget } from "@arcade/shared";
+import type { IGame, IRenderer, SpectateTarget, SpawnContext } from "@arcade/shared";
 import { GameLoop } from "./GameLoop";
 import { InputManager } from "./input/InputManager";
 
@@ -60,8 +60,8 @@ export class GameRunner {
   /** 루프를 돌리지 않고 시드 초기 상태를 현재 뷰에 한 번만 그린다.
    *  카운트다운 동안 "빈 경기장 + 중앙 플레이어"를 미리 보여주는 용도.
    *  이후 start()가 같은 시드로 다시 init하므로 결정론엔 영향 없다. */
-  prime(seed: number): void {
-    this.game.init(seed);
+  prime(seed: number, self?: SpawnContext): void {
+    this.game.init(seed, self);
     this.deathReported = false;
     for (const v of this.views) {
       if (v.target) this.game.renderSpectator(v.renderer, v.target);
@@ -70,9 +70,9 @@ export class GameRunner {
   }
 
   /** 시드와 예약 epoch로 라운드를 완전히 새로 시작한다. 반복 호출에도 리스너가 중복되지 않는다. */
-  start(seed: number, startEpochPerformanceMs = performance.now()): void {
+  start(seed: number, startEpochPerformanceMs = performance.now(), self?: SpawnContext): void {
     this.loop.stop();
-    this.game.init(seed);
+    this.game.init(seed, self);
     this.deathReported = false;
     this.input.start();
     this.loop.resetTick(startEpochPerformanceMs);

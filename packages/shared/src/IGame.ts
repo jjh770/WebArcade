@@ -8,12 +8,15 @@
    core는 이 인터페이스만 알고, 구체 게임(JungnimGame 등)은 모른다.
    ============================================================ */
 
-import type { InputState, SpectateTarget, PeerState } from "./types";
+import type { InputState, SpectateTarget, PeerState, SpawnContext } from "./types";
 import type { IRenderer } from "./IRenderer";
 
 export interface IGame {
-  /** 시드로 결정론 초기화. 여기서 SeededRNG 인스턴스를 만든다. */
-  init(seed: number): void;
+  /** 시드로 결정론 초기화. 여기서 SeededRNG 인스턴스를 만든다.
+   *  self는 멀티에서 이 클라의 신원(순번·인원) — 플레이어별로 스폰을 나눠 갖는 게임만
+   *  쓴다. 스폰이 고정인 게임은 매개변수를 아예 안 받아 무시하면 된다(TS는 매개변수를
+   *  덜 받는 구현을 허용한다 — 죽림고수의 init(seed)가 그대로 이 계약을 만족한다). */
+  init(seed: number, self?: SpawnContext): void;
 
   /** 고정 스텝(1/60초)마다 호출. 실측 deltaTime을 받지 않는다 — 결정론 불변식.
    *  ⚠️ 공통 월드(모두가 공유하는 시드 기반 부분)는 로컬 플레이어가 죽어도 계속

@@ -259,6 +259,49 @@ describe("관전용 남 꼬리 재구성 (C-1 — 판정엔 안 쓰는 시각 �
   });
 });
 
+describe("멀티 스폰 분리 (C-2 — 플레이어별 다른 시작점)", () => {
+  const spawnAt = (seed: number, index: number, count: number): { x: number; y: number } => {
+    const g = new CurveGame();
+    g.init(seed, { index, count });
+    return g.getPosition();
+  };
+
+  it("같은 판에서 순번마다 다른 스폰을 준다(시작점이 겹치지 않는다)", () => {
+    for (const seed of [1, 42, 999, 2024]) {
+      const pts = [0, 1, 2, 3].map((i) => spawnAt(seed, i, 4));
+      for (let a = 0; a < pts.length; a++) {
+        for (let b = a + 1; b < pts.length; b++) {
+          expect(Math.hypot(pts[a]!.x - pts[b]!.x, pts[a]!.y - pts[b]!.y)).toBeGreaterThan(1);
+        }
+      }
+    }
+  });
+
+  it("같은 순번·시드·인원이면 어느 클라에서든 같은 스폰이다(결정론)", () => {
+    expect(spawnAt(2024, 2, 4)).toEqual(spawnAt(2024, 2, 4));
+    expect(spawnAt(7, 0, 8)).toEqual(spawnAt(7, 0, 8));
+  });
+
+  it("각 순번의 스폰은 안전하다 — 직진해도 한동안 산다", () => {
+    for (const seed of [1, 42, 999]) {
+      for (let i = 0; i < 4; i++) {
+        const g = new CurveGame();
+        g.init(seed, { index: i, count: 4 });
+        for (let t = 1; t <= 20 && !g.isPlayerDead(); t++) g.update(t, IDLE);
+        expect(g.isPlayerDead()).toBe(false);
+      }
+    }
+  });
+
+  it("솔로(self 없음)는 count 1과 동일 — 기존 스폰 동작 그대로", () => {
+    const solo = new CurveGame();
+    solo.init(555);
+    const one = new CurveGame();
+    one.init(555, { index: 0, count: 1 });
+    expect(one.getPosition()).toEqual(solo.getPosition());
+  });
+});
+
 /** 점-선분 거리(테스트용). */
 function segDist(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1;

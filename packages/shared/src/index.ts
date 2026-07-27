@@ -7,6 +7,7 @@ export type {
   ScoreDirection,
   RoomState,
   PlayerPublic,
+  SpawnContext,
   SpectateTarget,
   PeerState,
   PeerSnapshot,

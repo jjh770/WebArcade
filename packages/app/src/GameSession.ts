@@ -1,5 +1,5 @@
 import { Canvas2DRenderer, GameRunner, InputManager, type GameView } from "@arcade/core";
-import type { IGame, PeerSnapshot, PlayerPublic } from "@arcade/shared";
+import type { IGame, PeerSnapshot, PlayerPublic, SpawnContext } from "@arcade/shared";
 import { GAME_REGISTRY, isGameId, type GameId } from "./GameRegistry";
 
 const SIDE_SLOTS = 3;
@@ -68,8 +68,17 @@ export class GameSession {
     if (!isGameId(gameId)) return false;
     this.ensureRunner(gameId);
     this.runner?.setViews([{ renderer: this.mainRenderer, target: null }]);
-    this.runner?.prime(seed);
+    this.runner?.prime(seed, this.selfContext());
     return true;
+  }
+
+  /** 이 클라의 스폰 신원. 멀티(인원 2+)에서만 유효 — 로스터 내 순번과 인원을 준다.
+   *  솔로거나 아직 나 혼자면 undefined(게임이 단일 스폰을 쓴다). 전원이 같은
+   *  로스터를 공유하므로 같은 스폰 집합에서 각자 다른 슬롯을 고르게 된다. */
+  private selfContext(): SpawnContext | undefined {
+    if (!this.myId || this.roster.length <= 1) return undefined;
+    const index = this.roster.findIndex((player) => player.id === this.myId);
+    return index < 0 ? undefined : { index, count: this.roster.length };
   }
 
   start(gameId: string, seed: number, epochPerformanceMs: number): boolean {
@@ -80,7 +89,7 @@ export class GameSession {
     this.spectateId = null;
     this.sideShown = [];
     this.roundActive = true;
-    this.runner?.start(seed, epochPerformanceMs);
+    this.runner?.start(seed, epochPerformanceMs, this.selfContext());
     this.syncGamePeers();
     this.rebuildViews();
     return true;

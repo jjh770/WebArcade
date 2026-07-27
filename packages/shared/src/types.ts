@@ -13,6 +13,14 @@ export type InputState = {
   right: boolean;
 };
 
+/** 라운드 시작 시 이 클라의 신원 — 멀티에서 플레이어별로 스폰을 나눠 갖는 데 쓴다.
+ *  솔로면 넘기지 않는다(그때 게임은 index 0, count 1처럼 단일 스폰을 쓴다).
+ *  스폰이 고정인 게임(죽림고수)은 이 정보를 무시해도 된다. */
+export type SpawnContext = {
+  index: number; // 로스터 내 내 순번(0-based)
+  count: number; // 방 인원 수(전원이 같은 값 → 같은 스폰 집합에서 각자 슬롯을 고른다)
+};
+
 /** 순위 정렬 방향. 죽림고수=생존시간이라 higher. 스피드런류는 lower.
  *  DESIGN.md의 "getScore 우열 방향" 미정 항목을 이 타입으로 해소한다. */
 export type ScoreDirection = "higher" | "lower";
