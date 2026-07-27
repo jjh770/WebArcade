@@ -210,6 +210,18 @@ export function fallScreen(): void {
   el.classList.add("fallen");
 }
 
+/** 사망 임팩트: 화면을 짧게 흔들고 붉은 섬광을 번쩍인다(순수 시각). 낙하와 함께 부른다.
+ *  같은 클래스를 즉시 다시 붙여도 재생되도록 리플로우로 애니메이션을 재시작시킨다. */
+export function deathFx(): void {
+  const play = byId("play");
+  const flash = byId("death-flash");
+  play.classList.remove("shake");
+  flash.classList.remove("flash");
+  void play.offsetWidth; // 리플로우 강제 — 연달아 죽어도 매번 재생된다.
+  play.classList.add("shake");
+  flash.classList.add("flash");
+}
+
 /** 관전 전환: 남의 화면이 위에서 미끄러져 들어온다. 낙하가 끝난 뒤 호출한다.
  *  같은 캔버스를 재사용하므로 클래스를 지웠다가 리플로우로 애니메이션을 재시작시킨다. */
 export function slideInScreen(): void {

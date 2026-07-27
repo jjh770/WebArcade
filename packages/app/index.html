@@ -49,9 +49,25 @@
       @keyframes swapFromLeft  { from { transform: translateX(-64px); opacity: .35; } to { transform: none; opacity: 1; } }
       #game.swap-r { animation: swapFromRight .26s cubic-bezier(.2, .7, .2, 1); }
       #game.swap-l { animation: swapFromLeft .26s cubic-bezier(.2, .7, .2, 1); }
+      /* 사망 임팩트: 화면이 짧게 흔들리고 붉은 섬광이 번쩍인다.
+         순수 시각 연출이라 게임 로직·결정론과 무관하고, 두 게임 공통으로 앱이 건다.
+         흔들림은 낙하가 걸리는 #game이 아니라 컨테이너(#play)에 얹어 서로 안 부딪히게 한다. */
+      @keyframes deathShake {
+        0%, 100% { transform: translate(0, 0); }
+        20% { transform: translate(-5px, 3px); }
+        40% { transform: translate(4px, -4px); }
+        60% { transform: translate(-3px, -2px); }
+        80% { transform: translate(3px, 3px); }
+      }
+      #play.shake { animation: deathShake .28s ease-in-out; }
+      #death-flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 50;
+        background: radial-gradient(circle at center, rgba(230,57,70,0) 45%, rgba(230,57,70,.5) 100%); }
+      #death-flash.flash { animation: deathFlash .4s ease-out; }
+      @keyframes deathFlash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
       @media (prefers-reduced-motion: reduce) {
         #game.fallen { animation: none; opacity: 0; } /* 모션 민감 사용자는 조용히 사라지게 */
         #game.slide-in, #game.swap-r, #game.swap-l { animation: none; } /* 전환 없이 즉시 표시 */
+        #play.shake, #death-flash.flash { animation: none; } /* 임팩트 연출도 끈다 */
       }
 
       /* 관전 조작 힌트: 관전 중에만 하단에 뜬다. */
@@ -193,6 +209,8 @@
     </style>
   </head>
   <body>
+    <!-- 사망 임팩트용 붉은 섬광 오버레이(항상 존재, 평소 투명·클릭 통과) -->
+    <div id="death-flash"></div>
     <!-- 사이트 헤더: 로고 + 내비 -->
     <header id="site-header">
       <button class="brand" data-nav="game">🎯 Arcade</button>

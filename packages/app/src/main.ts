@@ -11,6 +11,7 @@ import {
   renderResult,
   renderState,
   setAliveHud,
+  deathFx,
   fallScreen,
   slideInScreen,
   swapSpectateScreen,
@@ -21,6 +22,8 @@ import {
 } from "./AppView";
 import { GAME_REGISTRY, isGameId, type GameId } from "./GameRegistry";
 import { GameSession } from "./GameSession";
+import { recordBest } from "./personalBest";
+import { loadNickname, saveNickname } from "./prefs";
 
 /** 게임 좌표계(논리) 크기. 캔버스 픽셀 크기와 별개다 — 표시 크기는 CSS/DPR이 정하고,
  *  Canvas2DRenderer가 논리->픽셀 변환을 맡는다. 게임 로직은 항상 이 좌표만 본다. */
@@ -97,6 +100,7 @@ function onLocalDeath(): void {
   if (appState.state !== "playing") return;
   const score = session.getScore();
   if (score === null) return;
+  deathFx(); // 화면 흔들림 + 붉은 섬광(임팩트).
   fallScreen(); // 내 화면이 아래로 떨어진다.
   // 연습은 죽는 순간이 곧 끝이다. 관전할 남도, 기다릴 서버도 없다.
   if (soloMode) return showSoloResult(score);
@@ -175,9 +179,13 @@ function handleServer(message: ServerMessage): void {
 }
 
 const RANDOM_NAMES = ["고수", "초심자", "바람", "그림자", "은둔자", "검객", "나그네"];
+// 지난 방문에 쓴 닉네임을 입력칸에 미리 채운다(매번 다시 안 치게).
+byId<HTMLInputElement>("nick-input").value = loadNickname();
+
 byId("nick-go").addEventListener("click", () => {
   const value = byId<HTMLInputElement>("nick-input").value.trim();
   myNickname = value || `${RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]}${Math.floor(Math.random() * 100)}`;
+  saveNickname(myNickname); // 랜덤으로 정해진 이름도 기억해 다음에 이어 쓴다.
   byId("main-hello").textContent = `${myNickname} 님, 환영합니다`;
   transition("nickname_submit");
   tryAutoJoin();
@@ -275,6 +283,11 @@ function showSoloResult(score: number): void {
   finalRanks = [{ id: SOLO_ID, rank: 1, nickname: myNickname, survivalTicks: score }];
   // amHost=true로 넘겨 "다시 하기"를 보이게 한다(연습은 언제나 내가 방장이다).
   renderResult(finalRanks, SOLO_ID, true);
+  // 연습은 순위(1위)가 의미 없다 — 그 자리에 개인 최고기록을 보여준다.
+  if (selectedGameId) {
+    const { best, isNew } = recordBest(selectedGameId, score);
+    byId("result-sub").textContent = `${isNew ? "새 기록! " : ""}최고 ${(best / 60).toFixed(1)}s`;
+  }
   setAliveHud("", true);
   session.stopRound();
 }
