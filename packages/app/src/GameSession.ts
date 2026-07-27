@@ -201,7 +201,7 @@ export class GameSession {
   private syncGamePeers(): void {
     this.game?.syncPeers([...this.peers.entries()]
       .filter(([, peer]) => peer.alive)
-      .map(([id, peer]) => ({ id, x: peer.x, y: peer.y })));
+      .map(([id, peer]) => ({ id, x: peer.x, y: peer.y, label: peer.nickname })));
   }
 
   private pickMainSpectate(): void {

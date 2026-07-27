@@ -41,6 +41,20 @@ class TrailCapture extends LineCapture {
   }
 }
 
+/** text() 호출만 모으는 렌더러(HUD·사망문구·이름표 검증용). */
+class TextCapture implements IRenderer {
+  readonly width = 800;
+  readonly height = 800;
+  readonly texts: string[] = [];
+  clear(): void {}
+  circle(): void {}
+  rect(): void {}
+  line(): void {}
+  text(s: string): void {
+    this.texts.push(s);
+  }
+}
+
 function simulate(seed: number, input: InputState, ticks: number): { segments: number[][]; dead: boolean } {
   const game = new CurveGame();
   game.init(seed);
@@ -247,6 +261,17 @@ describe("관전용 남 꼬리 재구성 (C-1 — 판정엔 안 쓰는 시각 �
     expect(capB.segments.map((s) => s.slice(0, 4))).toEqual([[20, 20, 22, 20]]); // b = 둘째 색
   });
 
+  it("각 피어 머리에 닉네임 이름표를 붙인다 (A-3)", () => {
+    const game = new CurveGame();
+    game.init(1);
+    game.syncPeers([{ id: "p1", x: 100, y: 100, label: "고수" }]);
+    game.syncPeers([{ id: "p1", x: 120, y: 110, label: "고수" }]);
+
+    const cap = new TextCapture();
+    game.renderSpectator(cap, { id: "p1", x: 120, y: 110, label: "고수" });
+    expect(cap.texts).toContain("고수"); // 이름표
+  });
+
   it("새 라운드(init)면 지난 판 남 꼬리를 비운다", () => {
     const game = new CurveGame();
     game.init(1);
@@ -299,6 +324,33 @@ describe("멀티 스폰 분리 (C-2 — 플레이어별 다른 시작점)", () =
     const one = new CurveGame();
     one.init(555, { index: 0, count: 1 });
     expect(one.getPosition()).toEqual(solo.getPosition());
+  });
+});
+
+describe("커브 HUD·사망 피드백 (A-1·A-2)", () => {
+  it("생존 시간을 초 단위로 그린다(죽림고수와 같은 형식)", () => {
+    const game = new CurveGame();
+    game.init(999);
+    for (let t = 1; t <= 90; t++) game.update(t, IDLE);
+    const cap = new TextCapture();
+    game.render(cap, 0);
+    // 죽든 살든 getScore(생존 tick) 기준으로 표기 — X.Xs 형식.
+    expect(cap.texts).toContain(`${(game.getScore() / 60).toFixed(1)}s`);
+    expect(cap.texts.some((s) => /^\d+\.\d+s$/.test(s))).toBe(true);
+  });
+
+  it("죽으면 중앙에 '사망 — 생존 X초' 문구를 그린다(살아있을 땐 없다)", () => {
+    const game = new CurveGame();
+    game.init(777);
+    const alive = new TextCapture();
+    game.render(alive, 0);
+    expect(alive.texts.some((s) => s.startsWith("사망"))).toBe(false); // 시작 직후 생존
+
+    for (let t = 1; t <= 500; t++) game.update(t, IDLE); // 벽에 박혀 죽는다
+    expect(game.isPlayerDead()).toBe(true);
+    const dead = new TextCapture();
+    game.render(dead, 0);
+    expect(dead.texts.some((s) => s.startsWith("사망 — 생존"))).toBe(true);
   });
 });
 

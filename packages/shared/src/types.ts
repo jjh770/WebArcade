@@ -45,11 +45,13 @@ export type SpectateTarget = {
   label: string;
 };
 
-/** 관전 렌더용 남의 상태 — 보간할 위치(게임 좌표계). syncPeers로 게임에 넘긴다. */
+/** 관전 렌더용 남의 상태 — 보간할 위치(게임 좌표계). syncPeers로 게임에 넘긴다.
+ *  이건 앱→게임 내부 전달용이지 네트워크로 나가는 wire 타입이 아니다(그건 PeerSnapshot). */
 export type PeerState = {
   id: string;
   x: number;
   y: number;
+  label?: string; // 표시용 닉네임(관전 화면 이름표). 없으면 이름은 생략.
 };
 
 /** 서버가 10Hz로 묶어서 전달하는 관전용 위치. 판정에는 사용하지 않는다. */

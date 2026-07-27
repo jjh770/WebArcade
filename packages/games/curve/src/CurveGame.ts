@@ -52,7 +52,7 @@ export class CurveGame implements IGame {
 
   // 남들의 꼬리(관전용 재구성). syncPeers로 오는 10Hz 위치를 병렬 배열로 쌓아
   // 폴리라인으로 잇는다. 판정에는 절대 쓰지 않는다(시각 근사).
-  private peerTrails = new Map<string, { xs: number[]; ys: number[]; color: string }>();
+  private peerTrails = new Map<string, { xs: number[]; ys: number[]; color: string; label: string }>();
 
   private dead = false;
   private survivalTicks = 0;
@@ -335,6 +335,14 @@ export class CurveGame implements IGame {
     this.drawArena(r);
     this.drawTrail(r, this.trailX, this.trailY, MY_COLOR);
     if (!this.dead) r.circle(this.x, this.y, C.lineWidth, HEAD_COLOR);
+    // 생존 시간(60tick=1초). 죽림고수와 같은 위치·형식으로 좌상단에.
+    r.text(`${(this.survivalTicks / 60).toFixed(1)}s`, 12, 28, HUD_COLOR, 22);
+    // 사망 피드백 — 죽림고수와 같은 중앙 문구(그동안 머리만 사라져 죽은 줄 몰랐다).
+    if (this.dead) {
+      const cx = C.screenWidth / 2;
+      const cy = C.screenHeight / 2;
+      r.text(`사망 — 생존 ${(this.survivalTicks / 60).toFixed(1)}s`, cx - 90, cy, MY_COLOR, 26);
+    }
   }
 
   private drawArena(r: IRenderer): void {
@@ -378,8 +386,10 @@ export class CurveGame implements IGame {
     for (const p of peers) {
       let trail = this.peerTrails.get(p.id);
       if (!trail) {
-        trail = { xs: [], ys: [], color: PEER_COLORS[this.peerTrails.size % PEER_COLORS.length]! };
+        trail = { xs: [], ys: [], color: PEER_COLORS[this.peerTrails.size % PEER_COLORS.length]!, label: p.label ?? "" };
         this.peerTrails.set(p.id, trail);
+      } else if (p.label) {
+        trail.label = p.label;
       }
       const n = trail.xs.length;
       if (n === 0 || trail.xs[n - 1] !== p.x || trail.ys[n - 1] !== p.y) {
@@ -392,8 +402,11 @@ export class CurveGame implements IGame {
   renderSpectator(r: IRenderer, target: SpectateTarget): void {
     this.drawArena(r); // 장애물은 시드 공유라 이 로컬 인스턴스 것이 방 전체와 같다.
     // 남들의 재구성된 꼬리를 모두 그린다 — 관전 화면에서 판 전체가 읽히도록.
+    // 각 꼬리 머리에 닉네임을 같은 색으로 붙여 누구 선인지 알아보게 한다(범례).
     for (const trail of this.peerTrails.values()) {
       this.drawTrail(r, trail.xs, trail.ys, trail.color);
+      const n = trail.xs.length;
+      if (trail.label && n > 0) r.text(trail.label, trail.xs[n - 1]! + 8, trail.ys[n - 1]! - 8, trail.color, 15);
     }
     // 관전 대상의 머리를 강조. 재구성 꼬리의 끝점을 쓰되, 없으면 target 좌표 폴백.
     const focus = this.peerTrails.get(target.id);
