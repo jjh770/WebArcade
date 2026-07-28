@@ -102,9 +102,12 @@ export class JungnimGame implements IGame {
       // 피격 디버프는 **내 입력·속도 사본**에만 건다. 공통 월드는 그대로라 남과 안 어긋난다.
       let left = input.left;
       let right = input.right;
+      let up = input.up;
+      let down = input.down;
       if (this.invertTicks > 0) {
         this.invertTicks--;
-        [left, right] = [right, left];
+        [left, right] = [right, left]; // 4방향 게임이라 상하까지 전부 뒤집는다
+        [up, down] = [down, up];
       }
       let s = jungnimConfig.playerSpeed;
       if (this.sluggishTicks > 0) {
@@ -113,8 +116,8 @@ export class JungnimGame implements IGame {
       }
       if (left) this.me.x -= s;
       if (right) this.me.x += s;
-      if (input.up) this.me.y -= s;
-      if (input.down) this.me.y += s;
+      if (up) this.me.y -= s;
+      if (down) this.me.y += s;
       clampToArena(this.me); // 사각형이 아니라 원 안으로 가둔다.
       this.me.spawner.update(tick, this.me.pool, this.me.x, this.me.y);
     }

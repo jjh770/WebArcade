@@ -7,6 +7,8 @@ import type { ArrowPool } from "../packages/games/jungnim/src/ArrowPool";
 const IDLE: InputState = { up: false, down: false, left: false, right: false };
 const MOVE_RIGHT: InputState = { up: false, down: false, left: false, right: true };
 const MOVE_LEFT: InputState = { up: false, down: false, left: true, right: false };
+const MOVE_UP: InputState = { up: true, down: false, left: false, right: false };
+const MOVE_DOWN: InputState = { up: false, down: true, left: false, right: false };
 
 class CaptureRenderer implements IRenderer {
   readonly width = 800;
@@ -158,6 +160,20 @@ describe("죽림고수 피격 디버프", () => {
     const normal = positionAfter(() => {}, MOVE_LEFT, 10);
     expect(inverted).toBeCloseTo(normal);
     expect(inverted).toBeLessThan(CENTER.x);
+  });
+
+  it("invert: 상하도 함께 뒤집힌다(4방향 전부)", () => {
+    const game = new JungnimGame();
+    game.init(9999);
+    game.applyEffect("invert", 1000);
+    step(game, 10, 0, MOVE_DOWN); // 아래를 눌렀는데 위로 가야 한다
+    const inverted = game.getPosition();
+    expect(inverted.y).toBeCloseTo(CENTER.y - jungnimConfig.playerSpeed * 10);
+
+    const plain = new JungnimGame();
+    plain.init(9999);
+    step(plain, 10, 0, MOVE_UP); // 반전 없이 위로 간 것과 같은 자리
+    expect(inverted.y).toBeCloseTo(plain.getPosition().y);
   });
 
   it("invert: 지속시간이 끝나면 원래대로 돌아온다", () => {

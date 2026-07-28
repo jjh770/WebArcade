@@ -246,7 +246,8 @@ export function swapSpectateScreen(direction: number): void {
    cloud)는 내 메인 화면에 직접 건다. 조작계(invert·sluggish)는 게임이 머리에 표시하고
    여기선 배너만 띄운다. 전부 순수 시각/CSS라 게임 로직·결정론과 무관하다. */
 const DEBUFF_META: Record<string, { icon: string; label: string }> = {
-  invert: { icon: "⇄", label: "좌우 반전" },
+  // 게임마다 뒤집는 축이 다르다(커브=좌우 회전, 죽림고수=상하좌우) → 배너는 축을 안 박는다.
+  invert: { icon: "⇄", label: "조작 반전" },
   sluggish: { icon: "🐌", label: "조작 둔화" },
   blur: { icon: "🌫️", label: "시야 흐림" },
   shake: { icon: "🌀", label: "화면 흔들림" },
