@@ -64,6 +64,41 @@
         background: radial-gradient(circle at center, rgba(230,57,70,0) 45%, rgba(230,57,70,.5) 100%); }
       #death-flash.flash { animation: deathFlash .4s ease-out; }
       @keyframes deathFlash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+      /* ---- 피격 디버프 연출(victim 화면) --------------------------------------
+         남의 발사에 맞았을 때. 전부 순수 시각/CSS라 게임 로직·결정론과 무관하다. */
+      /* 무엇에 맞았는지 화면 중앙에 크게 announce(1.3s, 지속시간과 무관). */
+      #debuff-banner { position: fixed; top: 20%; left: 50%; z-index: 55; pointer-events: none;
+        opacity: 0; font: 800 46px system-ui; color: #fff; letter-spacing: .02em; white-space: nowrap;
+        text-shadow: 0 3px 16px rgba(0,0,0,.75), 0 0 34px rgba(199,125,255,.75); }
+      #debuff-banner.on { animation: debuffBanner 1.3s cubic-bezier(.2,.7,.2,1) forwards; }
+      @keyframes debuffBanner {
+        0% { opacity: 0; transform: translateX(-50%) scale(1.5); }
+        14% { opacity: 1; transform: translateX(-50%) scale(1); }
+        72% { opacity: 1; }
+        100% { opacity: 0; transform: translateX(-50%) scale(1.02); }
+      }
+      /* 시야 흐림 — 메인 캔버스에 blur 필터를 건다(조작은 그대로, 보기만 힘들다). */
+      #game.debuff-blur { filter: blur(6px) brightness(.9); }
+      /* 화면 흔들림 — 플레이 영역이 디버프 내내 계속 덜덜 떨린다(사망 임팩트의 1회 흔들림과 별개). */
+      @keyframes debuffShake {
+        0%, 100% { transform: translate(0, 0); }
+        25% { transform: translate(-4px, 2px); }
+        50% { transform: translate(3px, -3px); }
+        75% { transform: translate(-2px, -2px); }
+      }
+      #play.debuff-shake { animation: debuffShake .16s linear infinite; }
+      /* 구름 가림 — 반투명 구름 덩어리가 왼→오로 화면을 가로지르며 시야를 막는다. */
+      #debuff-cloud { position: fixed; top: 0; bottom: 0; left: 0; width: 64vw; z-index: 46;
+        pointer-events: none; opacity: 0; filter: blur(5px);
+        background: radial-gradient(ellipse 62% 55% at 50% 45%,
+          rgba(232,237,246,.97) 30%, rgba(208,218,234,.78) 56%, rgba(208,218,234,0) 73%); }
+      #debuff-cloud.on { animation: debuffCloud var(--dur, 3000ms) linear forwards; }
+      @keyframes debuffCloud {
+        0% { opacity: 0; transform: translateX(-72vw); }
+        16% { opacity: 1; }
+        84% { opacity: 1; }
+        100% { opacity: 0; transform: translateX(118vw); }
+      }
       /* 게임 HUD — 캔버스(맵) 밖 좌측 상단. 플레이 중엔 헤더가 숨으므로 그 자리를 쓴다. */
       #game-hud { position: fixed; top: 16px; left: 20px; z-index: 40;
         display: flex; flex-direction: column; gap: 8px; color: var(--ink); pointer-events: none; }
@@ -82,6 +117,9 @@
         #game.fallen { animation: none; opacity: 0; } /* 모션 민감 사용자는 조용히 사라지게 */
         #game.slide-in, #game.swap-r, #game.swap-l { animation: none; } /* 전환 없이 즉시 표시 */
         #play.shake, #death-flash.flash { animation: none; } /* 임팩트 연출도 끈다 */
+        #play.debuff-shake, #debuff-banner.on { animation: none; } /* 흔들림·배너 모션 끔 */
+        #debuff-banner.on { opacity: 1; } /* 배너는 움직임 없이도 잠깐 보이게 */
+        #debuff-cloud.on { animation: none; opacity: .85; } /* 구름은 흐르지 않고 가리기만 */
       }
 
       /* 관전 조작 힌트: 관전 중에만 하단에 뜬다. */
@@ -225,6 +263,9 @@
   <body>
     <!-- 사망 임팩트용 붉은 섬광 오버레이(항상 존재, 평소 투명·클릭 통과) -->
     <div id="death-flash"></div>
+    <!-- 피격 디버프 연출: 구름 가림 오버레이 + 무엇에 맞았는지 알리는 배너(평소 숨김) -->
+    <div id="debuff-cloud"></div>
+    <div id="debuff-banner"></div>
     <!-- 게임 HUD: 맵(캔버스) 밖 좌측 상단에 시간 + 스릴 게이지. 플레이 중에만 보인다. -->
     <div id="game-hud" hidden>
       <div id="hud-time">0.0s</div>

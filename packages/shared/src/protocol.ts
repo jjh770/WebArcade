@@ -17,7 +17,7 @@ export type ClientMessage =
   | { type: "time_sync_request"; requestId: string }
   | { type: "player_state"; px: number; py: number } // 관전용 위치(주기적). 서버가 최신값을 방 스냅샷으로 묶는다.
   | { type: "player_died"; survivalTicks: number }
-  | { type: "fire_effect"; kind: string; durationMs: number } // 스릴 게이지 발사 — 상대에게 방해 효과. 서버는 내용 모르고 중계만.
+  | { type: "fire_effect"; kind: string; durationMs: number; targetId: string } // 스릴 게이지 발사 — 조준한 상대 1명에게만 방해 효과. 서버는 내용 모르고 그 1명에게 중계.
   | { type: "leave_room" };
 
 /** 서버 → 클라이언트 */

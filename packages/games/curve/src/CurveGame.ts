@@ -33,6 +33,7 @@ const FIRE_COLOR = "#fff3b0"; // 발사 순간 번쩍임 + 총알 트레이서
 /** 발사 연출이 지속되는 tick 수(≈0.33초). 이 동안 게이지 번쩍 + 트레이서. */
 const FIRE_FLASH_TICKS = 20;
 const INVERT_COLOR = "#c77dff"; // 좌우반전 피격 중 표시색
+const SLUGGISH_COLOR = "#4dd0e1"; // 조작 둔화 피격 중 표시색
 /** 초당 tick 수(고정 스텝). 방해 효과의 ms 지속시간을 tick으로 환산할 때 쓴다. */
 const TICK_HZ = 60;
 /** 남 꼬리 색 — 입장 순서대로 돌려 쓴다(관전 화면에서 서로 구분되게). */
@@ -79,6 +80,8 @@ export class CurveGame implements IGame {
   private pendingFire = false;
   // 남의 발사에 맞아 좌우 조작이 반전되는 잔여 tick(>0이면 left/right를 뒤집는다).
   private invertTicks = 0;
+  // 남의 발사에 맞아 회전이 둔해지는 잔여 tick(>0이면 turnRate가 배수만큼 줄어든다).
+  private sluggishTicks = 0;
 
   init(seed: number, self?: SpawnContext): void {
     const rng = new SeededRNG(seed);
@@ -108,6 +111,7 @@ export class CurveGame implements IGame {
     this.ticksSinceTurn = 0;
     this.pendingFire = false;
     this.invertTicks = 0;
+    this.sluggishTicks = 0;
   }
 
   /** 장애물을 시드에서 뽑는다. 벽붙은 선분 → 떠 있는 선분 → 원 기둥 순.
@@ -315,22 +319,28 @@ export class CurveGame implements IGame {
   update(tick: number, input: InputState): void {
     if (this.dead) return; // 죽으면 내 선은 멈춘다(꼬리는 그대로 남아 장애물).
 
-    // 남의 발사에 맞은 동안(invertTicks>0)엔 좌/우를 뒤집는다. 이 효과는 이 클라의
-    // 입력만 바꾸므로(각자 시뮬은 원래 독립) 결정론이 깨지지 않는다 — 벌은 나만 받는다.
+    // 남의 발사에 맞은 동안 디버프를 건다. 모두 이 클라의 입력/회전만 바꾸므로
+    // (각자 시뮬은 원래 독립) 결정론이 깨지지 않는다 — 벌은 나만 받는다.
+    // invert: 좌/우를 뒤집는다. sluggish: 회전 각도를 배수만큼 줄여 굼뜨게 한다.
     let left = input.left;
     let right = input.right;
     if (this.invertTicks > 0) {
       this.invertTicks--;
       [left, right] = [right, left];
     }
+    let turn = C.turnRate;
+    if (this.sluggishTicks > 0) {
+      this.sluggishTicks--;
+      turn *= C.fire.sluggishTurnMult;
+    }
 
     // 좌/우 입력이 있을 때만 방향을 튼다. 둘 다거나 없으면 직진.
     // 방향을 틀면 "스침 충전" 유예 시계를 리셋한다(직진만 하면 시계가 흘러 충전이 끊긴다).
     if (left && !right) {
-      this.angle -= C.turnRate;
+      this.angle -= turn;
       this.ticksSinceTurn = 0;
     } else if (right && !left) {
-      this.angle += C.turnRate;
+      this.angle += turn;
       this.ticksSinceTurn = 0;
     } else {
       this.ticksSinceTurn++;
@@ -438,10 +448,14 @@ export class CurveGame implements IGame {
     } else if (!this.dead && this.grazing) {
       r.text("스릴!", this.x + 10, this.y - 10, GRAZE_COLOR, 14); // 게이지가 차는 니어 미스
     }
-    // 좌우반전 피격 중: 머리를 반전색으로 알리고 경고 문구를 띄운다.
+    // 조작계 디버프 피격 중: 머리를 디버프색으로 바꾸고 머리 옆에 경고 문구를 띄운다
+    // (화면 전체 배너는 앱이 따로 그린다 — 여기선 지속 표시로 머리에 남긴다).
     if (!this.dead && this.invertTicks > 0) {
       r.text("조작 반전!", this.x + 10, this.y + 22, INVERT_COLOR, 15);
       r.circle(this.x, this.y, C.lineWidth, INVERT_COLOR);
+    } else if (!this.dead && this.sluggishTicks > 0) {
+      r.text("조작 둔화!", this.x + 10, this.y + 22, SLUGGISH_COLOR, 15);
+      r.circle(this.x, this.y, C.lineWidth, SLUGGISH_COLOR);
     } else if (!this.dead) {
       r.circle(this.x, this.y, C.lineWidth, HEAD_COLOR);
     }
@@ -504,23 +518,24 @@ export class CurveGame implements IGame {
     return this.gauge;
   }
 
-  /** 러너가 매 스텝 물어본다: 상대에게 쏠 발사가 대기 중이면 그 내용(kind·지속시간)을
-   *  돌려주고 플래그를 내린다(한 번만 전송). 없으면 null. 효과 내용은 게임이 정한다
-   *  — 서버·러너는 슬러그를 모르고 중계만 한다. */
-  consumePendingFire(): { kind: string; durationMs: number } | null {
+  /** 러너가 매 스텝 물어본다: 상대에게 쏠 발사가 대기 중이면 걸 수 있는 **디버프 풀**을
+   *  돌려주고 플래그를 내린다(한 번만 전송). 없으면 null. 이 중 어느 하나를 뽑아 누구에게
+   *  보낼지는 앱이 정한다(랜덤 선택은 결정론 밖) — 서버·러너·게임 update는 슬러그를 모른다. */
+  consumePendingFire(): readonly { kind: string; durationMs: number }[] | null {
     if (!this.pendingFire) return null;
     this.pendingFire = false;
-    return { kind: C.fire.kind, durationMs: C.fire.durationMs };
+    return C.fire.debuffs;
   }
 
-  /** 남의 발사에 맞았다. 아는 효과면 적용한다 — invert면 지속시간(ms)만큼 좌우 조작을
-   *  반전한다. 모르는 kind는 무시(앞으로 효과가 늘어도 옛 클라가 안 죽는다). 이미 죽었으면
-   *  무시. 결정론 안전: 내 입력만 바꿀 뿐 공통 월드는 안 건드린다. */
+  /** 남의 발사에 맞았다. 아는 조작계 디버프면 지속시간(ms)만큼 로컬에 건다 — invert(좌우
+   *  반전)·sluggish(회전 둔화). 시각계(blur·shake·cloud)는 앱이 화면에 처리하므로 게임은
+   *  무시한다(모르는 kind도 무시 → 효과가 늘어도 옛 클라가 안 죽는다). 이미 죽었으면 무시.
+   *  결정론 안전: 내 입력/회전만 바꿀 뿐 공통 월드는 안 건드린다. */
   applyEffect(kind: string, durationMs: number): void {
     if (this.dead) return;
-    if (kind === "invert") {
-      this.invertTicks = Math.max(this.invertTicks, Math.round((durationMs / 1000) * TICK_HZ));
-    }
+    const ticks = Math.round((durationMs / 1000) * TICK_HZ);
+    if (kind === "invert") this.invertTicks = Math.max(this.invertTicks, ticks);
+    else if (kind === "sluggish") this.sluggishTicks = Math.max(this.sluggishTicks, ticks);
   }
 
   /** 관전용: 남들의 10Hz 위치를 이어 붙여 꼬리를 재구성한다. 매 스냅샷마다

@@ -166,6 +166,46 @@ describe("전체 방 흐름", () => {
     expect(ready.players).toHaveLength(2);
   });
 
+  it("발사(fire_effect)는 조준한 1명에게만 effect_hit으로 가고, 나머지·자신은 못 받는다", async () => {
+    const code = await createRoom("curve");
+    const host = await join(code, "Host");
+    const a = await join(code, "A");
+    const b = await join(code, "B");
+    await host.wait("room_state", (m) => m.players.length === 3);
+
+    host.send({ type: "start_game" });
+    const start = await host.wait("game_start");
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, start.startTime - Date.now()) + 100));
+
+    // 호스트가 A를 조준해 발사한다.
+    host.send({ type: "fire_effect", kind: "invert", durationMs: 2500, targetId: a.id });
+
+    // A만 맞는다 — 발사자(from)와 효과 내용이 그대로 전달된다.
+    const hit = await a.wait("effect_hit");
+    expect(hit).toMatchObject({ from: host.id, kind: "invert", durationMs: 2500 });
+
+    // B(다른 관전자)와 호스트(자신)에겐 오지 않는다.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(b.inbox.some((m) => m.type === "effect_hit")).toBe(false);
+    expect(host.inbox.some((m) => m.type === "effect_hit")).toBe(false);
+  });
+
+  it("없는 id·자기 자신을 조준한 발사는 아무에게도 가지 않는다", async () => {
+    const code = await createRoom("curve");
+    const host = await join(code, "Host");
+    const a = await join(code, "A");
+    await host.wait("room_state", (m) => m.players.length === 2);
+    host.send({ type: "start_game" });
+    const start = await host.wait("game_start");
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, start.startTime - Date.now()) + 100));
+
+    host.send({ type: "fire_effect", kind: "invert", durationMs: 2500, targetId: "ghost-id" }); // 없는 멤버
+    host.send({ type: "fire_effect", kind: "invert", durationMs: 2500, targetId: host.id }); // 자기 자신
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(a.inbox.some((m) => m.type === "effect_hit")).toBe(false);
+    expect(host.inbox.some((m) => m.type === "effect_hit")).toBe(false);
+  });
+
   it("호스트만 시작할 수 있다", async () => {
     const code = await createRoom();
     await join(code, "Host");

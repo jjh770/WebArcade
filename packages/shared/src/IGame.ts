@@ -50,13 +50,13 @@ export interface IGame {
    *  된다(그러면 HUD가 게이지 줄을 숨긴다). (잠정 IGame 확장) */
   getGauge?(): number;
 
-  /** (선택) 이번 스텝에 상대에게 쏠 방해 발사가 있으면 그 내용을 돌려주고 소비한다.
-   *  러너가 매 스텝 폴링해 네트워크로 내보낸다. kind/지속시간은 게임이 정하고,
-   *  core·서버는 슬러그를 모른 채 중계만 한다. 없으면 null. (잠정 IGame 확장) */
-  consumePendingFire?(): { kind: string; durationMs: number } | null;
+  /** (선택) 이번 스텝에 상대에게 쏠 방해 발사가 있으면 걸 수 있는 **디버프 풀**을 돌려주고
+   *  소비한다. 러너가 매 스텝 폴링한다. 이 중 하나를 뽑아(랜덤) 누구에게 보낼지는 앱이 정한다
+   *  — 게임 update와 core·서버는 슬러그를 모른다. 없으면 null. (잠정 IGame 확장) */
+  consumePendingFire?(): readonly { kind: string; durationMs: number }[] | null;
 
   /** (선택) 남의 발사에 맞았을 때 호출. 게임이 아는 kind면 자기 로컬 상태에만 효과를
-   *  적용한다(예: 좌우 조작 반전). 결정론 안전 — 공통 월드가 아니라 그 클라의 입력/시야만
-   *  바뀐다. 모르는 kind는 무시한다. (잠정 IGame 확장) */
+   *  적용한다(예: 좌우 조작 반전·회전 둔화). 결정론 안전 — 공통 월드가 아니라 그 클라의
+   *  입력/시야만 바뀐다. 시각계·모르는 kind는 무시한다(화면 연출은 앱이 처리). (잠정 IGame 확장) */
   applyEffect?(kind: string, durationMs: number): void;
 }

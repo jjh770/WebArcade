@@ -22,6 +22,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const isNickname = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length >= 1 && [...value.trim()].length <= 12;
+/** 플레이어 id 형식(서버가 crypto.randomUUID로 발급). 실제 존재 여부는 라우팅에서 확인. */
+const isPlayerId = (value: unknown): value is string =>
+  typeof value === "string" && value.length >= 1 && value.length <= 64;
 
 export function parseClientMessage(value: unknown): ClientMessage | null {
   if (!isRecord(value) || typeof value.type !== "string") return null;
@@ -47,12 +50,14 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
         ? { type: value.type, survivalTicks: Number(value.survivalTicks) }
         : null;
     case "fire_effect":
-      // 서버는 효과의 의미를 모른다 — kind는 짧은 식별자 문자열, durationMs는 상한만 막는다.
+      // 서버는 효과의 의미를 모른다 — kind는 짧은 식별자 문자열, durationMs는 상한만,
+      // targetId는 형식(서버 발급 id)만 본다. 그 id가 실제 방 멤버인지는 라우팅에서 거른다.
       return EFFECT_KIND.test(String(value.kind ?? "")) &&
         isFiniteNumber(value.durationMs) &&
         value.durationMs > 0 &&
-        value.durationMs <= MAX_EFFECT_MS
-        ? { type: value.type, kind: String(value.kind), durationMs: value.durationMs }
+        value.durationMs <= MAX_EFFECT_MS &&
+        isPlayerId(value.targetId)
+        ? { type: value.type, kind: String(value.kind), durationMs: value.durationMs, targetId: String(value.targetId) }
         : null;
     case "start_game":
     case "return_to_ready":

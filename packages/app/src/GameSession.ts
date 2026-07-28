@@ -17,8 +17,9 @@ export type GameSessionOptions = {
   onSideSlot: (index: number, visible: boolean, label: string) => void;
   /** 매 프레임 로컬 플레이어 HUD 값(생존 tick, 게이지 0~1 또는 없으면 null). 캔버스 밖 DOM 헤더용. */
   onHud: (score: number, gauge: number | null) => void;
-  /** 게임이 상대에게 쏠 방해 발사를 냈을 때(멀티에서 fire_effect로 서버에 전송). */
-  onFire: (kind: string, durationMs: number) => void;
+  /** 게임이 방해 발사를 냈고 조준 대상(우측 관전 슬롯 중 1명)이 정해졌을 때.
+   *  타깃이 없으면(혼자 남음 등) 아예 호출되지 않는다. */
+  onFire: (kind: string, durationMs: number, targetId: string) => void;
 };
 
 /** 한 라운드의 게임 인스턴스, 입력, 관전 대상과 멀티 뷰를 소유한다. */
@@ -142,10 +143,25 @@ export class GameSession {
     this.rebuildViews();
   }
 
-  /** 남의 발사에 맞았다 — 라운드 중일 때만 게임에 방해 효과를 적용한다.
-   *  (관전·대기 중이면 무시. 죽은 뒤 도착한 효과도 게임이 알아서 무시한다.) */
-  applyEffect(kind: string, durationMs: number): void {
-    if (this.roundActive) this.runner?.applyEffect(kind, durationMs);
+  /** 게임이 발사를 냈다(디버프 풀 도착). 풀에서 랜덤 1개를 뽑고, 우측 관전 슬롯(sideShown)에
+   *  지금 떠 있는 살아있는 상대 중 랜덤 1명을 조준해 전송한다 — "보이는 사람만 맞힌다".
+   *  정말 혼자 남아 조준 대상이 없으면 발사를 흘려버린다(마지막 생존자는 어차피 이긴 상황).
+   *  Math.random은 네트워킹/연출용이라 게임 결정론과 무관하다. */
+  private handleFire(debuffs: readonly { kind: string; durationMs: number }[]): void {
+    const targets = this.sideShown.filter((id) => this.peers.get(id)?.alive);
+    if (targets.length === 0 || debuffs.length === 0) return;
+    const targetId = targets[Math.floor(Math.random() * targets.length)]!;
+    const debuff = debuffs[Math.floor(Math.random() * debuffs.length)]!;
+    this.options.onFire(debuff.kind, debuff.durationMs, targetId);
+  }
+
+  /** 남의 발사에 맞았다. 라운드 중이고 내가 아직 살아있을 때만 게임에 조작계 효과를 적용한다.
+   *  적용됐으면 true를 돌려 앱이 화면 연출(배너·시각 디버프)도 같이 걸게 한다. 관전·대기·
+   *  사망 중이면 false(연출도 안 건다). 시각계 kind는 게임이 무시하지만 여기선 true를 준다. */
+  applyEffect(kind: string, durationMs: number): boolean {
+    if (!this.roundActive || !this.game || this.game.isPlayerDead()) return false;
+    this.runner?.applyEffect(kind, durationMs);
+    return true;
   }
 
   markPeerDead(id: string): void {
@@ -189,7 +205,7 @@ export class GameSession {
     if (this.activeGameId === gameId) return;
     this.runner?.stop();
     this.game = GAME_REGISTRY[gameId].factory();
-    this.runner = new GameRunner(this.game, this.input, this.options.onLocalDeath, this.options.onHud, this.options.onFire);
+    this.runner = new GameRunner(this.game, this.input, this.options.onLocalDeath, this.options.onHud, (debuffs) => this.handleFire(debuffs));
     this.activeGameId = gameId;
   }
 

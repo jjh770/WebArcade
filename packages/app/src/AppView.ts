@@ -241,9 +241,58 @@ export function swapSpectateScreen(direction: number): void {
   el.classList.add(direction > 0 ? "swap-r" : "swap-l");
 }
 
+/* ---- 피격 디버프 연출(victim 화면) ---------------------------------------
+   남의 발사에 맞으면 "무엇에 맞았는지" 큰 배너로 알리고, 시각계 디버프(blur·shake·
+   cloud)는 내 메인 화면에 직접 건다. 조작계(invert·sluggish)는 게임이 머리에 표시하고
+   여기선 배너만 띄운다. 전부 순수 시각/CSS라 게임 로직·결정론과 무관하다. */
+const DEBUFF_META: Record<string, { icon: string; label: string }> = {
+  invert: { icon: "⇄", label: "좌우 반전" },
+  sluggish: { icon: "🐌", label: "조작 둔화" },
+  blur: { icon: "🌫️", label: "시야 흐림" },
+  shake: { icon: "🌀", label: "화면 흔들림" },
+  cloud: { icon: "☁️", label: "시야 가림" },
+};
+let debuffTimer = 0;
+
+/** 시각 디버프 클래스/요소를 모두 내린다(라운드 리셋·중복 피격·정리용). */
+function clearDebuffFx(): void {
+  clearTimeout(debuffTimer);
+  byId("game").classList.remove("debuff-blur");
+  byId("play").classList.remove("debuff-shake");
+  byId("debuff-cloud").classList.remove("on");
+  byId("debuff-banner").classList.remove("on");
+}
+
+/** 남의 발사에 맞았다. kind에 맞는 배너 + 시각 디버프를 durationMs 동안 건다. */
+export function debuffFx(kind: string, durationMs: number): void {
+  const meta = DEBUFF_META[kind];
+  if (!meta) return; // 모르는 디버프는 무시(옛 클라 안전)
+  clearDebuffFx();
+
+  // 배너 — 무엇에 맞았는지 화면 중앙에 크게 announce(짧게, 지속시간과 무관).
+  const banner = byId("debuff-banner");
+  banner.textContent = `${meta.icon} ${meta.label}!`;
+  void banner.offsetWidth; // 리플로우 — 연달아 맞아도 매번 재생.
+  banner.classList.add("on");
+
+  // 시각계 디버프 본체 — durationMs 동안 유지하고 타이머로 내린다.
+  if (kind === "blur") {
+    byId("game").classList.add("debuff-blur");
+  } else if (kind === "shake") {
+    byId("play").classList.add("debuff-shake");
+  } else if (kind === "cloud") {
+    const cloud = byId("debuff-cloud");
+    cloud.style.setProperty("--dur", `${durationMs}ms`);
+    void cloud.offsetWidth;
+    cloud.classList.add("on");
+  }
+  debuffTimer = window.setTimeout(clearDebuffFx, durationMs);
+}
+
 /** 새 라운드·로비 복귀 등 연출을 모두 지우고 캔버스를 기본 상태로. */
 export function resetScreenFx(): void {
   byId("game").classList.remove("fallen", "slide-in", "swap-l", "swap-r");
+  clearDebuffFx();
 }
 
 function badge(text: string, className: string): HTMLElement {

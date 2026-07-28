@@ -12,6 +12,7 @@ import {
   renderState,
   setAliveHud,
   deathFx,
+  debuffFx,
   fallScreen,
   slideInScreen,
   swapSpectateScreen,
@@ -57,7 +58,7 @@ const session = new GameSession({
   onLocalDeath,
   onSideSlot: setSideSlot,
   onHud: updateHud,
-  onFire: (kind, durationMs) => net.send({ type: "fire_effect", kind, durationMs }),
+  onFire: (kind, durationMs, targetId) => net.send({ type: "fire_effect", kind, durationMs, targetId }),
 });
 
 /** 매 프레임 로컬 플레이어 HUD 갱신 — 캔버스 밖 좌측 상단 헤더(시간 + 스릴 게이지).
@@ -179,8 +180,9 @@ function handleServer(message: ServerMessage): void {
       session.markPeerDead(message.id);
       break;
     case "effect_hit":
-      // 누군가 스릴 게이지를 채워 나에게 방해 효과를 쐈다. 게임이 아는 효과면 적용.
-      session.applyEffect(message.kind, message.durationMs);
+      // 누군가 스릴 게이지를 채워 나를 조준해 방해 디버프를 쐈다. 살아서 플레이 중일 때만
+      // 게임에 적용하고, 같은 조건에서 화면 연출(배너 + 시각 디버프)도 함께 건다.
+      if (session.applyEffect(message.kind, message.durationMs)) debuffFx(message.kind, message.durationMs);
       break;
     case "ranking_update":
       setAliveHud(`생존 ${message.alive} / ${message.ranks.length}`);

@@ -227,11 +227,12 @@ export class RoomObject {
       }
 
       case "fire_effect": {
-        // 스릴 게이지 발사. 서버는 효과 내용을 모른다 — 라운드가 진행 중일 때만,
-        // 발사자를 뺀 나머지에게 kind를 그대로 중계한다(순수 릴레이). 저장하지 않는다:
-        // 순간적 이벤트라 하이버네이션을 건너 살아남을 필요가 없다.
+        // 스릴 게이지 발사. 서버는 효과 내용을 모른다 — 라운드가 진행 중이고, 조준한
+        // targetId가 자기 자신이 아닌 실제 방 멤버일 때만 그 1명에게 kind를 그대로 중계한다.
+        // (전원이 아니라 조준 1명. 없는 id·자기 자신이면 조용히 버린다.) 저장하지 않는다.
         if (!this.room.ensurePlaying(Date.now())) return;
-        this.broadcastExcept(id, { type: "effect_hit", from: id, kind: msg.kind, durationMs: msg.durationMs });
+        if (msg.targetId === id || !this.room.hasConnectedMember(msg.targetId)) return;
+        this.sendTo(msg.targetId, { type: "effect_hit", from: id, kind: msg.kind, durationMs: msg.durationMs });
         return;
       }
 
@@ -349,6 +350,17 @@ export class RoomObject {
       // 아직 참가하지 않았거나 이미 나간 소켓은 건너뛴다. 나가는 소켓은 이 시점에도
       // getWebSockets()에 남아 있을 수 있어, 멤버 목록을 기준으로 걸러야 한다.
       if (id !== null && this.room.hasConnectedMember(id)) this.send(ws, msg);
+    }
+  }
+
+  /** 지정한 한 명에게만 보낸다(조준 발사 중계용). 연결된 멤버가 아니면 아무 일 없음. */
+  private sendTo(targetId: string, msg: ServerMessage): void {
+    if (!this.room) return;
+    for (const ws of this.ctx.getWebSockets()) {
+      if (this.idOf(ws) === targetId && this.room.hasConnectedMember(targetId)) {
+        this.send(ws, msg);
+        return;
+      }
     }
   }
 

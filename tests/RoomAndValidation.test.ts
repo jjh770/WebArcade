@@ -154,15 +154,19 @@ describe("프로토콜 런타임 검증", () => {
     expect(parseClientMessage({ type: "join_room", code: "AIO1", nickname: "고수" })).toBeNull();
   });
 
-  it("fire_effect은 kind 슬러그와 durationMs 범위를 검사한다", () => {
-    // 정상: 짧은 슬러그 + 유한한 지속시간
-    expect(parseClientMessage({ type: "fire_effect", kind: "invert", durationMs: 2500 }))
-      .toEqual({ type: "fire_effect", kind: "invert", durationMs: 2500 });
+  it("fire_effect은 kind 슬러그·durationMs 범위·targetId 형식을 검사한다", () => {
+    const ok = { type: "fire_effect", kind: "invert", durationMs: 2500, targetId: "player-1" };
+    // 정상: 짧은 슬러그 + 유한한 지속시간 + 타깃 id
+    expect(parseClientMessage(ok)).toEqual(ok);
     // kind 형식 위반(대문자/공백/과길이)·durationMs 상한/0·비유한은 거부
-    expect(parseClientMessage({ type: "fire_effect", kind: "INVERT", durationMs: 2500 })).toBeNull();
-    expect(parseClientMessage({ type: "fire_effect", kind: "a".repeat(33), durationMs: 2500 })).toBeNull();
-    expect(parseClientMessage({ type: "fire_effect", kind: "invert", durationMs: 0 })).toBeNull();
-    expect(parseClientMessage({ type: "fire_effect", kind: "invert", durationMs: 999999 })).toBeNull();
-    expect(parseClientMessage({ type: "fire_effect", kind: "invert", durationMs: Infinity })).toBeNull();
+    expect(parseClientMessage({ ...ok, kind: "INVERT" })).toBeNull();
+    expect(parseClientMessage({ ...ok, kind: "a".repeat(33) })).toBeNull();
+    expect(parseClientMessage({ ...ok, durationMs: 0 })).toBeNull();
+    expect(parseClientMessage({ ...ok, durationMs: 999999 })).toBeNull();
+    expect(parseClientMessage({ ...ok, durationMs: Infinity })).toBeNull();
+    // targetId 누락·빈 문자열·과길이는 거부(조준 대상이 반드시 있어야 한다)
+    expect(parseClientMessage({ type: "fire_effect", kind: "invert", durationMs: 2500 })).toBeNull();
+    expect(parseClientMessage({ ...ok, targetId: "" })).toBeNull();
+    expect(parseClientMessage({ ...ok, targetId: "a".repeat(65) })).toBeNull();
   });
 });

@@ -434,11 +434,11 @@ describe("스릴 게이지 발사 → 상대 방해 (2단계)", () => {
     expect(game.consumePendingFire?.()).toBeNull();
   });
 
-  it("게이지가 꽉 차면 발사 내용(invert·2500ms)을 한 번 내주고 소비한다", () => {
+  it("게이지가 꽉 차면 디버프 풀을 한 번 내주고 소비한다", () => {
     // 적극적으로 벽·꼬리를 스치며 위빙(좌우 번갈아)하면 게이지가 꽉 차 발사가 나온다.
     // (단순 회전만으론 잘 안 찬다 — 능동적으로 스치는 플레이만 보상하는 튜닝.)
     const weave = (t: number): InputState => (t % 6 < 3 ? TURN_LEFT : TURN_RIGHT);
-    let fired: { kind: string; durationMs: number } | null = null;
+    let fired: readonly { kind: string; durationMs: number }[] | null = null;
     for (const seed of [1, 42, 999, 2024, 7, 55555, 31337, 8888]) {
       const game = new CurveGame();
       game.init(seed);
@@ -449,7 +449,8 @@ describe("스릴 게이지 발사 → 상대 방해 (2단계)", () => {
       }
       if (fired) break;
     }
-    expect(fired).toEqual({ kind: curveConfig.fire.kind, durationMs: curveConfig.fire.durationMs });
+    // 앱이 이 풀에서 랜덤으로 하나 뽑아 조준한 상대에게 보낸다.
+    expect(fired).toEqual(curveConfig.fire.debuffs);
   });
 
   it("invert 피격 중엔 좌/우가 뒤집힌다 — 같은 시드에서 LEFT(반전)가 RIGHT(정상)와 같은 궤적", () => {
@@ -479,6 +480,38 @@ describe("스릴 게이지 발사 → 상대 방해 (2단계)", () => {
     expect(inverted.getPosition()).toEqual(normal.getPosition()); // 반전 구간 = 같음
     for (let t = 4; t <= 6; t++) { inverted.update(t, TURN_LEFT); normal.update(t, TURN_RIGHT); }
     expect(inverted.getPosition()).not.toEqual(normal.getPosition()); // 만료 후 = 서로 반대로 갈림
+  });
+
+  it("sluggish 피격 중엔 회전이 둔해진다 — 같은 입력에 덜 꺾여 정상과 궤적이 갈린다", () => {
+    for (const seed of [1, 42, 999, 2024]) {
+      const slow = new CurveGame();
+      slow.init(seed);
+      slow.applyEffect?.("sluggish", 3000);
+      const normal = new CurveGame();
+      normal.init(seed);
+      // 같은 TURN_RIGHT를 줘도 sluggish는 회전각이 배수만큼 줄어 궤적이 달라진다.
+      for (let t = 1; t <= 15; t++) { slow.update(t, TURN_RIGHT); normal.update(t, TURN_RIGHT); }
+      expect(slow.getPosition()).not.toEqual(normal.getPosition());
+    }
+  });
+
+  it("sluggish는 지속시간이 지나면 정상 회전량으로 돌아온다", () => {
+    // 계속 TURN_RIGHT를 주며 위치를 모은다. 둔화 구간의 tick당 회전각은 배수만큼
+    // 작고, 만료 뒤엔 다시 커진다. 연속 세 위치로 그 tick의 회전각을 잰다.
+    const g = new CurveGame();
+    g.init(1);
+    g.applyEffect?.("sluggish", 100); // 6tick 둔화
+    const pts: { x: number; y: number }[] = [g.getPosition()];
+    for (let t = 1; t <= 20; t++) { g.update(t, TURN_RIGHT); pts.push(g.getPosition()); }
+    const turnAt = (i: number): number => {
+      const ax = pts[i]!.x - pts[i - 1]!.x, ay = pts[i]!.y - pts[i - 1]!.y;
+      const bx = pts[i + 1]!.x - pts[i]!.x, by = pts[i + 1]!.y - pts[i]!.y;
+      return Math.abs(Math.atan2(ax * by - ay * bx, ax * bx + ay * by));
+    };
+    const duringSluggish = turnAt(3); // 둔화 구간
+    const afterExpiry = turnAt(15); // 만료 후
+    expect(afterExpiry).toBeGreaterThan(duringSluggish * 1.8); // 대략 1/mult(0.4)=2.5배로 회복
+    expect(afterExpiry).toBeCloseTo(curveConfig.turnRate, 4); // 정상 회전각과 일치
   });
 
   it("모르는 효과 kind는 무시한다(옛 클라 안전)", () => {

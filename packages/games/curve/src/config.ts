@@ -103,14 +103,22 @@ export const curveConfig = {
     turnGraceTicks: 180,
   },
 
-  /** 게이지가 꽉 차면 상대 전원에게 쏘는 방해 효과. 멀티에서만 실제로 전달된다
-   *  (서버가 발사자를 뺀 나머지에게 중계). 결정론 안전: 효과는 맞은 쪽 자기 입력만
-   *  바꾸므로(각 클라 시뮬은 원래 독립) 월드가 어긋나지 않는다. */
+  /** 게이지가 꽉 차면 조준한 상대 1명에게 거는 방해 디버프 풀. 발사 순간 앱이 이 중
+   *  하나를 랜덤으로 뽑아 우측 관전 중인 상대에게 보낸다(서버는 내용 모르고 그 1명에게 중계).
+   *  결정론 안전: 모든 디버프는 맞은 쪽 자기 입력/화면만 바꾼다(각 클라 시뮬은 원래 독립).
+   *  - 조작계(게임이 처리): invert(좌우 반전), sluggish(회전 둔화)
+   *  - 시각계(앱이 victim 화면에 처리): blur(시야 흐림), shake(화면 흔들림), cloud(구름 가림)
+   *  kind 슬러그는 서버 검증 정규식 [a-z0-9_-]{1,32}과 맞물린다. durationMs는 상한 10000ms. */
   fire: {
-    /** 효과 종류 슬러그(서버 검증 정규식 [a-z0-9_-]{1,32}과 맞물림). invert=좌우 조작 반전. */
-    kind: "invert",
-    /** 맞은 쪽에 효과가 지속되는 시간(ms). 서버 상한(10000ms) 이내. */
-    durationMs: 2500,
+    debuffs: [
+      { kind: "blur", durationMs: 2500 },
+      { kind: "sluggish", durationMs: 3000 },
+      { kind: "shake", durationMs: 2000 },
+      { kind: "cloud", durationMs: 3000 },
+      { kind: "invert", durationMs: 2500 },
+    ],
+    /** sluggish 동안 회전 속도 배수(1=정상). 낮을수록 굼떠 급회전을 못 한다. */
+    sluggishTurnMult: 0.4,
   },
 } as const;
 

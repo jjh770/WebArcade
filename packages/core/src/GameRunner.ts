@@ -35,9 +35,9 @@ export class GameRunner {
      *  score=getScore(생존 tick), gauge=getGauge()가 있으면 그 값(0~1) 없으면 null.
      *  게임이 뭔지는 모른다 — HUD 표시는 앱이 정한다. */
     private readonly onHud?: (score: number, gauge: number | null) => void,
-    /** 게임이 상대에게 쏠 방해 발사를 냈을 때 호출(멀티에서 fire_effect 전송용).
-     *  kind/지속시간은 게임이 정한 값을 그대로 넘길 뿐 — 러너는 의미를 모른다. */
-    private readonly onFire?: (kind: string, durationMs: number) => void,
+    /** 게임이 발사를 냈을 때 걸 수 있는 디버프 풀을 앱에 넘긴다(멀티에서 fire_effect 전송용).
+     *  이 중 하나를 뽑아 누구에게 보낼지는 앱이 정한다 — 러너는 슬러그 의미를 모른다. */
+    private readonly onFire?: (debuffs: readonly { kind: string; durationMs: number }[]) => void,
   ) {
     this.loop = new GameLoop(
       // 고정 스텝: 현재 입력 스냅샷과 tick만 게임에 전달.
@@ -47,9 +47,9 @@ export class GameRunner {
           this.deathReported = true;
           this.onDeath?.();
         }
-        // 이번 스텝에 상대에게 쏠 발사가 있으면 앱으로 흘려보낸다(네트워크 전송).
+        // 이번 스텝에 발사가 있으면 디버프 풀을 앱으로 흘려보낸다(앱이 하나 뽑아 조준 전송).
         const fire = this.game.consumePendingFire?.();
-        if (fire) this.onFire?.(fire.kind, fire.durationMs);
+        if (fire && fire.length > 0) this.onFire?.(fire);
       },
       // 렌더: 각 뷰마다 자기 화면(render) 또는 관전(renderSpectator).
       (alpha) => {
