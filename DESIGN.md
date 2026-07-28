@@ -148,10 +148,18 @@ export interface IGame {
   getPosition(): { x: number; y: number };         // 관전 위치 전송
   syncPeers(peers: readonly PeerState[]): void;    // 관전 위치 반영
   getScore(): number;                              // 순위 기준
+
+  // ---- 선택 메서드 (구현 안 하면 그 기능이 그냥 없는 게임이 된다) ----
+  getGauge?(): number;                                  // 0~1. DOM HUD 게이지 줄
+  consumePendingFire?(): readonly Debuff[] | null;      // 이번 스텝의 방해 발사(디버프 풀)
+  applyEffect?(kind: string, durationMs: number): void; // 남의 발사에 맞았을 때
 }
 ```
 
 재시작은 `init(newSeed)` 재호출로 통일한다. 관전 위치와 개인 조준 화살은 시각적 근사이며 판정에는 사용하지 않는다.
+
+**선택 메서드는 옵셔널로 넓혔다.** 방해 발사(아래 "스릴 게이지" 참조)는 두 게임 다 쓰지만,
+게이지가 없는 게임도 얼마든지 있을 수 있다. 필수로 만들면 빈 구현을 강요하게 된다.
 
 **잠정적으로 열어둘 지점** (두 번째 게임에서 실제로 부딪히면 넓힌다. 상상으로 미리 넓히지 않는다):
 - ~~`getScore()`의 우열 방향~~ → **해소됨.** `ScoreDirection`('higher'|'lower') 타입으로 분리하여
@@ -159,8 +167,10 @@ export interface IGame {
 - 입력이 4방향으로 충분한지 — **커브 피버(둘째 게임)는 좌/우만 써서 4방향의 부분집합이었다.
   즉 넓힐 필요가 없었다.** 회전 각도·연속 입력이 필요한 게임이 오면 그때 다시 본다.
 - 종료 조건이 "죽음" 하나인지 (목표 도달로 끝나는 게임 대비) — 커브도 "죽음"이라 아직 유효.
-- 관전 데이터가 위치 하나(`PeerState {x,y}`)로 충분한지 — **커브는 꼬리 이력이 필요해 부족할
-  것으로 보인다.** 커브 멀티(관전 재구성) 단계에서 실제로 부딪혀 확정한다.
+- ~~관전 데이터가 위치 하나(`PeerState {x,y}`)로 충분한지~~ → **해소됨. 안 넓혔다.**
+  커브는 꼬리 이력이 필요했지만, 10Hz로 오는 위치를 게임이 로컬에 쌓아 폴리라인으로 이으니
+  충분했다(`CurveGame.peerTrails`). 이력은 **받는 쪽이 만들면 되는 것**이라 wire 타입을
+  키울 이유가 없었다 — 넓혔다면 대역폭만 늘었을 것이다.
 
 ### GameRunner — 코어가 게임을 모른 채 구동하는 방식
 
@@ -208,15 +218,40 @@ export interface IGame {
 ```
 클라 → 서버:  join_room(code, nickname) · create_room(gameId, nickname) · start_game
              time_sync_request · player_state(px, py) · player_died(survivalTicks)
-             return_to_ready · leave_room
+             fire_effect(kind, durationMs, targetId) · return_to_ready · leave_room
 서버 → 클라:  welcome(id) · time_sync_response · room_state(state, players, hostId)
              game_start(seed, startTime, gameId) · peer_snapshot(peers) · peer_died(id)
-             ranking_update(alive, ranks) · game_over(finalRanks) · host_changed(newHostId)
+             effect_hit(from, kind, durationMs) · ranking_update(alive, ranks)
+             game_over(finalRanks) · host_changed(newHostId)
 ```
 
 - 서버는 게임 내용을 모른다. `gameId`는 문자열로 중계할 뿐.
 - 화살은 네트워크를 한 번도 타지 않는다. 관전 위치만 플레이어당 10Hz로 보내며 서버가 방별 스냅샷으로 묶는다.
+- `fire_effect`도 마찬가지로 **서버는 `kind`의 의미를 모른다.** 형식(`/^[a-z0-9_-]{1,32}$/`, 지속시간
+  ≤10초, 대상이 접속 중인 남)만 검증하고 그 한 명에게 `effect_hit`으로 넘긴다. 저장하지 않는다.
+  → **디버프 종류를 늘려도 서버는 재배포할 필요가 없다.**
 - v1은 최대 32명으로 검증한다. 그 이상 확장은 측정 후 전송 빈도·압축·관전 정책을 다시 결정한다.
+
+### 스릴 게이지 — 방해 발사 (event-injection 핸디캡)
+
+플레이어끼리 간섭하는 유일한 통로. 결정론을 깨지 않으려고 **"공통 월드는 절대 안 건드리고,
+맞은 사람의 입력·시야만 바꾼다"** 는 한 가지 규칙으로 설계했다.
+
+| | 죽림고수 | 커브 피버 |
+|---|---|---|
+| 충전 | 화살이 피격 반경 바로 밖(16px)을 지나감 = **1회**, 10회면 발사 | 벽·꼬리·장애물 스침 정도에 비례해 연속 충전, 100%면 발사 |
+| 반전 효과 | 상하좌우 **4방향** 전부 | 좌/우 (회전 게임이라 축이 그것뿐) |
+| 둔화 효과 | 이동 속도 ×0.45 | 회전 속도 ×0.4 |
+
+- **디버프 5종 공용**: `blur`·`shake`·`cloud`(시각계 — **앱이 DOM/CSS로** victim 화면에 건다) +
+  `invert`·`sluggish`(조작계 — **게임이** 자기 입력 사본에 건다). 게임은 모르는 kind를 무시하므로
+  종류가 늘어도 옛 클라가 죽지 않는다.
+- **랜덤은 앱에서만**: 게임은 디버프 *풀*을 돌려줄 뿐(`consumePendingFire`), 누구를 맞힐지·어떤
+  디버프일지는 앱이 `Math.random`으로 고른다. 게임 `update()`에는 여전히 난수가 없다(2절 불변식).
+- **조준 = 지금 내 우측 관전창에 떠 있는 사람 중 1명**. "보이는 사람만 맞힌다"가 규칙이라 화면과
+  인과가 맞고, 전원 브로드캐스트보다 훨씬 덜 아프다. 정말 혼자 남으면 발사는 그냥 버려진다.
+- **왜 락스텝이 필요 없나**: 각 클라의 시뮬은 원래 독립이고 판정도 로컬이다. 효과가 바꾸는 건
+  그 클라의 입력뿐이라 공통 월드(시드 기반 화살·장애물)는 전 클라에서 그대로 일치한다.
 
 ---
 
@@ -248,15 +283,19 @@ export interface IGame {
 4. ✅ **멈추고 훑고 청소한다** — core에 죽림고수 냄새(예: GameRunner가 "화살"을 안다)가 새어들었는지 점검·제거.
    여기서 나온 것: 범용 `StateMachine` 추출, app을 AppFlow/AppView/GameSession으로 분해,
    서버를 `ArcadeServer` + `validation`으로 분리, Vitest 회귀 스위트.
-5. ⬅️ **[현재] 두 번째 게임(커브 피버)을 붙이며 IGame이 안 맞는 부분을 넓힌다** — 추상화가 진짜로
-   확정되는 지점. 지금까지 나온 것: 입력은 좌/우만 써서 `InputState`를 **안 넓혀도 됐다**(4방향의
-   부분집합). 관전 계약(`PeerState`가 위치 하나뿐 → 커브는 꼬리 이력이 필요)은 커브 멀티 단계에서
-   부딪혀 확정될 예정. 싱글·장애물·연출까지는 완성, 멀티(관전 재구성)는 남았다.
-6. **세 번째부터**는 IGame 구현 + GameRegistry 등록만.
+5. ✅ **두 번째 게임(커브 피버)을 붙이며 IGame이 안 맞는 부분을 넓혔다** — 싱글·장애물·멀티·관전
+   재구성까지 완주. 결론:
+   - `InputState`(4방향) — **안 넓혔다.** 커브는 좌/우만 쓰는 부분집합이었다.
+   - `PeerState`(위치 하나) — **안 넓혔다.** 커브 꼬리는 받는 쪽이 10Hz 위치를 쌓아 재구성했다.
+   - 실제로 넓힌 건 **선택 메서드 3개**(`getGauge`·`consumePendingFire`·`applyEffect`)뿐이고,
+     그것도 옵셔널이라 죽림고수는 한 줄도 안 바뀐 채로 계약을 만족했다. 나중에 죽림고수가
+     자기 방식(스침 10회)으로 같은 계약을 구현하며 이 추상이 두 번 검증됐다.
+   - `core`·서버는 이 과정에서 **게임 슬러그를 하나도 알게 되지 않았다**(디버프 kind는 문자열 중계).
+6. ⬅️ **[현재] 세 번째부터**는 IGame 구현 + GameRegistry 등록만.
 
 > 3~4단계 이후 배포(9절)까지 마쳐 링크 하나로 플레이 가능한 상태다. 다만 **결정론이 진짜
-> 네트워크·기기 차이를 견디는지는 아직 다수 동시 플레이로 검증되지 않았다.** 5단계 전에 이걸
-> 먼저 확인하는 편이 낫다 — 코어가 틀렸다면 두 번째 게임은 틀린 코어 위에 얹히기 때문이다.
+> 네트워크·기기 차이를 견디는지는 아직 다수 동시 플레이로 검증되지 않았다.** 여전히 남은 숙제다
+> — 지금은 혼자 여러 탭으로 여는 수준이라 실제 기기·지연 편차를 못 본다.
 
 ---
 
