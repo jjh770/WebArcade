@@ -99,6 +99,19 @@
         84% { opacity: 1; }
         100% { opacity: 0; transform: translateX(118vw); }
       }
+      /* ---- 발사 연출(shooter 화면) --------------------------------------------
+         내 화면 중앙에서 조준한 관전창까지 탄환이 날아가 명중한다. 좌표가 매 발사마다
+         달라 이동은 JS(Web Animations)가 넣고 여기선 생김새만 정한다. */
+      .fire-bullet { position: fixed; z-index: 54; pointer-events: none; font-size: 30px;
+        line-height: 1; will-change: transform;
+        filter: drop-shadow(0 0 10px rgba(255,209,102,.95)) drop-shadow(0 0 22px rgba(255,159,28,.7)); }
+      /* 명중 — 맞은 관전창이 번쩍인다(슬롯 안쪽만, overflow:hidden). */
+      .side-slot.hit::after { content: ""; position: absolute; inset: 0; border-radius: 5px;
+        pointer-events: none; animation: slotHit .5s ease-out forwards; }
+      @keyframes slotHit {
+        0% { background: rgba(255,209,102,.85); box-shadow: inset 0 0 0 3px rgba(255,209,102,1); }
+        100% { background: rgba(255,209,102,0); box-shadow: inset 0 0 0 3px rgba(255,209,102,0); }
+      }
       /* 게임 HUD — 캔버스(맵) 밖 좌측 상단. 플레이 중엔 헤더가 숨으므로 그 자리를 쓴다. */
       #game-hud { position: fixed; top: 16px; left: 20px; z-index: 40;
         display: flex; flex-direction: column; gap: 8px; color: var(--ink); pointer-events: none; }
@@ -120,6 +133,7 @@
         #play.debuff-shake, #debuff-banner.on { animation: none; } /* 흔들림·배너 모션 끔 */
         #debuff-banner.on { opacity: 1; } /* 배너는 움직임 없이도 잠깐 보이게 */
         #debuff-cloud.on { animation: none; opacity: .85; } /* 구름은 흐르지 않고 가리기만 */
+        /* 탄환은 아예 안 날린다(bulletFx가 명중 번쩍임만 낸다). */
       }
 
       /* 관전 조작 힌트: 관전 중에만 하단에 뜬다. */

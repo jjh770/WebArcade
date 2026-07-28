@@ -289,10 +289,82 @@ export function debuffFx(kind: string, durationMs: number): void {
   debuffTimer = window.setTimeout(clearDebuffFx, durationMs);
 }
 
+/* ---- 발사 연출(shooter 화면) ---------------------------------------------
+   스릴 게이지를 채워 쐈을 때 **발사한 사람 화면에만** 보이는 연출. 내 메인 화면
+   중앙에서 조준한 우측 관전창까지 탄환이 날아가 명중한다 — "저 사람을 맞혔다"를
+   보여주는 게 목적이라 실제 디버프 적용(서버 릴레이)과는 완전히 별개다. */
+const BULLET_FLIGHT_MS = 420;
+const SLOT_HIT_MS = 500;
+/** 아직 날아가는 중인 탄환들. 라운드가 끝나면 도착 전에 취소해야 한다. */
+const bulletsInFlight = new Set<Animation>();
+
+/** 명중: 맞은 관전창이 번쩍인다. */
+function slotHitFx(slot: HTMLElement): void {
+  slot.classList.remove("hit");
+  void slot.offsetWidth; // 리플로우 — 연달아 맞혀도 매번 재생.
+  slot.classList.add("hit");
+  window.setTimeout(() => slot.classList.remove("hit"), SLOT_HIT_MS);
+}
+
+/** 내가 쐈다. 메인 화면 중앙 → slotIndex번 관전창으로 탄환을 날리고 명중시킨다.
+ *  좌표는 발사 때마다 레이아웃에서 직접 읽는다(창 크기·슬롯 개수가 계속 변한다). */
+export function bulletFx(slotIndex: number, kind: string): void {
+  const slot = document.getElementById(`slot-${slotIndex}`);
+  if (!slot) return;
+  const to = slot.getBoundingClientRect();
+  if (to.width <= 0 || to.height <= 0) return; // 좁은 화면 = 관전 칼럼이 접힘 → 쏠 곳이 없다
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    slotHitFx(slot); // 모션 민감 사용자에겐 날리지 않고 명중만 알린다
+    return;
+  }
+
+  const from = byId("game").getBoundingClientRect();
+  const originX = from.left + from.width / 2;
+  const originY = from.top + from.height / 2;
+  const dx = to.left + to.width / 2 - originX;
+  const dy = to.top + to.height / 2 - originY;
+
+  const bullet = document.createElement("div");
+  bullet.className = "fire-bullet";
+  bullet.textContent = DEBUFF_META[kind]?.icon ?? "✦"; // 무슨 디버프를 쐈는지 탄환이 들고 간다
+  bullet.style.left = `${originX}px`;
+  bullet.style.top = `${originY}px`;
+  document.body.appendChild(bullet);
+
+  const flight = bullet.animate(
+    [
+      { transform: "translate(-50%, -50%) scale(.5) rotate(0deg)", opacity: 0.35 },
+      {
+        transform: `translate(calc(${dx}px - 50%), calc(${dy}px - 50%)) scale(1.15) rotate(320deg)`,
+        opacity: 1,
+      },
+    ],
+    { duration: BULLET_FLIGHT_MS, easing: "cubic-bezier(.45,0,.75,.6)" },
+  );
+  bulletsInFlight.add(flight);
+  flight.onfinish = () => {
+    bulletsInFlight.delete(flight);
+    bullet.remove();
+    // 날아가는 동안 그 슬롯이 비었으면(상대 사망 등) 명중 연출은 생략한다.
+    if (slot.classList.contains("on")) slotHitFx(slot);
+  };
+  flight.oncancel = () => {
+    bulletsInFlight.delete(flight);
+    bullet.remove();
+  };
+}
+
+/** 날아가던 탄환을 즉시 치운다(라운드 종료·로비 복귀). */
+function clearBullets(): void {
+  for (const flight of [...bulletsInFlight]) flight.cancel(); // oncancel이 요소를 지운다
+  bulletsInFlight.clear();
+}
+
 /** 새 라운드·로비 복귀 등 연출을 모두 지우고 캔버스를 기본 상태로. */
 export function resetScreenFx(): void {
   byId("game").classList.remove("fallen", "slide-in", "swap-l", "swap-r");
   clearDebuffFx();
+  clearBullets();
 }
 
 function badge(text: string, className: string): HTMLElement {

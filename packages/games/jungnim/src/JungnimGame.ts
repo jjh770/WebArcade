@@ -26,6 +26,17 @@ const PLAYER_COLOR = "#e63946";
 const ARROW_COLOR = "#1d3557"; // 공통(시드) 화살 — 짙은 남색.
 const PERSONAL_COLOR = "#f77f00"; // 개인(조준) 화살 — 주황. "너를 노린다"는 신호.
 const HUD_COLOR = "#e8eef2"; // HUD 텍스트 — 원 밖 어두운 영역 위라 밝게.
+const GRAZE_COLOR = "#ff9f1c"; // 니어 미스 순간 — 주황.
+const FIRE_COLOR = "#ffd166"; // 발사 순간 — 밝은 금색(커브 피버와 같은 신호색).
+const INVERT_COLOR = "#c77dff"; // 조작 반전 피격 중.
+const SLUGGISH_COLOR = "#4dd0e1"; // 조작 둔화 피격 중.
+
+/** 니어 미스·발사 연출이 화면에 남는 시간(tick). 연출 전용 — 판정과 무관. */
+const GRAZE_FLASH_TICKS = 24;
+const FIRE_FLASH_TICKS = 30;
+
+/** 고정 스텝 주파수. 디버프 지속시간(ms)을 tick으로 바꿀 때만 쓴다. */
+const TICK_HZ = 60;
 
 // 원형 경기장 색: 어두운 바깥 + 얇은 테두리 + 밝은 바닥.
 const ARENA_OUTSIDE = "#15171d";
@@ -56,6 +67,16 @@ export class JungnimGame implements IGame {
   private survivalTicks = 0;
   private dead = false;
 
+  // 「스릴 게이지」 — 아주 가까이 스친 화살 수. needed번이면 발사(0으로 리셋).
+  private grazeCount = 0;
+  private grazeFlash = 0; // 스침 연출 잔여 tick
+  private fireFlash = 0; // 발사 연출 잔여 tick
+  /** 러너가 가져갈 발사 신호. 로컬 연출(fireFlash)과 별개 — 이건 "남에게 전송" 신호다. */
+  private pendingFire = false;
+  // 남의 발사에 맞아 걸린 조작계 디버프 잔여 tick.
+  private invertTicks = 0;
+  private sluggishTicks = 0;
+
   init(seed: number): void {
     this.commonPool = new ArrowPool(jungnimConfig.poolSize);
     this.commonSpawner = new ArrowSpawner(new SeededRNG(seed), jungnimConfig);
@@ -65,14 +86,33 @@ export class JungnimGame implements IGame {
     this.peers.clear();
     this.survivalTicks = 0;
     this.dead = false;
+    this.grazeCount = 0;
+    this.grazeFlash = 0;
+    this.fireFlash = 0;
+    this.pendingFire = false;
+    this.invertTicks = 0;
+    this.sluggishTicks = 0;
   }
 
   update(tick: number, input: InputState): void {
     // 살아있을 때만: 플레이어 이동 + 내 개인 스폰 + 피격 판정.
     if (!this.dead) {
-      const s = jungnimConfig.playerSpeed;
-      if (input.left) this.me.x -= s;
-      if (input.right) this.me.x += s;
+      if (this.grazeFlash > 0) this.grazeFlash--;
+      if (this.fireFlash > 0) this.fireFlash--;
+      // 피격 디버프는 **내 입력·속도 사본**에만 건다. 공통 월드는 그대로라 남과 안 어긋난다.
+      let left = input.left;
+      let right = input.right;
+      if (this.invertTicks > 0) {
+        this.invertTicks--;
+        [left, right] = [right, left];
+      }
+      let s = jungnimConfig.playerSpeed;
+      if (this.sluggishTicks > 0) {
+        this.sluggishTicks--;
+        s *= jungnimConfig.fire.sluggishSpeedMult;
+      }
+      if (left) this.me.x -= s;
+      if (right) this.me.x += s;
       if (input.up) this.me.y -= s;
       if (input.down) this.me.y += s;
       clampToArena(this.me); // 사각형이 아니라 원 안으로 가둔다.
@@ -96,8 +136,40 @@ export class JungnimGame implements IGame {
 
     if (!this.dead) {
       if (this.checkHit()) this.dead = true;
+      else this.scanNearMiss(); // 맞아 죽은 화살은 스침으로 안 친다
       this.survivalTicks = tick; // 사망 프레임까지 포함 → 생존시간 = 사망 tick.
     }
+  }
+
+  /** 「스릴 게이지」: 아주 가까이 스치고 지나간 화살을 센다. 화살 하나당 딱 한 번
+   *  (밴드 안에 여러 tick 머물러도 중복 없음 — Arrow.grazed 표식). needed번 모이면
+   *  발사되고 0으로 리셋된다. 남의 개인 화살은 내 위험이 아니라 세지 않는다. */
+  private scanNearMiss(): void {
+    const radius = jungnimConfig.nearMiss.grazeRadius;
+    const radius2 = radius * radius;
+    const grazed = this.markGrazes(this.commonPool, radius2) + this.markGrazes(this.me.pool, radius2);
+    if (grazed === 0) return;
+    this.grazeCount += grazed;
+    this.grazeFlash = GRAZE_FLASH_TICKS;
+    if (this.grazeCount >= jungnimConfig.nearMiss.needed) {
+      this.grazeCount = 0;
+      this.fireFlash = FIRE_FLASH_TICKS; // 발사! — 연출 시작
+      this.pendingFire = true; // 러너가 가져가 관전 중인 상대 1명에게 디버프를 쏜다(멀티).
+    }
+  }
+
+  /** 아직 안 센 화살 중 스침 밴드 안에 들어온 것에 표식을 남기고 그 수를 돌려준다. */
+  private markGrazes(pool: ArrowPool, radius2: number): number {
+    let count = 0;
+    for (const a of pool.items) {
+      if (!a.active || a.grazed) continue;
+      const dx = this.me.x - a.x;
+      const dy = this.me.y - a.y;
+      if (dx * dx + dy * dy > radius2) continue;
+      a.grazed = true;
+      count++;
+    }
+    return count;
   }
 
   /** 관전 대상(남)들의 목표 위치를 반영. 새 대상은 아바타 생성, 빠진 대상은 제거. */
@@ -124,7 +196,25 @@ export class JungnimGame implements IGame {
     this.drawArena(r);
     this.drawPool(r, this.commonPool); // 공통 화살
     this.drawPool(r, this.me.pool); // 내 개인 화살
-    r.circle(this.me.x, this.me.y, jungnimConfig.playerRadius, PLAYER_COLOR);
+
+    // 스침·발사 손맛은 플레이어 옆에 위치성으로 남긴다(게이지 수치는 캔버스 밖 DOM HUD).
+    if (!this.dead && this.fireFlash > 0) {
+      this.drawFireBurst(r);
+      r.text("발사!", this.me.x + 12, this.me.y - 28, FIRE_COLOR, 16);
+    } else if (!this.dead && this.grazeFlash > 0) {
+      r.text("니어 미스!", this.me.x + 12, this.me.y - 12, GRAZE_COLOR, 14);
+    }
+    // 조작계 디버프 피격 중: 플레이어를 디버프색으로 바꾸고 옆에 경고 문구를 띄운다
+    // (화면 전체 배너는 앱이 따로 그린다 — 여기선 지속 표시로 남긴다).
+    if (!this.dead && this.invertTicks > 0) {
+      r.text("조작 반전!", this.me.x + 12, this.me.y + 24, INVERT_COLOR, 15);
+      r.circle(this.me.x, this.me.y, jungnimConfig.playerRadius, INVERT_COLOR);
+    } else if (!this.dead && this.sluggishTicks > 0) {
+      r.text("조작 둔화!", this.me.x + 12, this.me.y + 24, SLUGGISH_COLOR, 15);
+      r.circle(this.me.x, this.me.y, jungnimConfig.playerRadius, SLUGGISH_COLOR);
+    } else {
+      r.circle(this.me.x, this.me.y, jungnimConfig.playerRadius, PLAYER_COLOR);
+    }
 
     // 생존 시간은 캔버스 밖 DOM HUD가 보여준다(getScore로 전달). 여기선 안 그린다.
     if (this.dead) {
@@ -158,7 +248,52 @@ export class JungnimGame implements IGame {
     return this.survivalTicks;
   }
 
+  /** 「스릴 게이지」 값(0~1) — 스침 횟수 / 발사에 필요한 횟수. HUD·테스트용. */
+  getGauge(): number {
+    return this.grazeCount / jungnimConfig.nearMiss.needed;
+  }
+
+  /** 러너가 매 스텝 물어본다: 발사가 대기 중이면 걸 수 있는 **디버프 풀**을 돌려주고
+   *  플래그를 내린다(한 번만 전송). 어느 디버프를 누구에게 보낼지는 앱이 정한다. */
+  consumePendingFire(): readonly { kind: string; durationMs: number }[] | null {
+    if (!this.pendingFire) return null;
+    this.pendingFire = false;
+    return jungnimConfig.fire.debuffs;
+  }
+
+  /** 남의 발사에 맞았다. 아는 조작계 디버프면 지속시간(ms)만큼 로컬에 건다 — invert(좌우
+   *  반전)·sluggish(이동 둔화). 시각계(blur·shake·cloud)는 앱이 화면에 처리하므로 여기선
+   *  무시한다(모르는 kind도 무시 → 효과가 늘어도 옛 클라가 안 죽는다). 이미 죽었으면 무시.
+   *  결정론 안전: 내 입력·속도만 바꿀 뿐 공통 월드는 안 건드린다. */
+  applyEffect(kind: string, durationMs: number): void {
+    if (this.dead) return;
+    const ticks = Math.round((durationMs / 1000) * TICK_HZ);
+    if (kind === "invert") this.invertTicks = Math.max(this.invertTicks, ticks);
+    else if (kind === "sluggish") this.sluggishTicks = Math.max(this.sluggishTicks, ticks);
+  }
+
   // ---- 내부 ----
+
+  /** 발사 순간: 플레이어에서 8방향으로 빛줄기가 퍼져나갔다 사그라든다.
+   *  fireFlash가 줄수록 더 바깥으로 밀려나며 짧아져 "쏜" 느낌을 준다. */
+  private drawFireBurst(r: IRenderer): void {
+    const progress = 1 - this.fireFlash / FIRE_FLASH_TICKS; // 0(막 발사) → 1(끝)
+    const start = jungnimConfig.playerRadius + 4 + progress * 34;
+    const len = 18 * (1 - progress);
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI / 4) * i;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      r.line(
+        this.me.x + cos * start,
+        this.me.y + sin * start,
+        this.me.x + cos * (start + len),
+        this.me.y + sin * (start + len),
+        FIRE_COLOR,
+        3,
+      );
+    }
+  }
 
   private newAvatar(): Avatar {
     return {

@@ -18,8 +18,9 @@ export type GameSessionOptions = {
   /** 매 프레임 로컬 플레이어 HUD 값(생존 tick, 게이지 0~1 또는 없으면 null). 캔버스 밖 DOM 헤더용. */
   onHud: (score: number, gauge: number | null) => void;
   /** 게임이 방해 발사를 냈고 조준 대상(우측 관전 슬롯 중 1명)이 정해졌을 때.
+   *  slotIndex는 그 대상이 떠 있는 관전 슬롯 번호 — 탄환 연출이 날아갈 목적지다.
    *  타깃이 없으면(혼자 남음 등) 아예 호출되지 않는다. */
-  onFire: (kind: string, durationMs: number, targetId: string) => void;
+  onFire: (kind: string, durationMs: number, targetId: string, slotIndex: number) => void;
 };
 
 /** 한 라운드의 게임 인스턴스, 입력, 관전 대상과 멀티 뷰를 소유한다. */
@@ -152,7 +153,8 @@ export class GameSession {
     if (targets.length === 0 || debuffs.length === 0) return;
     const targetId = targets[Math.floor(Math.random() * targets.length)]!;
     const debuff = debuffs[Math.floor(Math.random() * debuffs.length)]!;
-    this.options.onFire(debuff.kind, debuff.durationMs, targetId);
+    // 슬롯 번호는 sideShown 기준(targets는 살아있는 것만 걸러낸 부분집합이라 번호가 다르다).
+    this.options.onFire(debuff.kind, debuff.durationMs, targetId, this.sideShown.indexOf(targetId));
   }
 
   /** 남의 발사에 맞았다. 라운드 중이고 내가 아직 살아있을 때만 게임에 조작계 효과를 적용한다.

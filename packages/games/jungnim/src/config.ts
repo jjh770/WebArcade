@@ -89,6 +89,34 @@ export const jungnimConfig = {
     unlock: { spinner: 300, ring: 900 },
   },
 
+  /** 「스릴 게이지」 — 커브 피버와 달리 연속 충전이 아니라 **횟수**로 센다.
+   *  화살이 아주 가까이(grazeRadius) 스치고 지나가면 1회. 같은 화살은 한 번만 센다
+   *  (화살에 표식을 남기고 풀 반납 때 지운다). needed번이면 발사.
+   *  판정은 순수 기하 + tick이라 클라마다 어긋나지 않는다. */
+  nearMiss: {
+    /** 이 거리(px) 안에 화살이 들어오면 "아주 가까이 스쳤다"로 친다. 피격 반경
+     *  (playerRadius + arrowRadius = 9) 바로 바깥의 좁은 띠 = 진짜 아슬아슬한 회피만 센다.
+     *  ⚠️ 여기에 아주 민감하다. 회피 AI로 8판(총 322초) 측정: 11px→발사 0회, 15px→발사
+     *  1회당 ~35초, 18px→~14초, 26px→~5초(남발). 16px = 발사 1회당 ~25초로 잡았다. */
+    grazeRadius: 16,
+    /** 발사에 필요한 스침 횟수. */
+    needed: 10,
+  },
+
+  /** 발사로 상대에게 거는 디버프 풀. 슬러그는 커브 피버와 공유한다(앱·서버가 같은 걸 안다).
+   *  조작계(invert·sluggish)는 이 게임이 처리하고 시각계(blur·shake·cloud)는 앱이 화면에 건다. */
+  fire: {
+    debuffs: [
+      { kind: "blur", durationMs: 2500 },
+      { kind: "sluggish", durationMs: 3000 },
+      { kind: "shake", durationMs: 2000 },
+      { kind: "cloud", durationMs: 3000 },
+      { kind: "invert", durationMs: 2500 },
+    ],
+    /** sluggish 피격 중 이동 속도 배수(느려져 화살 사이를 빠져나가기 어렵다). */
+    sluggishSpeedMult: 0.45,
+  },
+
   /** 관전 시 남의 위치를 부드럽게 따라가는 계수(틱당 lerp, 0~1).
    *  위치가 ~10Hz로 드문드문 오므로, 매 틱 이 비율로 목표에 다가가 점·화살이
    *  뚝뚝 끊기지 않고 매끄럽게 움직인다. 크면 즉각적이지만 덜 부드럽다. */

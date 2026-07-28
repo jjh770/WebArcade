@@ -20,6 +20,9 @@ export class Arrow {
   /** 개인(플레이어 조준) 화살이면 true. 공통(시드) 화살은 false.
    *  렌더 색 구분 + 레이어 분리 확인용. 반납 시 반드시 false로 되돌린다. */
   personal = false;
+  /** 이미 「니어 미스」로 센 화살이면 true. 화살 하나는 아무리 오래 스쳐도 한 번만 센다
+   *  — 밴드 안에 여러 tick 머물러도 중복 카운트되지 않는다. 반납 시 false로 되돌린다. */
+  grazed = false;
 
   /** 풀 내 고정 인덱스(release 시 free 스택 복원용). */
   constructor(readonly index: number) {}
@@ -47,11 +50,12 @@ export class ArrowPool {
     return a;
   }
 
-  /** 화살을 비활성화해 풀로 반납. personal 플래그도 반드시 초기화(재사용 누수 방지). */
+  /** 화살을 비활성화해 풀로 반납. personal·grazed 플래그도 반드시 초기화(재사용 누수 방지). */
   release(a: Arrow): void {
     if (!a.active) return;
     a.active = false;
     a.personal = false;
+    a.grazed = false;
     this.free.push(a.index);
   }
 

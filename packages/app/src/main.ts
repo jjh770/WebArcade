@@ -13,6 +13,7 @@ import {
   setAliveHud,
   deathFx,
   debuffFx,
+  bulletFx,
   fallScreen,
   slideInScreen,
   swapSpectateScreen,
@@ -58,11 +59,15 @@ const session = new GameSession({
   onLocalDeath,
   onSideSlot: setSideSlot,
   onHud: updateHud,
-  onFire: (kind, durationMs, targetId) => net.send({ type: "fire_effect", kind, durationMs, targetId }),
+  // 서버로 조준 발사를 보내고, 내 화면에는 그 관전창으로 탄환이 날아가 명중하는 연출을 건다.
+  onFire: (kind, durationMs, targetId, slotIndex) => {
+    net.send({ type: "fire_effect", kind, durationMs, targetId });
+    bulletFx(slotIndex, kind);
+  },
 });
 
 /** 매 프레임 로컬 플레이어 HUD 갱신 — 캔버스 밖 좌측 상단 헤더(시간 + 스릴 게이지).
- *  gauge가 null이면(게이지 없는 게임=죽림고수) 게이지 줄을 숨긴다. */
+ *  gauge가 null이면(getGauge를 구현 안 한 게임) 게이지 줄을 숨긴다. */
 function updateHud(score: number, gauge: number | null): void {
   byId("hud-time").textContent = `${(score / 60).toFixed(1)}s`;
   const gaugeEl = byId("hud-gauge");
