@@ -27,7 +27,10 @@ export function renderState(state: AppState): void {
   // 카운트다운 동안에도 플레이 영역을 보여준다 — 그 위에 게임판이 내려와 자리잡는다.
   const showPlay = PLAY_STATES.has(state) || state === "countdown";
   byId("play").classList.toggle("on", showPlay);
-  byId("game-hud").hidden = !showPlay; // 시간·스릴 게이지 HUD는 플레이 중에만(맵 밖 헤더)
+  // 시간·스릴 게이지 HUD는 **내가 살아서 뛰는 동안에만**. 죽는 순간 값이 멈추므로
+  // 그 뒤로도 띄워두면 낡은 숫자가 남는다 — 관전 중엔 남의 기록으로, 결과 화면에선
+  // 순위표와 겹쳐 읽힌다. 내 기록은 결과표가, 관전은 상대 화면이 말해준다.
+  byId("game-hud").hidden = state !== "playing";
   document.body.classList.toggle("playing", showPlay);
   byId("spectate-hint").hidden = state !== "spectating"; // 관전 중에만 ←/→ 힌트
 

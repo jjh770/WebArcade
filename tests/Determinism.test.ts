@@ -146,6 +146,55 @@ describe("죽림고수 스릴 게이지(스침 횟수)", () => {
   });
 });
 
+/* 스침 문구는 "몇 번째인지"를 화면에 싣는다(HUD 게이지로 시선을 옮기지 않게).
+   판정이 아니라 표시라 렌더러가 받은 문자열로 확인한다. */
+class TextRenderer implements IRenderer {
+  readonly width = 800;
+  readonly height = 800;
+  readonly texts: string[] = [];
+  clear(): void {}
+  circle(): void {}
+  rect(): void {}
+  line(): void {}
+  text(value: string): void {
+    this.texts.push(value);
+  }
+}
+
+function drawnTexts(game: JungnimGame): string[] {
+  const renderer = new TextRenderer();
+  game.render(renderer, 0);
+  return renderer.texts;
+}
+
+describe("죽림고수 스침 문구", () => {
+  it("스친 횟수를 문구에 실어 보여준다", () => {
+    const game = new JungnimGame();
+    game.init(42);
+    ringAroundPlayer(game, 3, GRAZE_DIST);
+    step(game, 1);
+    expect(drawnTexts(game)).toContain("스릴 ×3");
+  });
+
+  it("발사한 순간엔 「발사!」만 뜬다(0으로 리셋된 카운터가 비치지 않는다)", () => {
+    const game = new JungnimGame();
+    game.init(42);
+    ringAroundPlayer(game, jungnimConfig.nearMiss.needed, GRAZE_DIST);
+    step(game, 1);
+    const texts = drawnTexts(game);
+    expect(texts).toContain("발사!");
+    expect(texts.some((text) => text.startsWith("스릴"))).toBe(false);
+  });
+
+  it("연출 시간이 지나면 사라진다", () => {
+    const game = new JungnimGame();
+    game.init(42);
+    ringAroundPlayer(game, 2, GRAZE_DIST);
+    step(game, 40); // 스침 연출(24tick)보다 길게
+    expect(drawnTexts(game).some((text) => text.startsWith("스릴"))).toBe(false);
+  });
+});
+
 describe("죽림고수 피격 디버프", () => {
   const positionAfter = (effect: (game: JungnimGame) => void, input: InputState, ticks: number): number => {
     const game = new JungnimGame();

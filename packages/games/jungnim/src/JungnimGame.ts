@@ -26,14 +26,20 @@ const PLAYER_COLOR = "#e63946";
 const ARROW_COLOR = "#1d3557"; // 공통(시드) 화살 — 짙은 남색.
 const PERSONAL_COLOR = "#f77f00"; // 개인(조준) 화살 — 주황. "너를 노린다"는 신호.
 const HUD_COLOR = "#e8eef2"; // HUD 텍스트 — 원 밖 어두운 영역 위라 밝게.
-const GRAZE_COLOR = "#ff9f1c"; // 니어 미스 순간 — 주황.
+const GRAZE_COLOR = "#ff9f1c"; // 스침 1회 — 주황. 발사가 가까울수록 FIRE_COLOR로 달아오른다.
 const FIRE_COLOR = "#ffd166"; // 발사 순간 — 밝은 금색(커브 피버와 같은 신호색).
 const INVERT_COLOR = "#c77dff"; // 조작 반전 피격 중.
 const SLUGGISH_COLOR = "#4dd0e1"; // 조작 둔화 피격 중.
 
-/** 니어 미스·발사 연출이 화면에 남는 시간(tick). 연출 전용 — 판정과 무관. */
+/** 니어 미스·발사 연출이 화면에 남는 시간(tick). 연출 전용 — 판정과 무관.
+ *  ⚠️ 스침 표시는 발사 표시보다 짧아야 한다 — 길면 발사로 0이 된 카운터가
+ *  「스릴 ×0」으로 잠깐 비친다(render에서 한 번 더 막지만, 순서 자체를 지킨다). */
 const GRAZE_FLASH_TICKS = 24;
 const FIRE_FLASH_TICKS = 30;
+
+/** 스침 문구가 발사에 가까워질수록 커지는 폭(px). 14 → 18. */
+const GRAZE_FONT = 14;
+const GRAZE_FONT_GROWTH = 4;
 
 /** 고정 스텝 주파수. 디버프 지속시간(ms)을 tick으로 바꿀 때만 쓴다. */
 const TICK_HZ = 60;
@@ -204,8 +210,18 @@ export class JungnimGame implements IGame {
     if (!this.dead && this.fireFlash > 0) {
       this.drawFireBurst(r);
       r.text("발사!", this.me.x + 12, this.me.y - 28, FIRE_COLOR, 16);
-    } else if (!this.dead && this.grazeFlash > 0) {
-      r.text("니어 미스!", this.me.x + 12, this.me.y - 12, GRAZE_COLOR, 14);
+    } else if (!this.dead && this.grazeFlash > 0 && this.grazeCount > 0) {
+      // 커브 피버는 스치는 **동안** 「스릴!」이 떠 있지만(연속 충전), 여기선 화살 하나가
+      // 1회다 — 몇 번째인지까지 같이 띄워 HUD 게이지로 시선을 옮기지 않아도 되게 한다.
+      // 발사가 가까울수록 색이 달아오르고 글자가 커진다.
+      const heat = this.grazeCount / jungnimConfig.nearMiss.needed;
+      r.text(
+        `스릴 ×${this.grazeCount}`,
+        this.me.x + 12,
+        this.me.y - 12,
+        mixColor(GRAZE_COLOR, FIRE_COLOR, heat),
+        GRAZE_FONT + Math.round(heat * GRAZE_FONT_GROWTH),
+      );
     }
     // 조작계 디버프 피격 중: 플레이어를 디버프색으로 바꾸고 옆에 경고 문구를 띄운다
     // (화면 전체 배너는 앱이 따로 그린다 — 여기선 지속 표시로 남긴다).
@@ -367,6 +383,19 @@ export class JungnimGame implements IGame {
     }
     return false;
   }
+}
+
+/** 두 #rrggbb 색을 t(0~1)로 섞는다. 스침 카운터가 발사에 가까워질수록 색을 달구는 용도 —
+ *  순수 렌더 계산이라 결정론과 무관하다. */
+function mixColor(from: string, to: string, t: number): string {
+  const ratio = Math.max(0, Math.min(1, t));
+  let mixed = "#";
+  for (let offset = 1; offset < 7; offset += 2) {
+    const a = parseInt(from.slice(offset, offset + 2), 16);
+    const b = parseInt(to.slice(offset, offset + 2), 16);
+    mixed += Math.round(a + (b - a) * ratio).toString(16).padStart(2, "0");
+  }
+  return mixed;
 }
 
 /** 아바타를 원형 경기장 안으로 끌어당긴다. 중심에서 (반지름-플레이어반지름)보다 멀면

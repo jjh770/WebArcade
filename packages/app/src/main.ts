@@ -275,6 +275,7 @@ function startSolo(): void {
   const seed = randomSeed();
   runLocalCountdown(gameId, seed, () => {
     resetScreenFx(); // 새 라운드 — 떨어졌던 화면 복구.
+    updateHud(0, null); // 지난 판 숫자가 첫 프레임에 잠깐 비치지 않게.
     setAliveHud("연습");
     if (!session.start(gameId, seed, performance.now())) {
       toast(`게임을 시작할 수 없습니다: ${gameId}`);
@@ -411,6 +412,7 @@ function startCountdown(seed: number, startTime: number, gameId: string): void {
 function beginPlay(gameId: string, seed: number, startTime: number): void {
   finalRanks = [];
   resetScreenFx(); // 새 라운드 — 떨어졌던 화면 복구.
+  updateHud(0, null); // 지난 판 숫자가 첫 프레임에 잠깐 비치지 않게.
   setAliveHud("생존 …");
   if (!session.start(gameId, seed, net.serverTimeToPerformance(startTime))) {
     toast(`게임을 시작할 수 없습니다: ${gameId}`);
