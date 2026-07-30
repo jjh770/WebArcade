@@ -1,5 +1,6 @@
 import { NetClient, StateMachine } from "@arcade/core";
 import type { RankEntry, ServerMessage } from "@arcade/shared";
+import { formatTicks } from "@arcade/shared";
 import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
 import {
   byId,
@@ -69,7 +70,7 @@ const session = new GameSession({
 /** 매 프레임 로컬 플레이어 HUD 갱신 — 캔버스 밖 좌측 상단 헤더(시간 + 스릴 게이지).
  *  gauge가 null이면(getGauge를 구현 안 한 게임) 게이지 줄을 숨긴다. */
 function updateHud(score: number, gauge: number | null): void {
-  byId("hud-time").textContent = `${(score / 60).toFixed(1)}s`;
+  byId("hud-time").textContent = formatTicks(score);
   const gaugeEl = byId("hud-gauge");
   if (gauge === null) {
     gaugeEl.hidden = true;
@@ -316,7 +317,7 @@ function showSoloResult(score: number): void {
   // 연습은 순위(1위)가 의미 없다 — 그 자리에 개인 최고기록을 보여준다.
   if (selectedGameId) {
     const { best, isNew } = recordBest(selectedGameId, score);
-    byId("result-sub").textContent = `${isNew ? "새 기록! " : ""}최고 ${(best / 60).toFixed(1)}s`;
+    byId("result-sub").textContent = `${isNew ? "새 기록! " : ""}최고 ${formatTicks(best)}`;
   }
   setAliveHud("", true);
   session.stopRound();

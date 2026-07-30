@@ -1,4 +1,5 @@
 import type { PlayerPublic, RankEntry } from "@arcade/shared";
+import { formatTicks } from "@arcade/shared";
 import { GAME_REGISTRY, type GameId } from "./GameRegistry";
 import { PLAY_STATES, type AppState } from "./AppFlow";
 import { NOTICES } from "./siteContent";
@@ -174,7 +175,7 @@ export function renderResult(
     }
     row.innerHTML = `<td class="rank">${rank.rank}</td>`
       + `<td>${escapeHtml(rank.nickname)}</td>`
-      + `<td class="time">${(rank.survivalTicks / 60).toFixed(1)}s</td>`;
+      + `<td class="time">${formatTicks(rank.survivalTicks)}</td>`;
     body.appendChild(row);
   }
   byId("result-sub").textContent = myRank ? `내 순위 ${myRank}위` : "";

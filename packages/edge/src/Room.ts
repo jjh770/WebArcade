@@ -10,8 +10,7 @@
    ============================================================ */
 
 import type { PlayerPublic, RoomState } from "@arcade/shared";
-
-const FIXED_STEP_MS = 1000 / 60;
+import { FIXED_STEP_MS } from "@arcade/shared";
 
 /** 방 정원. 기존 RoomManager에 있던 상수를 여기로 옮겼다(RoomManager는 DO가 대체). */
 export const ROOM_CAPACITY = 32;

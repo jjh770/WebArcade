@@ -16,6 +16,7 @@
    ============================================================ */
 
 import type { IGame, IRenderer, InputState, SpectateTarget, PeerState } from "@arcade/shared";
+import { TICKS_PER_SECOND, formatTicks } from "@arcade/shared";
 import { SeededRNG } from "@arcade/core";
 import { jungnimConfig } from "./config";
 import { ArrowSpawner } from "./ArrowSpawner";
@@ -40,9 +41,6 @@ const FIRE_FLASH_TICKS = 30;
 /** 스침 문구가 발사에 가까워질수록 커지는 폭(px). 14 → 18. */
 const GRAZE_FONT = 14;
 const GRAZE_FONT_GROWTH = 4;
-
-/** 고정 스텝 주파수. 디버프 지속시간(ms)을 tick으로 바꿀 때만 쓴다. */
-const TICK_HZ = 60;
 
 // 원형 경기장 색: 어두운 바깥 + 얇은 테두리 + 밝은 바닥.
 const ARENA_OUTSIDE = "#15171d";
@@ -239,7 +237,7 @@ export class JungnimGame implements IGame {
     if (this.dead) {
       const cx = jungnimConfig.screenWidth / 2;
       const cy = jungnimConfig.screenHeight / 2;
-      r.text(`사망 — 생존 ${(this.survivalTicks / 60).toFixed(1)}s`, cx - 90, cy, PLAYER_COLOR, 26);
+      r.text(`사망 — 생존 ${formatTicks(this.survivalTicks)}`, cx - 90, cy, PLAYER_COLOR, 26);
     }
   }
 
@@ -286,7 +284,7 @@ export class JungnimGame implements IGame {
    *  결정론 안전: 내 입력·속도만 바꿀 뿐 공통 월드는 안 건드린다. */
   applyEffect(kind: string, durationMs: number): void {
     if (this.dead) return;
-    const ticks = Math.round((durationMs / 1000) * TICK_HZ);
+    const ticks = Math.round((durationMs / 1000) * TICKS_PER_SECOND);
     if (kind === "invert") this.invertTicks = Math.max(this.invertTicks, ticks);
     else if (kind === "sluggish") this.sluggishTicks = Math.max(this.sluggishTicks, ticks);
   }

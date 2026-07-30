@@ -87,8 +87,8 @@ export const curveConfig = {
   spawnInset: 120,
 
   /** 「스릴 게이지」 — 벽·꼬리·장애물에 아슬아슬하게 스치면(니어 미스, 충돌 직전) 게이지가 찬다.
-   *  꽉 차면(=1) 자동 발사되고 0으로 리셋된다(멀티에선 상대에게 방해 효과를 쏠 자리 —
-   *  지금은 로컬 리셋만). 안전빵 플레이는 게이지가 안 차게 해 공격적 스치기를 유도한다. */
+   *  꽉 차면(=1) 조준한 상대 1명에게 방해 디버프를 쏘고 0으로 리셋된다(아래 fire 참조).
+   *  안전빵 플레이는 게이지가 안 차게 해 공격적 스치기를 유도한다. */
   nearMiss: {
     /** 충돌 경계에서 이 거리(px) 안으로 들어오면 스침으로 친다. 경계 안(음수)은 죽음이라 제외. */
     grazeBand: 14,
@@ -121,5 +121,3 @@ export const curveConfig = {
     sluggishTurnMult: 0.4,
   },
 } as const;
-
-export type CurveConfig = typeof curveConfig;

@@ -45,6 +45,3 @@ export type GameId = keyof typeof GAME_REGISTRY;
 export function isGameId(value: string): value is GameId {
   return value in GAME_REGISTRY;
 }
-
-/** 게임 선택 화면용 목록 (자동 생성). */
-export const gameList: GameEntry[] = Object.values(GAME_REGISTRY);

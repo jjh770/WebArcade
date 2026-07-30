@@ -17,6 +17,7 @@
    ============================================================ */
 
 import type { IGame, IRenderer, InputState, PeerState, SpawnContext, SpectateTarget } from "@arcade/shared";
+import { TICKS_PER_SECOND, formatTicks } from "@arcade/shared";
 import { SeededRNG } from "@arcade/core";
 import { curveConfig as C } from "./config";
 import { drawObstacle, obstacleBlocks, obstacleClearance, type Obstacle } from "./obstacles";
@@ -34,8 +35,6 @@ const FIRE_COLOR = "#fff3b0"; // 발사 순간 번쩍임 + 총알 트레이서
 const FIRE_FLASH_TICKS = 20;
 const INVERT_COLOR = "#c77dff"; // 좌우반전 피격 중 표시색
 const SLUGGISH_COLOR = "#4dd0e1"; // 조작 둔화 피격 중 표시색
-/** 초당 tick 수(고정 스텝). 방해 효과의 ms 지속시간을 tick으로 환산할 때 쓴다. */
-const TICK_HZ = 60;
 /** 남 꼬리 색 — 입장 순서대로 돌려 쓴다(관전 화면에서 서로 구분되게). */
 const PEER_COLORS = ["#f4a261", "#2a9d8f", "#e9c46a", "#a8dadc", "#c77dff", "#90be6d"];
 
@@ -66,11 +65,9 @@ export class CurveGame implements IGame {
   private survivalTicks = 0;
 
   // 「스릴 게이지」(0~1). 벽·꼬리·장애물을 아슬아슬하게 스칠 때(니어 미스)마다 찬다.
-  // 꽉 차면 자동 발사(지금은 로컬 리셋만) → 0으로. grazing은 이번 tick 스치는 중인지(HUD용).
+  // 꽉 차면 상대에게 발사하고 0으로. grazing은 이번 tick 스치는 중인지(문구 표시용).
   private gauge = 0;
   private grazing = false;
-  // 이번 라운드에 게이지가 꽉 차 발사된 횟수. 2단계에서 방해 이벤트 전송에 쓴다.
-  private fireCount = 0;
   // 발사 연출 잔여 tick(>0이면 게이지 번쩍 + 총알 트레이서). tick마다 준다.
   private fireFlash = 0;
   // 마지막으로 방향을 튼 뒤 흐른 tick. 오래 직진만 하면(벽타기) 충전을 끊는 데 쓴다.
@@ -106,7 +103,6 @@ export class CurveGame implements IGame {
     this.survivalTicks = 0;
     this.gauge = 0;
     this.grazing = false;
-    this.fireCount = 0;
     this.fireFlash = 0;
     this.ticksSinceTurn = 0;
     this.pendingFire = false;
@@ -360,8 +356,8 @@ export class CurveGame implements IGame {
   }
 
   /** 「니어 미스」: 살아남았지만 벽·꼬리·장애물에 충돌 직전까지 스쳤으면 게이지를 채운다.
-   *  가까울수록 빨리 차고, 꽉 차면(=1) 자동 발사되고 0으로 리셋된다(2단계에서 이 순간에
-   *  상대에게 방해 이벤트를 쏜다). 판정은 순수 기하라 클라마다 어긋나지 않는다. */
+   *  가까울수록 빨리 차고, 꽉 차면(=1) 상대에게 쏠 발사를 예약하고 0으로 리셋된다
+   *  (consumePendingFire). 판정은 순수 기하라 클라마다 어긋나지 않는다. */
   private accrueNearMiss(): void {
     if (this.fireFlash > 0) this.fireFlash--; // 발사 연출 시간 경과
     const { grazeBand, gaugeGain, turnGraceTicks } = C.nearMiss;
@@ -376,9 +372,8 @@ export class CurveGame implements IGame {
     this.gauge += nearMissGain(gap, grazeBand, gaugeGain);
     if (this.gauge >= 1) {
       this.gauge = 0;
-      this.fireCount++;
       this.fireFlash = FIRE_FLASH_TICKS; // 발사! — 연출 시작
-      this.pendingFire = true; // 러너가 가져가 상대 전원에게 방해 효과를 쏜다(멀티).
+      this.pendingFire = true; // 러너가 가져가 조준한 상대 1명에게 방해 효과를 쏜다(멀티).
     }
   }
 
@@ -463,7 +458,7 @@ export class CurveGame implements IGame {
     if (this.dead) {
       const cx = C.screenWidth / 2;
       const cy = C.screenHeight / 2;
-      r.text(`사망 — 생존 ${(this.survivalTicks / 60).toFixed(1)}s`, cx - 90, cy, MY_COLOR, 26);
+      r.text(`사망 — 생존 ${formatTicks(this.survivalTicks)}`, cx - 90, cy, MY_COLOR, 26);
     }
   }
 
@@ -533,7 +528,7 @@ export class CurveGame implements IGame {
    *  결정론 안전: 내 입력/회전만 바꿀 뿐 공통 월드는 안 건드린다. */
   applyEffect(kind: string, durationMs: number): void {
     if (this.dead) return;
-    const ticks = Math.round((durationMs / 1000) * TICK_HZ);
+    const ticks = Math.round((durationMs / 1000) * TICKS_PER_SECOND);
     if (kind === "invert") this.invertTicks = Math.max(this.invertTicks, ticks);
     else if (kind === "sluggish") this.sluggishTicks = Math.max(this.sluggishTicks, ticks);
   }

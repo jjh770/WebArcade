@@ -57,10 +57,6 @@ export class GameLoop {
     this.epoch = epoch;
   }
 
-  get currentTick(): number {
-    return this.tick;
-  }
-
   /** 보일 때: 매 rAF마다 따라잡고 렌더. rAF 체인은 여기서만 이어진다(중복 방지). */
   private rafLoop = (): void => {
     if (!this.running) return;
