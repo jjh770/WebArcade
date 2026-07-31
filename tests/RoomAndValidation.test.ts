@@ -150,6 +150,12 @@ describe("프로토콜 런타임 검증", () => {
     expect(parseClientMessage({ type: "join_room", code: "ABCD", nickname: "고수" }))
       .toEqual({ type: "join_room", code: "ABCD", nickname: "고수" });
     expect(parseClientMessage({ type: "player_state", px: Infinity, py: 1 })).toBeNull();
+    // ev는 선택 — 없으면 그대로 통과하고, 있으면 짧은 슬러그 형식만 본다(의미는 서버 밖).
+    expect(parseClientMessage({ type: "player_state", px: 1, py: 2 })).toEqual({ type: "player_state", px: 1, py: 2 });
+    expect(parseClientMessage({ type: "player_state", px: 1, py: 2, ev: "purge" }))
+      .toEqual({ type: "player_state", px: 1, py: 2, ev: "purge" });
+    expect(parseClientMessage({ type: "player_state", px: 1, py: 2, ev: "PURGE!" })).toBeNull();
+    expect(parseClientMessage({ type: "player_state", px: 1, py: 2, ev: "x".repeat(33) })).toBeNull();
     expect(parseClientMessage({ type: "player_died", survivalTicks: -1 })).toBeNull();
     expect(parseClientMessage({ type: "join_room", code: "AIO1", nickname: "고수" })).toBeNull();
   });

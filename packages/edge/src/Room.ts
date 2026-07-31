@@ -9,7 +9,7 @@
    이 왕복이 깨지면 깨어난 방이 빈손이 되어 참가자가 통째로 사라진다.
    ============================================================ */
 
-import type { PlayerPublic, RoomState } from "@arcade/shared";
+import type { PeerSnapshot, PlayerPublic, RoomState } from "@arcade/shared";
 import { FIXED_STEP_MS } from "@arcade/shared";
 
 /** 방 정원. 기존 RoomManager에 있던 상수를 여기로 옮겼다(RoomManager는 DO가 대체). */
@@ -24,6 +24,9 @@ export type Member = {
   px: number;
   py: number;
   hasPosition: boolean;
+  /** 다음 스냅샷에 한 번 실어 보낼 게임 정의 이벤트 슬러그. 보내고 나면 지운다.
+   *  서버는 의미를 모른다 — 위치와 같은 관전용 근사 정보라 저장도 하지 않는다. */
+  pendingEvent?: string;
 };
 
 export type DisconnectResult = { hostChanged: string | null; died: boolean };
@@ -140,12 +143,15 @@ export class Room {
     return Math.max(0, Math.floor((now - this.startTime) / FIXED_STEP_MS));
   }
 
-  updatePosition(id: string, px: number, py: number): boolean {
+  updatePosition(id: string, px: number, py: number, ev?: string): boolean {
     const member = this.members.find((candidate) => candidate.id === id && candidate.connected && candidate.alive);
     if (!member) return false;
     member.px = px;
     member.py = py;
     member.hasPosition = true;
+    // ⚠️ 덮어쓰지 않는다 — 아직 못 내보낸 이벤트가 있으면 그게 우선(스냅샷은 10Hz라
+    //    보내기 전에 다음 위치가 먼저 들어올 수 있다).
+    if (ev !== undefined && member.pendingEvent === undefined) member.pendingEvent = ev;
     return true;
   }
 
@@ -214,10 +220,18 @@ export class Room {
     }));
   }
 
-  getPeerSnapshot(): { id: string; px: number; py: number }[] {
+  /** ⚠️ 부수효과 있음: 실어 보낸 이벤트는 여기서 지운다(한 번만 전달된다). */
+  getPeerSnapshot(): PeerSnapshot[] {
     return this.members
       .filter((member) => member.connected && member.alive && member.hasPosition)
-      .map((member) => ({ id: member.id, px: member.px, py: member.py }));
+      .map((member) => {
+        const snapshot: PeerSnapshot = { id: member.id, px: member.px, py: member.py };
+        if (member.pendingEvent !== undefined) {
+          snapshot.ev = member.pendingEvent;
+          member.pendingEvent = undefined;
+        }
+        return snapshot;
+      });
   }
 
   isEmpty(): boolean {

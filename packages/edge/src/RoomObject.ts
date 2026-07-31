@@ -195,7 +195,7 @@ export class RoomObject {
       case "player_state": {
         const now = Date.now();
         if (!this.room.ensurePlaying(now)) return;
-        this.room.updatePosition(id, msg.px, msg.py);
+        this.room.updatePosition(id, msg.px, msg.py, msg.ev);
 
         // ⚠️ 여기서 persist() 하지 않는다. 위치는 10Hz × 인원수로 들어오므로
         //    매번 저장하면 무료 티어의 하루 쓰기 한도(10만)를 한 시간에 태운다.

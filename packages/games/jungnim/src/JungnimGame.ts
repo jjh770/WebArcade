@@ -21,26 +21,29 @@ import { SeededRNG } from "@arcade/core";
 import { jungnimConfig } from "./config";
 import { ArrowSpawner } from "./ArrowSpawner";
 import { PersonalSpawner } from "./PersonalSpawner";
-import { ArrowPool } from "./ArrowPool";
+import { ArrowPool, type Arrow } from "./ArrowPool";
+import { ItemSpawner } from "./ItemSpawner";
 
 const PLAYER_COLOR = "#e63946";
 const ARROW_COLOR = "#1d3557"; // 공통(시드) 화살 — 짙은 남색.
 const PERSONAL_COLOR = "#f77f00"; // 개인(조준) 화살 — 주황. "너를 노린다"는 신호.
 const HUD_COLOR = "#e8eef2"; // HUD 텍스트 — 원 밖 어두운 영역 위라 밝게.
-const GRAZE_COLOR = "#ff9f1c"; // 스침 1회 — 주황. 발사가 가까울수록 FIRE_COLOR로 달아오른다.
-const FIRE_COLOR = "#ffd166"; // 발사 순간 — 밝은 금색(커브 피버와 같은 신호색).
+const ITEM_COLOR = "#ffd166"; // 아이템 기본색(모르는 종류). 종류별 색은 config.item.kinds.
 const INVERT_COLOR = "#c77dff"; // 조작 반전 피격 중.
 const SLUGGISH_COLOR = "#4dd0e1"; // 조작 둔화 피격 중.
 
-/** 니어 미스·발사 연출이 화면에 남는 시간(tick). 연출 전용 — 판정과 무관.
- *  ⚠️ 스침 표시는 발사 표시보다 짧아야 한다 — 길면 발사로 0이 된 카운터가
- *  「스릴 ×0」으로 잠깐 비친다(render에서 한 번 더 막지만, 순서 자체를 지킨다). */
-const GRAZE_FLASH_TICKS = 24;
-const FIRE_FLASH_TICKS = 30;
-
-/** 스침 문구가 발사에 가까워질수록 커지는 폭(px). 14 → 18. */
-const GRAZE_FONT = 14;
-const GRAZE_FONT_GROWTH = 4;
+/** 아이템이 커졌다 작아지는 맥동 주기(tick)와 진폭(배율). 순수 렌더. */
+const ITEM_PULSE_TICKS = 40;
+const ITEM_PULSE_AMOUNT = 0.18;
+/** 사라지기 직전 이 tick 동안 깜빡여 "곧 없어진다"를 알린다. */
+const ITEM_FADE_TICKS = 120;
+/** 등장 순간 이 tick 동안 부풀어 오른다 — 탄막 속에서 "새로 생겼다"가 보이게. */
+const ITEM_POP_TICKS = 15;
+/** 획득 순간 아이템 자리에서 튀는 불꽃이 남는 시간(tick)과 개수. */
+const PICKUP_FLASH_TICKS = 20;
+const PICKUP_SPARKS = 10;
+/** 정화 파동 고리를 이루는 점 개수(반경이 커서 성기면 고리로 안 보인다). */
+const PURGE_RING_DOTS = 28;
 
 // 원형 경기장 색: 어두운 바깥 + 얇은 테두리 + 밝은 바닥.
 const ARENA_OUTSIDE = "#15171d";
@@ -54,10 +57,25 @@ const ARENA_BORDER_W = 3;
  *  멀티에서 플레이어별로 다르게 하려면 playerId를 섞고, 관전 계산에도 그 id가 필요하다. */
 const PERSONAL_SEED_SALT = 0x9e3779b9;
 
+/** 아이템 시드 = 공통 시드에서 파생. 화살 스트림과 섞이면 아이템 유무가 화살 패턴을
+ *  밀어버린다 — 반드시 별도 스트림. 값은 임의의 큰 홀수 상수. */
+const ITEM_SEED_SALT = 0x6a09e667;
+
 /** 개인 화살을 계산할 대상(나 또는 관전 대상 남).
  *  x,y = 실제 사용(렌더·스폰) 위치. tx,ty = 네트워크로 받은 목표 위치.
- *  관전 대상은 매 틱 x,y를 tx,ty로 부드럽게 당겨(ease) 끊김 없이 움직인다. */
-type Avatar = { x: number; y: number; tx: number; ty: number; pool: ArrowPool; spawner: PersonalSpawner };
+ *  관전 대상은 매 틱 x,y를 tx,ty로 부드럽게 당겨(ease) 끊김 없이 움직인다.
+ *  purge* = 정화 파동 연출(나는 내가 쓸 때, 남은 이벤트를 받았을 때). */
+type Avatar = {
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  pool: ArrowPool;
+  spawner: PersonalSpawner;
+  purgeFlash: number;
+  purgeX: number;
+  purgeY: number;
+};
 
 export class JungnimGame implements IGame {
   // 공통(시드) 레이어 — 모두 동일.
@@ -69,14 +87,25 @@ export class JungnimGame implements IGame {
   private readonly peers = new Map<string, Avatar>();
 
   private survivalTicks = 0;
+  /** 공통 월드의 현재 tick. survivalTicks는 죽는 순간 멈추므로, 사망 뒤에도 계속
+   *  도는 것(아이템 맥동·소멸 연출)은 이 값을 봐야 한다. */
+  private worldTick = 0;
   private dead = false;
 
-  // 「스릴 게이지」 — 아주 가까이 스친 화살 수. needed번이면 발사(0으로 리셋).
-  private grazeCount = 0;
-  private grazeFlash = 0; // 스침 연출 잔여 tick
-  private fireFlash = 0; // 발사 연출 잔여 tick
-  /** 러너가 가져갈 발사 신호. 로컬 연출(fireFlash)과 별개 — 이건 "남에게 전송" 신호다. */
-  private pendingFire = false;
+  /** 방해 발사를 주는 아이템. 스폰은 시드+tick, 획득은 로컬 판정. */
+  private items!: ItemSpawner;
+  // 아이템 효과(전부 나에게만 걸린다 — 공통 월드는 그대로).
+  private dashTicks = 0; // 질주 잔여
+  private focusTicks = 0; // 조준(개인) 화살 스폰 정지 잔여
+  private shieldCharges = 0; // 남은 방어 횟수
+  // 획득 연출: 아이템이 있던 자리에서 불꽃이 튄다.
+  private pickupFlash = 0;
+  private pickupX = 0;
+  private pickupY = 0;
+  private pickupColor = ITEM_COLOR;
+  private pickupLabel = "";
+  /** 남들 화면에도 보여야 할 시각 이벤트(앱이 위치 전송에 얹어 보낸다). 지금은 정화 하나. */
+  private pendingPeerEvent: string | null = null;
   // 남의 발사에 맞아 걸린 조작계 디버프 잔여 tick.
   private invertTicks = 0;
   private sluggishTicks = 0;
@@ -84,25 +113,29 @@ export class JungnimGame implements IGame {
   init(seed: number): void {
     this.commonPool = new ArrowPool(jungnimConfig.poolSize);
     this.commonSpawner = new ArrowSpawner(new SeededRNG(seed), jungnimConfig);
+    this.items = new ItemSpawner(new SeededRNG((seed ^ ITEM_SEED_SALT) >>> 0), jungnimConfig);
     this.personalSeed = (seed ^ PERSONAL_SEED_SALT) >>> 0;
     this.me = this.newAvatar();
     this.centerAvatar(this.me);
     this.peers.clear();
     this.survivalTicks = 0;
+    this.worldTick = 0;
     this.dead = false;
-    this.grazeCount = 0;
-    this.grazeFlash = 0;
-    this.fireFlash = 0;
-    this.pendingFire = false;
+    this.dashTicks = 0;
+    this.focusTicks = 0;
+    this.shieldCharges = 0;
+    this.pickupFlash = 0;
+    this.pendingPeerEvent = null;
     this.invertTicks = 0;
     this.sluggishTicks = 0;
   }
 
   update(tick: number, input: InputState): void {
+    this.worldTick = tick;
     // 살아있을 때만: 플레이어 이동 + 내 개인 스폰 + 피격 판정.
     if (!this.dead) {
-      if (this.grazeFlash > 0) this.grazeFlash--;
-      if (this.fireFlash > 0) this.fireFlash--;
+      if (this.pickupFlash > 0) this.pickupFlash--;
+      if (this.dashTicks > 0) this.dashTicks--;
       // 피격 디버프는 **내 입력·속도 사본**에만 건다. 공통 월드는 그대로라 남과 안 어긋난다.
       let left = input.left;
       let right = input.right;
@@ -118,18 +151,26 @@ export class JungnimGame implements IGame {
         this.sluggishTicks--;
         s *= jungnimConfig.fire.sluggishSpeedMult;
       }
+      if (this.dashTicks > 0) s *= jungnimConfig.item.dash.speedMult;
       if (left) this.me.x -= s;
       if (right) this.me.x += s;
       if (up) this.me.y -= s;
       if (down) this.me.y += s;
       clampToArena(this.me); // 사각형이 아니라 원 안으로 가둔다.
-      this.me.spawner.update(tick, this.me.pool, this.me.x, this.me.y);
+      // 조준 정지 중엔 개인 화살을 새로 만들지 않는다(이미 날아온 건 그대로 온다).
+      // ⚠️ 감소는 이 분기 안에서 — 밖에서 먼저 줄이면 마지막 tick에 한 발이 새어 나간다.
+      if (this.focusTicks > 0) this.focusTicks--;
+      else this.me.spawner.update(tick, this.me.pool, this.me.x, this.me.y);
     }
     this.moveArrows(this.me.pool);
+    // 파동은 죽어도 끝까지 재생된다(연출이라 사망과 무관).
+    if (this.me.purgeFlash > 0) this.me.purgeFlash--;
 
     // ⚠️ 공통 월드는 사망과 무관하게 항상 전진(남들과 안 어긋나게 + 관전 배경).
+    // 아이템도 공통 월드다 — 내가 죽어도 계속 뜨고 사라진다(관전 화면에 그대로 보인다).
     this.commonSpawner.update(tick, this.commonPool);
     this.moveArrows(this.commonPool);
+    this.items.update(tick);
 
     // 관전 대상(남)들: 네트워크 위치(tx,ty)로 부드럽게 당긴 뒤 개인 화살을 근사.
     // 위치가 ~10Hz라 매 틱 ease해야 점·화살이 끊기지 않는다.
@@ -139,44 +180,82 @@ export class JungnimGame implements IGame {
       peer.y += (peer.ty - peer.y) * s;
       peer.spawner.update(tick, peer.pool, peer.x, peer.y);
       this.moveArrows(peer.pool);
+      if (peer.purgeFlash > 0) peer.purgeFlash--;
     }
 
     if (!this.dead) {
-      if (this.checkHit()) this.dead = true;
-      else this.scanNearMiss(); // 맞아 죽은 화살은 스침으로 안 친다
+      const hit = this.findHit();
+      if (hit) {
+        // 쉴드가 남아 있으면 그 화살이 방패에 부딪혀 부서진다.
+        // ⚠️ 부수지 않으면 겹친 채로 다음 tick에 또 맞아 3회가 한순간에 날아간다.
+        if (this.shieldCharges > 0) {
+          this.shieldCharges--;
+          hit.pool.release(hit.arrow);
+        } else {
+          this.dead = true;
+        }
+      }
+      if (!this.dead) this.takeItem(); // 죽는 프레임에 먹은 것으로 치지 않는다
       this.survivalTicks = tick; // 사망 프레임까지 포함 → 생존시간 = 사망 tick.
     }
   }
 
-  /** 「스릴 게이지」: 아주 가까이 스치고 지나간 화살을 센다. 화살 하나당 딱 한 번
-   *  (밴드 안에 여러 tick 머물러도 중복 없음 — Arrow.grazed 표식). needed번 모이면
-   *  발사되고 0으로 리셋된다. 남의 개인 화살은 내 위험이 아니라 세지 않는다. */
-  private scanNearMiss(): void {
-    const radius = jungnimConfig.nearMiss.grazeRadius;
-    const radius2 = radius * radius;
-    const grazed = this.markGrazes(this.commonPool, radius2) + this.markGrazes(this.me.pool, radius2);
-    if (grazed === 0) return;
-    this.grazeCount += grazed;
-    this.grazeFlash = GRAZE_FLASH_TICKS;
-    if (this.grazeCount >= jungnimConfig.nearMiss.needed) {
-      this.grazeCount = 0;
-      this.fireFlash = FIRE_FLASH_TICKS; // 발사! — 연출 시작
-      this.pendingFire = true; // 러너가 가져가 관전 중인 상대 1명에게 디버프를 쏜다(멀티).
-    }
+  /** 아이템에 닿았으면 가져가고 그 자리에서 효과가 걸린다(모아두지 않는다).
+   *  ⚠️ 이 판정은 **내 위치**를 보므로 클라마다 결과가 다르다 — 그래서 아이템은
+   *  각자 먹는 것이고, 스포너의 다음 스폰 일정은 여기서 절대 건드리지 않는다. */
+  private takeItem(): void {
+    const item = this.items.current;
+    if (!item) return;
+    const reach = jungnimConfig.playerRadius + jungnimConfig.item.radius;
+    const dx = this.me.x - item.x;
+    const dy = this.me.y - item.y;
+    if (dx * dx + dy * dy > reach * reach) return;
+    this.items.consume();
+    this.pickupFlash = PICKUP_FLASH_TICKS; // 아이템이 있던 자리에서 불꽃
+    this.pickupX = item.x;
+    this.pickupY = item.y;
+    this.pickupColor = kindColor(item.kind);
+    this.pickupLabel = kindLabel(item.kind);
+    this.applyItem(item.kind);
   }
 
-  /** 아직 안 센 화살 중 스침 밴드 안에 들어온 것에 표식을 남기고 그 수를 돌려준다. */
-  private markGrazes(pool: ArrowPool, radius2: number): number {
-    let count = 0;
-    for (const a of pool.items) {
-      if (!a.active || a.grazed) continue;
-      const dx = this.me.x - a.x;
-      const dy = this.me.y - a.y;
-      if (dx * dx + dy * dy > radius2) continue;
-      a.grazed = true;
-      count++;
+  /** 아이템 효과. 전부 내 상태만 바꾼다 — purge만 예외로 내 화면의 화살을 지운다. */
+  private applyItem(kind: string): void {
+    const cfg = jungnimConfig.item;
+    if (kind === "dash") {
+      this.dashTicks = Math.max(this.dashTicks, cfg.dash.durationTicks);
+    } else if (kind === "focus") {
+      this.focusTicks = Math.max(this.focusTicks, cfg.focus.durationTicks);
+    } else if (kind === "shield") {
+      this.shieldCharges += cfg.shield.charges;
+    } else if (kind === "purge") {
+      this.purgeArrows(cfg.purge.radius);
+      this.startPurgeRing(this.me);
+      // 내 화면에서만 지운 화살이라, 나를 관전 중인 사람 화면에도 같은 파동을 재현하도록 알린다.
+      this.pendingPeerEvent = "purge";
     }
-    return count;
+    // 모르는 kind는 무시한다(종류가 늘어도 옛 판정이 안 죽는다).
+  }
+
+  /** 정화 파동을 그 아바타 자리에서 시작한다(나 또는 관전 대상 남). */
+  private startPurgeRing(avatar: Avatar): void {
+    avatar.purgeFlash = jungnimConfig.item.purge.ringTicks;
+    avatar.purgeX = avatar.x;
+    avatar.purgeY = avatar.y;
+  }
+
+  /** 내 주변 반경 안의 화살을 지운다. 개인 화살은 원래 내 것이고, 공통 화살은
+   *  내 화면에서만 사라진다(관전자 화면엔 남는다 — config.item.purge 주석 참조). */
+  private purgeArrows(radius: number): void {
+    const radius2 = radius * radius;
+    for (const pool of [this.commonPool, this.me.pool]) {
+      for (const arrow of pool.items) {
+        if (!arrow.active) continue;
+        const dx = this.me.x - arrow.x;
+        const dy = this.me.y - arrow.y;
+        if (dx * dx + dy * dy <= radius2) pool.release(arrow);
+      }
+    }
   }
 
   /** 관전 대상(남)들의 목표 위치를 반영. 새 대상은 아바타 생성, 빠진 대상은 제거. */
@@ -201,26 +280,16 @@ export class JungnimGame implements IGame {
 
   render(r: IRenderer, _alpha: number): void {
     this.drawArena(r);
+    this.drawItem(r); // 화살보다 먼저 — 화살이 아이템 위를 지나가야 "위험을 뚫고 줍는" 그림이 된다
+    // 내 화면에선 화살이 실제로 지워졌으니 걸러낼 게 없다 — 파동만 얹는다.
     this.drawPool(r, this.commonPool); // 공통 화살
     this.drawPool(r, this.me.pool); // 내 개인 화살
+    this.drawPurgeRing(r, this.me);
 
-    // 스침·발사 손맛은 플레이어 옆에 위치성으로 남긴다(게이지 수치는 캔버스 밖 DOM HUD).
-    if (!this.dead && this.fireFlash > 0) {
-      this.drawFireBurst(r);
-      r.text("발사!", this.me.x + 12, this.me.y - 28, FIRE_COLOR, 16);
-    } else if (!this.dead && this.grazeFlash > 0 && this.grazeCount > 0) {
-      // 커브 피버는 스치는 **동안** 「스릴!」이 떠 있지만(연속 충전), 여기선 화살 하나가
-      // 1회다 — 몇 번째인지까지 같이 띄워 HUD 게이지로 시선을 옮기지 않아도 되게 한다.
-      // 발사가 가까울수록 색이 달아오르고 글자가 커진다.
-      const heat = this.grazeCount / jungnimConfig.nearMiss.needed;
-      r.text(
-        `스릴 ×${this.grazeCount}`,
-        this.me.x + 12,
-        this.me.y - 12,
-        mixColor(GRAZE_COLOR, FIRE_COLOR, heat),
-        GRAZE_FONT + Math.round(heat * GRAZE_FONT_GROWTH),
-      );
-    }
+    // 획득 불꽃은 주운 자리에 남는다(플레이어는 이미 다른 데로 움직였을 수 있다).
+    if (!this.dead && this.pickupFlash > 0) this.drawPickupSparks(r);
+    // 걸려 있는 효과는 플레이어 위에 짧게 적는다(피격 디버프 문구는 아래쪽이라 안 겹친다).
+    if (!this.dead) this.drawActiveEffects(r);
     // 조작계 디버프 피격 중: 플레이어를 디버프색으로 바꾸고 옆에 경고 문구를 띄운다
     // (화면 전체 배너는 앱이 따로 그린다 — 여기선 지속 표시로 남긴다).
     if (!this.dead && this.invertTicks > 0) {
@@ -243,12 +312,22 @@ export class JungnimGame implements IGame {
 
   renderSpectator(r: IRenderer, target: SpectateTarget): void {
     this.drawArena(r);
-    this.drawPool(r, this.commonPool); // 공통 화살(모두 동일)
+    // ⚠️ 아이템은 내 인스턴스 기준이라, 관전 대상이 이미 먹은 아이템도 남아 보일 수 있다
+    // (획득은 각자의 로컬 판정 — 개인 화살이 근사인 것과 같은 종류의 오차).
+    this.drawItem(r);
     const peer = this.peers.get(target.id);
+    // 그 사람이 정화를 썼다면, 퍼지는 파동 안쪽 화살을 빼고 그린다 — 그 사람 화면에선
+    // 이미 없는 화살이다. 내 공통 풀은 그대로 두므로 내 판정엔 영향이 없다.
+    const ring = peer ? this.purgeRingRadius(peer) : null;
+    const skip = peer && ring !== null ? { x: peer.purgeX, y: peer.purgeY, radius: ring } : undefined;
+    this.drawPool(r, this.commonPool, skip); // 공통 화살(모두 동일)
     // 점·화살 모두 ease된 위치(peer.x,y)로 그려 부드럽게. 없으면 target 좌표 폴백.
     const dotX = peer ? peer.x : target.x;
     const dotY = peer ? peer.y : target.y;
-    if (peer) this.drawPool(r, peer.pool); // 그 사람의 개인(조준) 화살 시각 근사
+    if (peer) {
+      this.drawPool(r, peer.pool, skip); // 그 사람의 개인(조준) 화살 시각 근사
+      this.drawPurgeRing(r, peer);
+    }
     r.circle(dotX, dotY, jungnimConfig.playerRadius, PLAYER_COLOR);
     r.text(`관전: ${target.label}`, 12, 28, HUD_COLOR, 22);
   }
@@ -265,17 +344,19 @@ export class JungnimGame implements IGame {
     return this.survivalTicks;
   }
 
-  /** 「스릴 게이지」 값(0~1) — 스침 횟수 / 발사에 필요한 횟수. HUD·테스트용. */
-  getGauge(): number {
-    return this.grazeCount / jungnimConfig.nearMiss.needed;
+  /** 앱이 매 위치 전송마다 물어본다: 남들 화면에도 재현돼야 할 이벤트가 있으면 한 번 준다. */
+  consumePeerEvent(): string | null {
+    const event = this.pendingPeerEvent;
+    this.pendingPeerEvent = null;
+    return event;
   }
 
-  /** 러너가 매 스텝 물어본다: 발사가 대기 중이면 걸 수 있는 **디버프 풀**을 돌려주고
-   *  플래그를 내린다(한 번만 전송). 어느 디버프를 누구에게 보낼지는 앱이 정한다. */
-  consumePendingFire(): readonly { kind: string; durationMs: number }[] | null {
-    if (!this.pendingFire) return null;
-    this.pendingFire = false;
-    return jungnimConfig.fire.debuffs;
+  /** 남이 낸 이벤트가 도착했다. 그 사람을 관전 중이면 같은 파동이 그 자리에서 퍼진다.
+   *  ⚠️ 판정과 무관한 연출 — 유실돼도 게임 진행은 갈리지 않는다(그 사람 화면만 덜 맞아 보일 뿐). */
+  applyPeerEvent(id: string, kind: string): void {
+    if (kind !== "purge") return; // 모르는 이벤트는 무시(종류가 늘어도 옛 클라가 안 죽는다)
+    const peer = this.peers.get(id);
+    if (peer) this.startPurgeRing(peer);
   }
 
   /** 남의 발사에 맞았다. 아는 조작계 디버프면 지속시간(ms)만큼 로컬에 건다 — invert(좌우
@@ -291,25 +372,52 @@ export class JungnimGame implements IGame {
 
   // ---- 내부 ----
 
-  /** 발사 순간: 플레이어에서 8방향으로 빛줄기가 퍼져나갔다 사그라든다.
-   *  fireFlash가 줄수록 더 바깥으로 밀려나며 짧아져 "쏜" 느낌을 준다. */
-  private drawFireBurst(r: IRenderer): void {
-    const progress = 1 - this.fireFlash / FIRE_FLASH_TICKS; // 0(막 발사) → 1(끝)
-    const start = jungnimConfig.playerRadius + 4 + progress * 34;
-    const len = 18 * (1 - progress);
-    for (let i = 0; i < 8; i++) {
-      const angle = (Math.PI / 4) * i;
-      const cos = Math.cos(angle);
-      const sin = Math.sin(angle);
-      r.line(
-        this.me.x + cos * start,
-        this.me.y + sin * start,
-        this.me.x + cos * (start + len),
-        this.me.y + sin * (start + len),
-        FIRE_COLOR,
-        3,
-      );
+  /** 떠 있는 아이템: 맥동하는 금색 원 + 십자 반짝임. 사라지기 직전엔 깜빡인다.
+   *  전부 tick의 함수라 관전 화면에서도 같은 모습으로 보인다(렌더 전용 — 판정과 무관). */
+  private drawItem(r: IRenderer): void {
+    const item = this.items.current;
+    if (!item) return;
+    const age = this.worldTick - item.bornTick;
+    const left = item.expireTick - this.worldTick;
+    // 곧 사라지는 동안 8tick 주기로 깜빡 — 한 프레임 걸러 그리지 않는다.
+    if (left < ITEM_FADE_TICKS && Math.floor(left / 8) % 2 === 1) return;
+
+    const pulse = 1 + Math.sin((age / ITEM_PULSE_TICKS) * Math.PI * 2) * ITEM_PULSE_AMOUNT;
+    // 등장 직후엔 0에서 부풀어 오른다(ease-out). 탄막 한복판에 조용히 나타나면 못 본다.
+    const pop = Math.min(1, age / ITEM_POP_TICKS);
+    const radius = jungnimConfig.item.radius * pulse * pop * (2 - pop);
+    const color = kindColor(item.kind); // 종류마다 색이 달라 멀리서도 무엇인지 안다
+    r.circle(item.x, item.y, radius, color);
+    const spike = radius + 5;
+    r.line(item.x - spike, item.y, item.x + spike, item.y, color, 2);
+    r.line(item.x, item.y - spike, item.x, item.y + spike, color, 2);
+  }
+
+  /** 획득 순간: 아이템이 있던 자리에서 불꽃이 사방으로 튀며 작아진다.
+   *  발사 버스트(플레이어에 붙음)와 자리가 달라, "여기서 주웠고 → 내가 쐈다"가 함께 읽힌다. */
+  private drawPickupSparks(r: IRenderer): void {
+    const progress = 1 - this.pickupFlash / PICKUP_FLASH_TICKS; // 0(막 주움) → 1(끝)
+    const ring = jungnimConfig.item.radius + progress * 40;
+    const spark = 4 * (1 - progress);
+    for (let i = 0; i < PICKUP_SPARKS; i++) {
+      const angle = ((Math.PI * 2) / PICKUP_SPARKS) * i;
+      r.circle(this.pickupX + Math.cos(angle) * ring, this.pickupY + Math.sin(angle) * ring, spark, this.pickupColor);
     }
+    // 무엇을 주웠는지 그 자리에 적는다. 지속 효과가 없는 정화는 이 한 번이 유일한 이름표다.
+    r.text(`${this.pickupLabel}!`, this.pickupX + 14, this.pickupY - 14 - progress * 12, this.pickupColor, 16);
+  }
+
+  /** 지금 걸려 있는 효과를 플레이어 위에 한 줄씩. 쉴드는 남은 횟수까지 보여준다
+   *  — 몇 대 더 버티는지가 곧 다음 판단이라 숫자가 필요하다. */
+  private drawActiveEffects(r: IRenderer): void {
+    let line = 0;
+    const put = (text: string, color: string): void => {
+      r.text(text, this.me.x + 12, this.me.y - 28 - line * 16, color, 14);
+      line++;
+    };
+    if (this.shieldCharges > 0) put(`${kindLabel("shield")} ${this.shieldCharges}`, kindColor("shield"));
+    if (this.dashTicks > 0) put(kindLabel("dash"), kindColor("dash"));
+    if (this.focusTicks > 0) put(kindLabel("focus"), kindColor("focus"));
   }
 
   private newAvatar(): Avatar {
@@ -320,6 +428,9 @@ export class JungnimGame implements IGame {
       ty: 0,
       pool: new ArrowPool(jungnimConfig.poolSize),
       spawner: new PersonalSpawner(new SeededRNG(this.personalSeed), jungnimConfig),
+      purgeFlash: 0,
+      purgeX: 0,
+      purgeY: 0,
     };
   }
 
@@ -337,8 +448,40 @@ export class JungnimGame implements IGame {
     r.circle(cx, cy, radius - ARENA_BORDER_W, ARENA_FLOOR);
   }
 
-  private drawPool(r: IRenderer, pool: ArrowPool): void {
-    for (const a of pool.items) if (a.active) this.drawArrow(r, a);
+  /** skip이 있으면 그 원 안의 화살은 안 그린다 — 남의 정화 파동을 내 화면에서 흉내 낼 때 쓴다.
+   *  (그 사람은 실제로 지웠지만 내 공통 풀엔 남아 있다. 지우면 내 판정까지 바뀐다.) */
+  private drawPool(r: IRenderer, pool: ArrowPool, skip?: { x: number; y: number; radius: number }): void {
+    const skip2 = skip ? skip.radius * skip.radius : 0;
+    for (const a of pool.items) {
+      if (!a.active) continue;
+      if (skip) {
+        const dx = a.x - skip.x;
+        const dy = a.y - skip.y;
+        if (dx * dx + dy * dy <= skip2) continue;
+      }
+      this.drawArrow(r, a);
+    }
+  }
+
+  /** 지금 퍼지고 있는 정화 파동의 반경(없으면 null). tick의 함수라 어느 화면에서든 같다. */
+  private purgeRingRadius(avatar: Avatar): number | null {
+    if (avatar.purgeFlash <= 0) return null;
+    const { radius, ringTicks } = jungnimConfig.item.purge;
+    const progress = 1 - avatar.purgeFlash / ringTicks; // 0(막 씀) → 1(끝)
+    // 점이 아니라 **몸에서** 퍼져나간다 — 0에서 시작하면 첫 프레임이 한 점에 뭉쳐 얼룩처럼 보인다.
+    const from = jungnimConfig.playerRadius;
+    return from + (radius - from) * progress;
+  }
+
+  /** 정화 파동: 그 자리에서 금색 고리가 반경까지 퍼지며 옅어진다. */
+  private drawPurgeRing(r: IRenderer, avatar: Avatar): void {
+    const ring = this.purgeRingRadius(avatar);
+    if (ring === null) return;
+    const dot = 5 * (avatar.purgeFlash / jungnimConfig.item.purge.ringTicks);
+    for (let i = 0; i < PURGE_RING_DOTS; i++) {
+      const angle = ((Math.PI * 2) / PURGE_RING_DOTS) * i;
+      r.circle(avatar.purgeX + Math.cos(angle) * ring, avatar.purgeY + Math.sin(angle) * ring, dot, kindColor("purge"));
+    }
   }
 
   /** 화살 하나를 진행 방향(대각선 포함) 짧은 선으로 그린다. 색은 공통/개인 구분. */
@@ -366,34 +509,35 @@ export class JungnimGame implements IGame {
   }
 
   /** 내 플레이어와 화살(공통 + 내 개인)의 원-원 충돌. 남의 개인 화살은 판정 대상 아님. */
-  private checkHit(): boolean {
+  /** 나를 맞힌 화살과 그 풀(없으면 null). 쉴드가 그 한 발만 부수려면 어느 화살인지 알아야 한다. */
+  private findHit(): { arrow: Arrow; pool: ArrowPool } | null {
     const hitR = jungnimConfig.playerRadius + jungnimConfig.arrowRadius;
     const hitR2 = hitR * hitR;
-    return this.hitInPool(this.commonPool, hitR2) || this.hitInPool(this.me.pool, hitR2);
+    for (const pool of [this.commonPool, this.me.pool]) {
+      const arrow = this.hitInPool(pool, hitR2);
+      if (arrow) return { arrow, pool };
+    }
+    return null;
   }
 
-  private hitInPool(pool: ArrowPool, hitR2: number): boolean {
+  private hitInPool(pool: ArrowPool, hitR2: number): Arrow | null {
     for (const a of pool.items) {
       if (!a.active) continue;
       const dx = this.me.x - a.x;
       const dy = this.me.y - a.y;
-      if (dx * dx + dy * dy <= hitR2) return true;
+      if (dx * dx + dy * dy <= hitR2) return a;
     }
-    return false;
+    return null;
   }
 }
 
-/** 두 #rrggbb 색을 t(0~1)로 섞는다. 스침 카운터가 발사에 가까워질수록 색을 달구는 용도 —
- *  순수 렌더 계산이라 결정론과 무관하다. */
-function mixColor(from: string, to: string, t: number): string {
-  const ratio = Math.max(0, Math.min(1, t));
-  let mixed = "#";
-  for (let offset = 1; offset < 7; offset += 2) {
-    const a = parseInt(from.slice(offset, offset + 2), 16);
-    const b = parseInt(to.slice(offset, offset + 2), 16);
-    mixed += Math.round(a + (b - a) * ratio).toString(16).padStart(2, "0");
-  }
-  return mixed;
+/** 아이템 종류의 표시색·이름. 모르는 종류면 기본값(종류가 늘어도 옛 판정이 안 죽는다). */
+function kindColor(kind: string): string {
+  return jungnimConfig.item.kinds.find((entry) => entry.kind === kind)?.color ?? ITEM_COLOR;
+}
+
+function kindLabel(kind: string): string {
+  return jungnimConfig.item.kinds.find((entry) => entry.kind === kind)?.label ?? "아이템";
 }
 
 /** 아바타를 원형 경기장 안으로 끌어당긴다. 중심에서 (반지름-플레이어반지름)보다 멀면

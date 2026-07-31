@@ -41,10 +41,14 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
       return typeof value.requestId === "string" && value.requestId.length >= 1 && value.requestId.length <= 64
         ? { type: value.type, requestId: value.requestId }
         : null;
-    case "player_state":
-      return isFiniteNumber(value.px) && isFiniteNumber(value.py)
-        ? { type: value.type, px: value.px, py: value.py }
+    case "player_state": {
+      // ev는 게임 정의 시각 이벤트 슬러그. 서버는 의미를 모르므로 형식만 본다(없어도 정상).
+      if (!isFiniteNumber(value.px) || !isFiniteNumber(value.py)) return null;
+      if (value.ev === undefined) return { type: value.type, px: value.px, py: value.py };
+      return EFFECT_KIND.test(String(value.ev))
+        ? { type: value.type, px: value.px, py: value.py, ev: String(value.ev) }
         : null;
+    }
     case "player_died":
       return Number.isSafeInteger(value.survivalTicks) && Number(value.survivalTicks) >= 0
         ? { type: value.type, survivalTicks: Number(value.survivalTicks) }

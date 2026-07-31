@@ -423,7 +423,13 @@ function beginPlay(gameId: string, seed: number, startTime: number): void {
 window.setInterval(() => {
   if (soloMode || appState.state !== "playing") return; // 연습: 내 위치를 볼 남이 없다.
   const position = session.getPosition();
-  if (position) net.send({ type: "player_state", px: position.x, py: position.y });
+  if (!position) return;
+  // 게임이 낸 시각 이벤트(예: 정화 파동)를 위치에 얹어 보낸다 — 서버는 의미를 모르고
+  // 다음 스냅샷에 한 번 실어 중계한다. 없으면 필드 자체를 안 붙인다.
+  const ev = session.takePeerEvent();
+  net.send(ev === null
+    ? { type: "player_state", px: position.x, py: position.y }
+    : { type: "player_state", px: position.x, py: position.y, ev });
 }, POSITION_SEND_MS);
 
 function showResult(ranks: readonly RankEntry[]): void {

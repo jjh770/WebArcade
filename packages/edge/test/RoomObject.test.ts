@@ -206,6 +206,42 @@ describe("전체 방 흐름", () => {
     expect(host.inbox.some((m) => m.type === "effect_hit")).toBe(false);
   });
 
+  it("player_state의 ev는 다음 스냅샷에 딱 한 번 실려 남들에게 간다", async () => {
+    const code = await createRoom();
+    const host = await join(code, "Host");
+    const guest = await join(code, "Guest");
+    await host.wait("room_state", (m) => m.players.length === 2);
+    host.send({ type: "start_game" });
+    const start = await host.wait("game_start");
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, start.startTime - Date.now()) + 100));
+
+    // 호스트가 이벤트를 얹어 보낸다. 서버는 의미를 모르고 그대로 중계한다.
+    host.send({ type: "player_state", px: 10, py: 20, ev: "purge" });
+    let carried: { id: string; ev?: string } | undefined;
+    for (let attempt = 0; attempt < 40 && !carried; attempt++) {
+      guest.send({ type: "player_state", px: 30, py: 40 }); // 스냅샷을 흐르게 하는 쪽
+      await new Promise((resolve) => setTimeout(resolve, 110));
+      carried = guest.inbox
+        .filter((m) => m.type === "peer_snapshot")
+        .flatMap((m) => m.peers)
+        .find((peer) => peer.id === host.id && peer.ev !== undefined);
+    }
+    expect(carried?.ev).toBe("purge");
+
+    // 한 번 실려 나간 뒤로는 다시 붙지 않는다(계속 켜져 있으면 남의 화면에서 반복 재생된다).
+    guest.inbox.length = 0;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      host.send({ type: "player_state", px: 11, py: 21 });
+      guest.send({ type: "player_state", px: 31, py: 41 });
+      await new Promise((resolve) => setTimeout(resolve, 110));
+    }
+    const repeated = guest.inbox
+      .filter((m) => m.type === "peer_snapshot")
+      .flatMap((m) => m.peers)
+      .some((peer) => peer.ev !== undefined);
+    expect(repeated).toBe(false);
+  });
+
   it("호스트만 시작할 수 있다", async () => {
     const code = await createRoom();
     await join(code, "Host");

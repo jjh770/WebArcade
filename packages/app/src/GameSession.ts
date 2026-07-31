@@ -122,10 +122,17 @@ export class GameSession {
     return this.roundActive ? this.game?.getPosition() ?? null : null;
   }
 
+  /** 이번 위치 전송에 얹어 보낼 시각 이벤트(없으면 null). 게임이 정하고 서버는 의미를 모른다. */
+  takePeerEvent(): string | null {
+    return this.roundActive ? this.game?.consumePeerEvent?.() ?? null : null;
+  }
+
   applySnapshot(snapshot: readonly PeerSnapshot[]): void {
     if (!this.roundActive) return;
     for (const state of snapshot) {
       if (state.id === this.myId) continue;
+      // 남이 낸 시각 이벤트는 그 사람 관전 화면에 그대로 재현한다(서버는 한 번만 실어 보낸다).
+      if (state.ev !== undefined) this.game?.applyPeerEvent?.(state.id, state.ev);
       const existing = this.peers.get(state.id);
       if (existing) {
         existing.x = state.px;

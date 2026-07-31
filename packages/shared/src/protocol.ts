@@ -15,7 +15,11 @@ export type ClientMessage =
   | { type: "start_game" } // 호스트만 유효
   | { type: "return_to_ready" } // 종료 후 호스트만 유효
   | { type: "time_sync_request"; requestId: string }
-  | { type: "player_state"; px: number; py: number } // 관전용 위치(주기적). 서버가 최신값을 방 스냅샷으로 묶는다.
+  // 관전용 위치(주기적). 서버가 최신값을 방 스냅샷으로 묶는다.
+  // ev는 그 순간 남들 화면에도 보여야 할 **게임 정의 시각 이벤트** 슬러그(예: 죽림고수 "purge").
+  // 서버는 의미를 모르고 다음 스냅샷에 한 번 실어 보낸 뒤 지운다. 위치에 얹어 보내므로
+  // 새 메시지 종류·새 주기가 필요 없다(이벤트는 늘 그 사람 위치에서 일어난다).
+  | { type: "player_state"; px: number; py: number; ev?: string }
   | { type: "player_died"; survivalTicks: number }
   | { type: "fire_effect"; kind: string; durationMs: number; targetId: string } // 스릴 게이지 발사 — 조준한 상대 1명에게만 방해 효과. 서버는 내용 모르고 그 1명에게 중계.
   | { type: "leave_room" };

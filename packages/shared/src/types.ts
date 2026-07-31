@@ -54,9 +54,11 @@ export type PeerState = {
   label?: string; // 표시용 닉네임(관전 화면 이름표). 없으면 이름은 생략.
 };
 
-/** 서버가 10Hz로 묶어서 전달하는 관전용 위치. 판정에는 사용하지 않는다. */
+/** 서버가 10Hz로 묶어서 전달하는 관전용 위치. 판정에는 사용하지 않는다.
+ *  ev가 있으면 그 사람이 방금 낸 게임 정의 시각 이벤트(한 번만 실려 온다). */
 export type PeerSnapshot = {
   id: string;
   px: number;
   py: number;
+  ev?: string;
 };
