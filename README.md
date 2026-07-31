@@ -29,6 +29,8 @@ packages/
 │  └─ curve/      # 커브 피버 — 선 긋기 (IGame 구현)
 ├─ edge/          # 게임 서버 (Workers + DO). 방·시드·순위. 게임 내용을 모름
 └─ app/           # 진입점 + GameRegistry (게임 등록)
+   ├─ UI_DESIGN.md   # 사이트 UI의 색·타이포·컴포넌트 (UI 작업 때만)
+   └─ UI_MOTION.md   # 화면 전환·연출 (모션을 고칠 때만)
 tests/            # Vitest(Node) — 결정론·클럭·FSM·방 로직 회귀
 packages/edge/test/  # Vitest(workerd) — DO·WebSocket·알람 통합
 ```

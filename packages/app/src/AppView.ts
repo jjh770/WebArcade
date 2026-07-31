@@ -169,9 +169,11 @@ export function renderResult(
   let myRank: number | null = null;
   for (const rank of finalRanks) {
     const row = document.createElement("tr");
+    // 1위와 본인은 서로 다른 축으로 강조된다(등수 색 / 행 배경) — 겹쳐도 둘 다 읽힌다.
+    if (rank.rank === 1) row.classList.add("top");
     if (rank.id === myId) {
       myRank = rank.rank;
-      row.className = "self";
+      row.classList.add("self");
     }
     row.innerHTML = `<td class="rank">${rank.rank}</td>`
       + `<td>${escapeHtml(rank.nickname)}</td>`

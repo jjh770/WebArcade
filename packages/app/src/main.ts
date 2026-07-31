@@ -2,6 +2,7 @@ import { NetClient, StateMachine } from "@arcade/core";
 import type { RankEntry, ServerMessage } from "@arcade/shared";
 import { formatTicks } from "@arcade/shared";
 import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
+import { initBgDecor } from "./bgDecor";
 import {
   byId,
   layoutPlayArea,
@@ -460,6 +461,8 @@ function tryAutoJoin(): void {
   byId<HTMLInputElement>("join-code").value = hashCode;
   void enterRoom(hashCode);
 }
+
+initBgDecor(document.querySelector<HTMLElement>(".bg-spot")!);
 
 // 시작 시점에는 서버에 연결하지 않는다. 연결은 방에 들어갈 때 맺는다
 // — 덕분에 서버가 자고 있어도 연습 모드는 그대로 돌아간다.
