@@ -156,6 +156,8 @@
         #debuff-cloud.on { animation: none; opacity: .85; } /* 구름은 흐르지 않고 가리기만 */
         /* 배경 장식은 지우지 않고 멈춘다 — 정보가 아니라 밀도라 정지해도 잃는 게 없다. */
         .bg-grid, .bg-glow { animation: none; }
+        /* 순위·플레이어 행은 지연 없이 즉시 제자리에 — 정보는 그대로 남는다. */
+        ul.players li.enter, table.ranks tr.enter { animation: none; }
         /* 탄환은 아예 안 날린다(bulletFx가 명중 번쩍임만 낸다). */
       }
 
@@ -257,6 +259,15 @@
       /* 방 코드: 값이 자주 바뀌지 않지만 옮겨 적는 대상이라 고정폭 숫자로 읽기 쉽게. */
       #ready-code { font: 700 30px ui-monospace, SFMono-Regular, Consolas, monospace;
         letter-spacing: 6px; text-align: center; color: var(--primary); margin: 4px 0 14px; }
+      /* 목록 stagger — 행이 한 줄씩 따라 들어온다. 순서값(--i)만 JS가 주고 간격은 여기서 정한다.
+         both가 필요하다: 없으면 지연 동안 행이 먼저 보였다가 사라졌다 다시 뜬다. */
+      @keyframes rowIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+      ul.players li.enter, table.ranks tr.enter {
+        animation: rowIn .3s var(--ease-out) both;
+        animation-delay: calc(var(--i, 0) * 55ms); }
+      /* 결과는 카드가 떠오른 뒤에 행이 들어온다 — 패널 → 순위 행 순서를 지키려는 것. */
+      table.ranks tr.enter { animation-delay: calc(140ms + var(--i, 0) * 55ms); }
+
       ul.players { list-style: none; padding: 0; margin: 0 0 16px; max-height: 220px; overflow-y: auto; }
       ul.players li { padding: 9px 12px; background: var(--field); border-radius: 8px;
         margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }

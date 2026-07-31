@@ -3,6 +3,7 @@ import { formatTicks } from "@arcade/shared";
 import { GAME_REGISTRY, type GameId } from "./GameRegistry";
 import { PLAY_STATES, type AppState } from "./AppFlow";
 import { NOTICES } from "./siteContent";
+import { newcomers, staggerIndex } from "./stagger";
 
 const SCREEN_NAMES = [
   "nickname", "main", "gamelist", "lobby", "ready", "countdown", "result",
@@ -11,6 +12,11 @@ const SCREEN_NAMES = [
 type ScreenName = (typeof SCREEN_NAMES)[number];
 
 let toastTimer = 0;
+
+// 대기실은 renderReady가 목록을 통째로 다시 그린다. 누가 새로 들어왔는지는
+// 직전 렌더의 명단과 비교해야만 알 수 있어 여기 남겨 둔다(방이 바뀌면 버린다).
+let readyCode = "";
+let readyIds: ReadonlySet<string> = new Set();
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
@@ -143,10 +149,26 @@ export function renderReady(
   myId: string | null,
 ): void {
   byId("ready-code").textContent = code;
+  // 다른 방에 들어왔으면 이전 명단은 의미가 없다 — 전원이 새로 들어온 셈이다.
+  if (code !== readyCode) {
+    readyCode = code;
+    readyIds = new Set();
+  }
+  const ids = players.map((player) => player.id);
+  const entering = newcomers(readyIds, ids);
+  readyIds = new Set(ids);
+
   const list = byId("ready-players");
   list.innerHTML = "";
+  let order = 0;
   for (const player of players) {
     const item = document.createElement("li");
+    // 새로 들어온 사람만 슬라이드인. 순서는 목록 위치가 아니라 새로 온 순서라서,
+    // 한 명만 들어오면 대기 없이 바로 뜬다.
+    if (entering.has(player.id)) {
+      item.classList.add("enter");
+      item.style.setProperty("--i", String(staggerIndex(order++)));
+    }
     const name = document.createElement("span");
     name.textContent = player.nickname;
     item.appendChild(name);
@@ -167,8 +189,11 @@ export function renderResult(
   const body = byId("result-body");
   body.innerHTML = "";
   let myRank: number | null = null;
-  for (const rank of finalRanks) {
+  for (const [index, rank] of finalRanks.entries()) {
     const row = document.createElement("tr");
+    // 결과는 라운드마다 새 목록이라 매번 1위부터 순서대로 들어온다.
+    row.classList.add("enter");
+    row.style.setProperty("--i", String(staggerIndex(index)));
     // 1위와 본인은 서로 다른 축으로 강조된다(등수 색 / 행 배경) — 겹쳐도 둘 다 읽힌다.
     if (rank.rank === 1) row.classList.add("top");
     if (rank.id === myId) {
