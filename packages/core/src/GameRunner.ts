@@ -24,6 +24,9 @@ export class GameRunner {
   private deathReported = false;
   /** 그릴 화면 목록. 보통 [0]=메인(자기/관전), 나머지=사이드(생존자들). */
   private views: GameView[] = [];
+  /** 이번 프레임에 모인 소리 슬러그. Set인 이유: 한 프레임에 고정 스텝이 여러 번 돌 수
+   *  있어(따라잡기), 같은 소리가 0ms 간격으로 겹쳐 나면 그냥 커지기만 한다. */
+  private readonly frameSounds = new Set<string>();
 
   constructor(
     private readonly game: IGame,
@@ -39,6 +42,9 @@ export class GameRunner {
     /** 게임이 발사를 냈을 때 걸 수 있는 디버프 풀을 앱에 넘긴다(멀티에서 fire_effect 전송용).
      *  이 중 하나를 뽑아 누구에게 보낼지는 앱이 정한다 — 러너는 슬러그 의미를 모른다. */
     private readonly onFire?: (debuffs: readonly { kind: string; durationMs: number }[]) => void,
+    /** 이번 프레임에 게임이 낸 소리 슬러그들을 앱에 넘긴다(앱이 실제 소리에 대응시킨다).
+     *  러너는 슬러그의 뜻을 모른다 — 모으고 중복만 없앤다. */
+    private readonly onSound?: (slugs: readonly string[]) => void,
   ) {
     this.loop = new GameLoop(
       // 고정 스텝: 현재 입력 스냅샷과 tick만 게임에 전달.
@@ -51,6 +57,10 @@ export class GameRunner {
         // 이번 스텝에 발사가 있으면 디버프 풀을 앱으로 흘려보낸다(앱이 하나 뽑아 조준 전송).
         const fire = this.game.consumePendingFire?.();
         if (fire && fire.length > 0) this.onFire?.(fire);
+        // 소리는 여기서 흘려보내지 않고 모은다 — 스텝마다 내보내면 따라잡기 프레임에서
+        // 같은 소리가 여러 번 겹친다. 프레임당 한 번, 렌더 때 비운다.
+        const sounds = this.game.consumeSounds?.();
+        if (sounds) for (const slug of sounds) this.frameSounds.add(slug);
       },
       // 렌더: 각 뷰마다 자기 화면(render) 또는 관전(renderSpectator).
       (alpha) => {
@@ -59,6 +69,10 @@ export class GameRunner {
           else this.game.render(v.renderer, alpha);
         }
         this.onHud?.(this.game.getScore(), this.game.getGauge?.() ?? null);
+        if (this.frameSounds.size > 0) {
+          this.onSound?.([...this.frameSounds]);
+          this.frameSounds.clear();
+        }
       },
     );
   }
@@ -86,6 +100,7 @@ export class GameRunner {
     this.loop.stop();
     this.game.init(seed, self);
     this.deathReported = false;
+    this.frameSounds.clear(); // 지난 판의 소리가 새 판 첫 프레임에 새어 나오지 않게.
     this.input.start();
     this.loop.resetTick(startEpochPerformanceMs);
     this.loop.start();

@@ -1,5 +1,6 @@
 import { Canvas2DRenderer, CompositeInput, GameRunner, InputManager, TouchInput, type GameView } from "@arcade/core";
 import type { IGame, PeerSnapshot, PlayerPublic, SpawnContext } from "@arcade/shared";
+import { isSoundId, play } from "./audio";
 import { GAME_REGISTRY, isGameId, type GameEntry, type GameId } from "./GameRegistry";
 import { TouchHint, hasCoarsePointer, shouldShowHint } from "./touchHint";
 import { Joystick } from "./joystick";
@@ -255,7 +256,18 @@ export class GameSession {
     this.hint.setScheme(entry.touch ?? null);
     this.touchable = entry.touch !== undefined;
     this.game = entry.factory();
-    this.runner = new GameRunner(this.game, this.input, this.options.onLocalDeath, this.options.onHud, (debuffs) => this.handleFire(debuffs));
+    this.runner = new GameRunner(
+      this.game,
+      this.input,
+      this.options.onLocalDeath,
+      this.options.onHud,
+      (debuffs) => this.handleFire(debuffs),
+      // 게임이 낸 슬러그를 같은 이름의 소리로 옮긴다. 표에 없는 이름은 그냥 지나간다
+      // — 소리 없는 이벤트를 내는 게임이 생겨도 여기 손댈 일이 없다.
+      (slugs) => {
+        for (const slug of slugs) if (isSoundId(slug)) play(slug);
+      },
+    );
     this.activeGameId = gameId;
   }
 

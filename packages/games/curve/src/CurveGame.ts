@@ -33,6 +33,8 @@ const GRAZE_COLOR = "#ffd166"; // 스치는 순간(니어 미스) 강조 팝업
 const FIRE_COLOR = "#fff3b0"; // 발사 순간 번쩍임 + 총알 트레이서
 /** 발사 연출이 지속되는 tick 수(≈0.33초). 이 동안 게이지 번쩍 + 트레이서. */
 const FIRE_FLASH_TICKS = 20;
+/** 스침 소리 사이의 최소 간격(tick). 0.25초 — 계속 스쳐도 초당 4번을 넘지 않는다. */
+const GRAZE_SOUND_COOLDOWN_TICKS = 15;
 const INVERT_COLOR = "#c77dff"; // 좌우반전 피격 중 표시색
 const SLUGGISH_COLOR = "#4dd0e1"; // 조작 둔화 피격 중 표시색
 /** 남 꼬리 색 — 입장 순서대로 돌려 쓴다(관전 화면에서 서로 구분되게). */
@@ -79,6 +81,12 @@ export class CurveGame implements IGame {
   private invertTicks = 0;
   // 남의 발사에 맞아 회전이 둔해지는 잔여 tick(>0이면 turnRate가 배수만큼 줄어든다).
   private sluggishTicks = 0;
+  /** 이번 스텝에 낼 소리. Set이라 어휘 수만큼만 커진다 — 아무도 안 가져가도 안 쌓인다. */
+  private readonly sounds = new Set<string>();
+  /** 스침 소리를 다시 낼 수 있을 때까지 남은 tick. 스침은 **지속 상태**라 그냥 두면
+   *  벽을 타는 내내 초당 60번 울린다. tick 기반이라 결정론과 무관하고, 이 값은
+   *  어디에도 되먹임되지 않는다 — 소리 말고는 아무것도 바꾸지 않는다. */
+  private grazeSoundCooldown = 0;
 
   init(seed: number, self?: SpawnContext): void {
     const rng = new SeededRNG(seed);
@@ -106,6 +114,8 @@ export class CurveGame implements IGame {
     this.fireFlash = 0;
     this.ticksSinceTurn = 0;
     this.pendingFire = false;
+    this.sounds.clear();
+    this.grazeSoundCooldown = 0;
     this.invertTicks = 0;
     this.sluggishTicks = 0;
   }
@@ -360,6 +370,7 @@ export class CurveGame implements IGame {
    *  (consumePendingFire). 판정은 순수 기하라 클라마다 어긋나지 않는다. */
   private accrueNearMiss(): void {
     if (this.fireFlash > 0) this.fireFlash--; // 발사 연출 시간 경과
+    if (this.grazeSoundCooldown > 0) this.grazeSoundCooldown--;
     const { grazeBand, gaugeGain, turnGraceTicks } = C.nearMiss;
     // 벽타기(오래 직진) 무한 충전 방지: 최근에 방향을 튼 적이 있어야 스침이 충전된다.
     if (this.ticksSinceTurn >= turnGraceTicks) {
@@ -369,10 +380,16 @@ export class CurveGame implements IGame {
     const gap = this.nearestHazardGap();
     this.grazing = gap > 0 && gap <= grazeBand;
     if (!this.grazing) return;
+    // 스치는 내내가 아니라 쿨다운마다 한 번. 아슬아슬함을 알리는 짧은 신호지 지속음이 아니다.
+    if (this.grazeSoundCooldown === 0) {
+      this.sounds.add("graze");
+      this.grazeSoundCooldown = GRAZE_SOUND_COOLDOWN_TICKS;
+    }
     this.gauge += nearMissGain(gap, grazeBand, gaugeGain);
     if (this.gauge >= 1) {
       this.gauge = 0;
       this.fireFlash = FIRE_FLASH_TICKS; // 발사! — 연출 시작
+      this.sounds.add("fire");
       this.pendingFire = true; // 러너가 가져가 조준한 상대 1명에게 방해 효과를 쏜다(멀티).
     }
   }
@@ -511,6 +528,15 @@ export class CurveGame implements IGame {
   /** 현재 「스릴 게이지」 값(0~1). HUD·테스트용. */
   getGauge(): number {
     return this.gauge;
+  }
+
+  /** 러너가 매 스텝 가져간다. 죽으면 accrueNearMiss가 안 불려 자연히 비어 있다
+   *  — 관전 중 남의 판에서 내 소리가 나지 않는다. */
+  consumeSounds(): readonly string[] | null {
+    if (this.sounds.size === 0) return null;
+    const out = [...this.sounds];
+    this.sounds.clear();
+    return out;
   }
 
   /** 러너가 매 스텝 물어본다: 상대에게 쏠 발사가 대기 중이면 걸 수 있는 **디버프 풀**을

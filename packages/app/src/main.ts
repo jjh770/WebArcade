@@ -197,7 +197,11 @@ function handleServer(message: ServerMessage): void {
     case "effect_hit":
       // 누군가 스릴 게이지를 채워 나를 조준해 방해 디버프를 쐈다. 살아서 플레이 중일 때만
       // 게임에 적용하고, 같은 조건에서 화면 연출(배너 + 시각 디버프)도 함께 건다.
-      if (session.applyEffect(message.kind, message.durationMs)) debuffFx(message.kind, message.durationMs);
+      // 소리는 게임 계약을 안 거친다 — 이건 네트워크에서 온 사건이라 앱이 이미 안다.
+      if (session.applyEffect(message.kind, message.durationMs)) {
+        play("hit");
+        debuffFx(message.kind, message.durationMs);
+      }
       break;
     case "ranking_update":
       setAliveHud(`생존 ${message.alive} / ${message.ranks.length}`);

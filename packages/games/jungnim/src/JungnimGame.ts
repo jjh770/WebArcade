@@ -106,6 +106,8 @@ export class JungnimGame implements IGame {
   private pickupLabel = "";
   /** 남들 화면에도 보여야 할 시각 이벤트(앱이 위치 전송에 얹어 보낸다). 지금은 정화 하나. */
   private pendingPeerEvent: string | null = null;
+  /** 이번 스텝에 낼 소리. Set이라 어휘 수만큼만 커진다 — 아무도 안 가져가도 안 쌓인다. */
+  private readonly sounds = new Set<string>();
   // 남의 발사에 맞아 걸린 조작계 디버프 잔여 tick.
   private invertTicks = 0;
   private sluggishTicks = 0;
@@ -126,6 +128,7 @@ export class JungnimGame implements IGame {
     this.shieldCharges = 0;
     this.pickupFlash = 0;
     this.pendingPeerEvent = null;
+    this.sounds.clear();
     this.invertTicks = 0;
     this.sluggishTicks = 0;
   }
@@ -216,6 +219,7 @@ export class JungnimGame implements IGame {
     this.pickupY = item.y;
     this.pickupColor = kindColor(item.kind);
     this.pickupLabel = kindLabel(item.kind);
+    this.sounds.add("pickup"); // 종류를 나누지 않는다 — 불꽃 색과 이름표가 이미 무엇인지 말한다
     this.applyItem(item.kind);
   }
 
@@ -342,6 +346,15 @@ export class JungnimGame implements IGame {
 
   getScore(): number {
     return this.survivalTicks;
+  }
+
+  /** 러너가 매 스텝 가져간다. 죽은 뒤에는 takeItem이 안 불려 자연히 비어 있다
+   *  — 관전 중 남의 판에서 내 소리가 나지 않는다. */
+  consumeSounds(): readonly string[] | null {
+    if (this.sounds.size === 0) return null;
+    const out = [...this.sounds];
+    this.sounds.clear();
+    return out;
   }
 
   /** 앱이 매 위치 전송마다 물어본다: 남들 화면에도 재현돼야 할 이벤트가 있으면 한 번 준다. */

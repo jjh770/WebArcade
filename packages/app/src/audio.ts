@@ -22,8 +22,10 @@
 
 import { loadMuted, saveMuted } from "./prefs";
 
-/** 지금 낼 수 있는 소리. 늘어나면 SOUNDS에 줄을 추가한다. */
-export type SoundId = "click" | "count" | "go" | "death" | "result";
+/** 지금 낼 수 있는 소리. 늘어나면 SOUNDS에 줄을 추가한다.
+ *  뒤쪽 넷은 게임이 내는 슬러그와 이름이 같다 — 게임은 자기 슬러그만 알고 이 표는
+ *  모른다. 이름이 맞으면 울리고, 없으면 조용히 넘어간다(isSoundId). */
+export type SoundId = "click" | "count" | "go" | "death" | "result" | "pickup" | "graze" | "fire" | "hit";
 
 type Tone = {
   /** 파형. square는 각진 8비트 소리, triangle은 같은 음정이라도 덜 날카롭다. */
@@ -50,7 +52,21 @@ const SOUNDS: Record<SoundId, Tone> = {
   death: { wave: "square", freq: [392, 262, 165], step: 0.12, gain: 0.4 },
   // 결과: 올라가는 아르페지오(C-E-G-C). 판이 끝났다는 마침표.
   result: { wave: "triangle", freq: [523, 659, 784, 1047], step: 0.1, gain: 0.45 },
+  // 아이템 획득(죽림고수): 짧고 밝게 올라가는 두 음 — 좋은 일이 났다.
+  pickup: { wave: "triangle", freq: [784, 1175], step: 0.06, gain: 0.5 },
+  // 스침(커브 피버): 아주 짧고 작은 고음. 자주 나므로 존재감이 작아야 한다.
+  graze: { wave: "triangle", freq: [1319], step: 0.03, gain: 0.28 },
+  // 발사(커브 피버): 게이지가 꽉 차 상대에게 쏜다. 스침보다 크고 각지게.
+  fire: { wave: "square", freq: [880, 1319], step: 0.07, gain: 0.4 },
+  // 피격: 남의 발사에 맞았다. 낮게 떨어지는 두 음 — 발사와 짝을 이룬다.
+  hit: { wave: "square", freq: [220, 175], step: 0.1, gain: 0.45 },
 };
+
+/** 이 이름의 소리가 표에 있는가. 게임이 낸 슬러그를 거르는 데 쓴다 —
+ *  모르는 슬러그는 무시한다(소리가 없는 이벤트를 새 게임이 내도 앱이 안 죽는다). */
+export function isSoundId(slug: string): slug is SoundId {
+  return slug in SOUNDS;
+}
 
 /** 표에 있는 모든 소리 이름. 테스트가 하나도 빠뜨리지 않고 훑는 데 쓴다. */
 export const SOUND_IDS = Object.keys(SOUNDS) as readonly SoundId[];

@@ -162,14 +162,20 @@ export interface IGame {
   applyEffect?(kind: string, durationMs: number): void; // 남의 발사에 맞았을 때
   consumePeerEvent?(): string | null;                   // 남 화면에도 보여야 할 연출(슬러그)
   applyPeerEvent?(id: string, kind: string): void;      // 남이 낸 연출이 도착했을 때
+  consumeSounds?(): readonly string[] | null;           // 이번 스텝에 난 소리(슬러그)
 }
 ```
 
 재시작은 `init(newSeed)` 재호출로 통일한다. 관전 위치와 개인 조준 화살은 시각적 근사이며 판정에는 사용하지 않는다.
 
-**선택 메서드는 옵셔널로 넓혔다.** 앞의 셋은 커브 피버의 방해 발사, 뒤의 둘은 죽림고수의 정화
+**선택 메서드는 옵셔널로 넓혔다.** 앞의 셋은 커브 피버의 방해 발사, 그다음 둘은 죽림고수의 정화
 파동이 요구해서 생겼다(아래 5절 참조). **두 게임이 서로 다른 부분집합만 구현한다** — 필수로
 만들었다면 양쪽 다 빈 구현을 안고 있었을 것이다.
+
+`consumeSounds`는 소리를 붙이며 마지막으로 늘었다. **슬러그를 돌려주고 소비하는** 모양은
+`consumePendingFire`·`consumePeerEvent`와 같고, core도 서버도 슬러그의 뜻을 모른다 — 소리로
+바꾸는 건 앱이다. 판정이 아니라 출력이라, 여기서 무엇을 내든 tick·시드·결과는 갈리지 않는다
+(회귀 테스트: 소리를 매 tick 가져가든 한 번도 안 가져가든 경로가 같다).
 
 **잠정적으로 열어둘 지점** (두 번째 게임에서 실제로 부딪히면 넓힌다. 상상으로 미리 넓히지 않는다):
 - ~~`getScore()`의 우열 방향~~ → **해소됨.** `ScoreDirection`('higher'|'lower') 타입으로 분리하여
@@ -329,10 +335,12 @@ export interface IGame {
    - `PeerState`(위치 하나) — **안 넓혔다.** 커브 꼬리는 받는 쪽이 10Hz 위치를 쌓아 재구성했다.
    - 실제로 넓힌 건 **선택 메서드**뿐이고, 그것도 옵셔널이라 죽림고수는 한 줄도 안 바뀐 채로
      계약을 만족했다. 이후 죽림고수가 자기 방식(아이템·정화 파동)으로 필요한 것만 골라 구현하며
-     **두 게임이 서로 다른 부분집합을 쓴다**는 게 실제로 확인됐다(현재 5개:
-     `getGauge`·`consumePendingFire`·`applyEffect` / `consumePeerEvent`·`applyPeerEvent`).
-   - `core`·서버는 이 과정에서 **게임 슬러그를 하나도 알게 되지 않았다**(디버프·연출 kind 모두
-     문자열 중계). 아이템을 4종 넣는 동안 서버는 한 번도 재배포하지 않았다.
+     **두 게임이 서로 다른 부분집합을 쓴다**는 게 실제로 확인됐다(현재 6개:
+     `getGauge`·`consumePendingFire`·`applyEffect` / `consumePeerEvent`·`applyPeerEvent` /
+     둘 다 쓰는 `consumeSounds`).
+   - `core`·서버는 이 과정에서 **게임 슬러그를 하나도 알게 되지 않았다**(디버프·연출·소리 kind
+     모두 문자열 중계). 아이템을 4종 넣는 동안 서버는 한 번도 재배포하지 않았다. 소리를 붙일
+     때도 마찬가지였다 — `shared`의 옵셔널 메서드 하나 말고는 프로토콜도 서버도 안 건드렸다.
 6. ⬅️ **[현재] 세 번째부터**는 IGame 구현 + GameRegistry 등록만.
 
 > 3~4단계 이후 배포(9절)까지 마쳐 링크 하나로 플레이 가능한 상태다. 다만 **결정론이 진짜
