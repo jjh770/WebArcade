@@ -11,6 +11,7 @@
     { "path": "../shared" },
     { "path": "../core" },
     { "path": "../games/jungnim" },
-    { "path": "../games/curve" }
+    { "path": "../games/curve" },
+    { "path": "../games/floor" }
   ]
 }

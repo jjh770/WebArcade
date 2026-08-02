@@ -11,7 +11,8 @@
     "@arcade/shared": "*",
     "@arcade/core": "*",
     "@arcade/game-jungnim": "*",
-    "@arcade/game-curve": "*"
+    "@arcade/game-curve": "*",
+    "@arcade/game-floor": "*"
   },
   "devDependencies": {
     "vite": "^7.2.7"

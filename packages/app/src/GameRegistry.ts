@@ -12,6 +12,7 @@ import type { IGame, ScoreDirection } from "@arcade/shared";
 import type { TouchScheme } from "./touchSchemes";
 import { JungnimGame, jungnimConfig } from "@arcade/game-jungnim";
 import { CurveGame, curveConfig } from "@arcade/game-curve";
+import { FloorGame, floorConfig } from "@arcade/game-floor";
 
 export type GameEntry = {
   id: string;
@@ -42,6 +43,14 @@ export const GAME_REGISTRY = {
     scoreDirection: curveConfig.scoreDirection,
     factory: () => new CurveGame(),
     touch: "halves",
+  },
+  floor: {
+    id: floorConfig.id,
+    title: floorConfig.title,
+    description: floorConfig.description,
+    scoreDirection: floorConfig.scoreDirection,
+    factory: () => new FloorGame(),
+    // 조이스틱은 8방향이라 4방향 격자와 결이 안 맞는다. 폰 조작은 별도 단계에서.
   },
 } satisfies Record<string, GameEntry>;
 

@@ -5,6 +5,7 @@
     { "path": "./packages/core" },
     { "path": "./packages/games/jungnim" },
     { "path": "./packages/games/curve" },
+    { "path": "./packages/games/floor" },
     { "path": "./packages/edge" },
     { "path": "./packages/app" }
   ]

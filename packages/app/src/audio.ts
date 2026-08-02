@@ -25,17 +25,24 @@ import { loadMuted, saveMuted } from "./prefs";
 /** 지금 낼 수 있는 소리. 늘어나면 SOUNDS에 줄을 추가한다.
  *  뒤쪽 넷은 게임이 내는 슬러그와 이름이 같다 — 게임은 자기 슬러그만 알고 이 표는
  *  모른다. 이름이 맞으면 울리고, 없으면 조용히 넘어간다(isSoundId). */
-export type SoundId = "click" | "count" | "go" | "death" | "result" | "pickup" | "graze" | "fire" | "hit";
+export type SoundId =
+  | "click" | "count" | "go" | "death" | "result"
+  | "pickup" | "graze" | "fire" | "hit" | "crack";
 
 type Tone = {
   /** 파형. square는 각진 8비트 소리, triangle은 같은 음정이라도 덜 날카롭다. */
   wave: OscillatorType;
-  /** Hz 목록. 둘 이상이면 step 간격으로 이어 붙어 짧은 프레이즈가 된다. */
+  /** Hz 목록. 둘 이상이면 step 간격으로 이어 붙어 짧은 프레이즈가 된다.
+   *  noise면 음정이 아니라 **밴드패스가 훑고 지나갈 구간**이다(첫 값 → 마지막 값). */
   freq: readonly number[];
-  /** 음 하나의 길이(초). */
+  /** 음 하나의 길이(초). noise면 전체 길이. */
   step: number;
   /** 이 소리의 최고 음량(0~1). 마스터 게인에 곱해진다. */
   gain: number;
+  /** 잡음으로 낸다. 부서짐·충격처럼 **음정이 없는** 소리는 오실레이터로 안 된다
+   *  — 아무리 겹쳐도 "삐" 소리지 "쩍" 소리가 아니다. 화이트 노이즈를 밴드패스로
+   *  훑어 내리면 그제야 무언가 깨지는 결이 난다. */
+  noise?: true;
 };
 
 /** 슬러그 → 소리. 부르는 쪽은 이 표의 내용을 모른다.
@@ -60,6 +67,9 @@ const SOUNDS: Record<SoundId, Tone> = {
   fire: { wave: "square", freq: [880, 1319], step: 0.07, gain: 0.4 },
   // 피격: 남의 발사에 맞았다. 낮게 떨어지는 두 음 — 발사와 짝을 이룬다.
   hit: { wave: "square", freq: [220, 175], step: 0.1, gain: 0.45 },
+  // 바닥이 부서진다(무너지는 바닥). 잡음을 2200Hz에서 300Hz로 훑어 내려 「쩍…」.
+  // 물결마다 나므로 크면 금방 피곤하다 — 존재감은 낮게, 결만 남긴다.
+  crack: { wave: "square", freq: [2200, 300], step: 0.18, gain: 0.5, noise: true },
 };
 
 /** 이 이름의 소리가 표에 있는가. 게임이 낸 슬러그를 거르는 데 쓴다 —
@@ -85,6 +95,9 @@ let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let muted = false;
 let voices = 0;
+/** 화이트 노이즈 한 통. 한 번 만들어 두고 재생할 때마다 돌려 쓴다
+ *  — 매번 새로 채우면 부서지는 소리 한 번에 수만 번의 난수를 뽑게 된다. */
+let noiseBuffer: AudioBuffer | null = null;
 
 /** 저장된 소리 설정을 읽어 온다. 앱 시작 때 한 번 부른다. */
 export function initAudio(): void {
@@ -110,9 +123,11 @@ export function play(id: SoundId): void {
   const audio = ensureContext();
   if (!audio || !master) return;
   const tone = SOUNDS[id];
-  if (voices + tone.freq.length > MAX_VOICES) return;
+  // 잡음은 몇 음이든 목소리 하나다(버퍼 소스 한 개).
+  if (voices + (tone.noise ? 1 : tone.freq.length) > MAX_VOICES) return;
   try {
-    schedule(audio, master, tone);
+    if (tone.noise) scheduleNoise(audio, master, tone);
+    else schedule(audio, master, tone);
   } catch {
     /* 노드 생성/스케줄 실패는 무음으로 넘긴다. */
   }
@@ -124,6 +139,7 @@ export function resetAudioForTest(): void {
   master = null;
   muted = false;
   voices = 0;
+  noiseBuffer = null;
 }
 
 function ensureContext(): AudioContext | null {
@@ -152,6 +168,56 @@ function wake(audio: AudioContext): void {
   } catch {
     /* 무시 */
   }
+}
+
+/** 부서지는 소리. 화이트 노이즈를 밴드패스로 높은 데서 낮은 데로 훑어 내린다
+ *  — 「쨍」에서 「쿵」으로 미끄러지는 그 궤적이 무언가 무너지는 결을 만든다. */
+function scheduleNoise(audio: AudioContext, out: GainNode, tone: Tone): void {
+  const at = audio.currentTime;
+  const source = audio.createBufferSource();
+  source.buffer = ensureNoise(audio);
+
+  const band = audio.createBiquadFilter();
+  band.type = "bandpass";
+  band.Q.value = 0.8; // 좁으면 삐 소리가 된다 — 넓게 열어 잡음의 결을 남긴다
+  const from = tone.freq[0] ?? 2000;
+  const to = tone.freq[tone.freq.length - 1] ?? 300;
+  band.frequency.setValueAtTime(from, at);
+  band.frequency.exponentialRampToValueAtTime(Math.max(MIN_GAIN, to), at + tone.step);
+
+  const env = audio.createGain();
+  env.gain.setValueAtTime(MIN_GAIN, at);
+  env.gain.linearRampToValueAtTime(tone.gain, at + ATTACK);
+  env.gain.exponentialRampToValueAtTime(MIN_GAIN, at + tone.step);
+
+  source.connect(band);
+  band.connect(env);
+  env.connect(out);
+  voices += 1;
+  source.onended = () => {
+    voices -= 1;
+    try {
+      source.disconnect();
+      band.disconnect();
+      env.disconnect();
+    } catch {
+      /* 이미 끊긴 노드 */
+    }
+  };
+  source.start(at);
+  source.stop(at + tone.step);
+}
+
+/** 1초짜리 화이트 노이즈를 한 번만 만들어 재사용한다. */
+function ensureNoise(audio: AudioContext): AudioBuffer {
+  if (noiseBuffer) return noiseBuffer;
+  const frames = Math.floor(audio.sampleRate);
+  const buffer = audio.createBuffer(1, frames, audio.sampleRate);
+  const data = buffer.getChannelData(0);
+  // 연출용 난수라 Math.random을 쓴다 — 게임 판정과 무관한 레이어다.
+  for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
+  noiseBuffer = buffer;
+  return buffer;
 }
 
 function schedule(audio: AudioContext, out: GainNode, tone: Tone): void {

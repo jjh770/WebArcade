@@ -57,17 +57,37 @@ class FakeOsc {
   }
 }
 
+/** 잡음 소스(부서지는 소리). 오실레이터와 달리 음정이 없고 버퍼를 재생한다. */
+class FakeSource extends FakeOsc {
+  buffer: unknown = null;
+}
+
+/** 밴드패스 필터. 잡음을 어느 구간으로 훑는지가 여기 frequency에 남는다. */
+class FakeFilter {
+  type = "";
+  readonly frequency = new FakeParam();
+  readonly Q = { value: 0 };
+  connectedTo: unknown = null;
+  connect(target: unknown) {
+    this.connectedTo = target;
+  }
+  disconnect() {}
+}
+
 class FakeContext {
   static last: FakeContext | null = null;
   currentTime = 10;
+  sampleRate = 48000;
   state: AudioContextState = "running";
   readonly destination = { id: "destination" };
   readonly gains: FakeGain[] = [];
   readonly oscillators: FakeOsc[] = [];
-  resumed = 0;
+  readonly sources: FakeSource[] = [];
+  readonly filters: FakeFilter[] = [];
   constructor() {
     FakeContext.last = this;
   }
+  resumed = 0;
   resume() {
     this.resumed += 1;
     this.state = "running";
@@ -82,6 +102,24 @@ class FakeContext {
     const node = new FakeOsc();
     this.oscillators.push(node);
     return node;
+  }
+  createBufferSource() {
+    const node = new FakeSource();
+    this.sources.push(node);
+    return node;
+  }
+  createBiquadFilter() {
+    const node = new FakeFilter();
+    this.filters.push(node);
+    return node;
+  }
+  createBuffer(_channels: number, frames: number, _rate: number) {
+    const data = new Float32Array(frames);
+    return { getChannelData: () => data, length: frames };
+  }
+  /** 소리 하나가 몇 개의 목소리를 냈는가(오실레이터든 잡음이든). */
+  get voices(): number {
+    return this.oscillators.length + this.sources.length;
   }
 }
 
@@ -184,8 +222,24 @@ describe("소리 — 표 전체", () => {
       resetAudioForTest(); // 앞 소리가 자리를 차지한 채로 재지 않는다
       FakeContext.last = null;
       play(id);
-      expect(ctx().oscillators.length, `${id}가 소리를 내지 않았다`).toBeGreaterThan(0);
+      // 오실레이터든 잡음이든 무언가는 나야 한다 — 소리 내는 방식은 표가 정한다.
+      expect(ctx().voices, `${id}가 소리를 내지 않았다`).toBeGreaterThan(0);
     }
+  });
+
+  it("잡음 소리는 밴드패스를 훑고 지나간다 — 부서짐은 음정이 아니라 궤적이다", () => {
+    play("crack");
+    const audio = ctx();
+    expect(audio.sources).toHaveLength(1);
+    expect(audio.oscillators).toHaveLength(0); // 음정으로 내지 않는다
+    const band = audio.filters[0];
+    expect(band.type).toBe("bandpass");
+    const swept = band.frequency.calls.map(([, hz]) => hz);
+    expect(swept.length).toBeGreaterThanOrEqual(2);
+    expect(swept[swept.length - 1]).toBeLessThan(swept[0]); // 높은 데서 낮은 데로
+    // 잡음 → 필터 → 봉투 → 마스터 순으로 이어져 있다
+    expect(audio.sources[0].connectedTo).toBe(band);
+    expect(band.connectedTo).toBe(audio.gains[1]);
   });
 
   it("여러 음짜리 소리는 음마다 시각을 밀어 또박또박 끊어 낸다", () => {
@@ -199,14 +253,18 @@ describe("소리 — 표 전체", () => {
     }
   });
 
-  it("음정은 소리마다 다르다 — 카운트다운과 시작이 같은 소리면 구분이 안 된다", () => {
-    const pitchOf = (id: (typeof SOUND_IDS)[number]) => {
+  it("소리마다 결이 다르다 — 카운트다운과 시작이 같으면 구분이 안 된다", () => {
+    const signatureOf = (id: (typeof SOUND_IDS)[number]) => {
       resetAudioForTest();
       FakeContext.last = null;
       play(id);
-      return ctx().oscillators.map((o) => o.frequency.calls[0][1]);
+      const audio = ctx();
+      // 음정이 있으면 음정으로, 잡음이면 훑고 지나간 구간으로 지문을 만든다.
+      const pitches = audio.oscillators.map((o) => o.frequency.calls[0][1]);
+      const sweeps = audio.filters.flatMap((f) => f.frequency.calls.map(([, hz]) => hz));
+      return `${pitches.join(",")}/${sweeps.join(",")}`;
     };
-    const signatures = SOUND_IDS.map((id) => pitchOf(id).join(","));
+    const signatures = SOUND_IDS.map(signatureOf);
     expect(new Set(signatures).size).toBe(SOUND_IDS.length);
   });
 });
