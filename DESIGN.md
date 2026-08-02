@@ -100,7 +100,10 @@ WebArcade/
 │  │  ├─ GameRunner.ts     # IGame을 받아 구동 + 멀티 뷰 렌더
 │  │  ├─ net/NetClient.ts
 │  │  ├─ render/Canvas2DRenderer.ts   # IRenderer 구현 (논리좌표 ↔ DPR 픽셀)
-│  │  └─ input/InputManager.ts
+│  │  └─ input/
+│  │     ├─ InputSource.ts     # 입력 소스 계약 + CompositeInput(키보드 OR 터치)
+│  │     ├─ InputManager.ts    # 키보드 방향키 → InputState
+│  │     └─ TouchInput.ts      # 요소 위 포인터 → InputState (매핑은 앱이 준다)
 │  ├─ games/jungnim/src/   # 죽림고수 (첫 게임)
 │  │  ├─ JungnimGame.ts    # implements IGame
 │  │  ├─ ArrowSpawner.ts   # 공통(시드) 화살 — 모두가 동일
@@ -126,6 +129,9 @@ WebArcade/
 │     ├─ AppView.ts        # DOM·화면 전환·플레이 영역 레이아웃
 │     ├─ GameSession.ts    # 한 라운드의 게임·입력·관전·멀티뷰 소유
 │     ├─ GameRegistry.ts   # ⭐ 새 게임은 여기에만 등록
+│     ├─ touchSchemes.ts   # 터치 조작 방식(매핑·조작면·안내를 한 줄로 묶음)
+│     ├─ touchHint.ts      # 카운트다운 동안 뜨는 조작 안내
+│     ├─ joystick.ts       # 조이스틱 위젯의 노브 표현(입력은 TouchInput 몫)
 │     └─ siteContent.ts    # 공지 등 사이트 콘텐츠 데이터
 └─ tests/                  # Vitest — 결정론·클럭·FSM·방·서버 통합
 ```

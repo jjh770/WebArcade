@@ -324,6 +324,21 @@
       .card { background: var(--surface); padding: 32px 36px; border-radius: 14px;
         min-width: 340px; max-width: 100%; max-height: 100%; overflow-y: auto;
         box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+      /* 스크롤바도 UI다. 기본 막대는 어두운 카드 위에서 혼자 밝고 두껍게 뜬다.
+         쉴 때는 테두리색으로 조용히, 손이 올라가면 밝아진다.
+         두 벌을 쓰는 이유: 최신 크롬·파이어폭스는 표준 속성(scrollbar-*)만 보고,
+         사파리와 구형 크롬은 ::-webkit-scrollbar만 본다. 둘이 같은 그림을 그린다. */
+      .card, ul.players { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+      .card:hover, ul.players:hover { scrollbar-color: var(--text-muted) transparent; }
+      .card::-webkit-scrollbar, ul.players::-webkit-scrollbar { width: 10px; }
+      .card::-webkit-scrollbar-track, ul.players::-webkit-scrollbar-track { background: transparent; }
+      /* 투명 테두리 + background-clip으로 막대를 얇게 보이게 하면서 잡는 폭은 유지한다. */
+      .card::-webkit-scrollbar-thumb, ul.players::-webkit-scrollbar-thumb {
+        background: var(--border); border-radius: 999px;
+        border: 3px solid transparent; background-clip: padding-box; }
+      .card::-webkit-scrollbar-thumb:hover, ul.players::-webkit-scrollbar-thumb:hover {
+        background: var(--text-muted); background-clip: padding-box; }
+
       .card h1 { margin: 0 0 4px; font-size: 22px; }
       .card h2 { margin: 0 0 18px; font-size: 15px; font-weight: 500; color: var(--text-muted); }
       .card .hint { color: var(--text-muted); font-size: 13px; margin: 6px 0 0; }
@@ -447,7 +462,14 @@
       .notice-item:last-child { border-bottom: none; }
       .notice-date { color: var(--text-muted); font-size: 12px; }
       .notice-title { font-weight: 700; margin: 3px 0 5px; }
-      .notice-body { color: var(--text-secondary); font-size: 14px; line-height: 1.55; }
+      /* 공지 본문은 목록이다. 불릿을 브라우저 기본 점 대신 강조색 원으로 찍어
+         카드 안에서 사이트 팔레트로 읽히게 한다. */
+      ul.notice-body { list-style: none; padding: 0; margin: 0;
+        color: var(--text-secondary); font-size: 14px; line-height: 1.55; }
+      ul.notice-body li { position: relative; padding-left: 14px; margin: 2px 0; }
+      ul.notice-body li::before { content: ""; position: absolute; left: 1px; top: .62em;
+        width: 4px; height: 4px; border-radius: 50%;
+        background: color-mix(in srgb, var(--primary) 65%, transparent); }
       .about-body { color: var(--text-secondary); font-size: 15px; line-height: 1.7; }
       .about-body h3 { color: var(--text-primary); margin: 18px 0 6px; font-size: 16px; }
       .about-body p { margin: 0 0 10px; }

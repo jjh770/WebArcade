@@ -90,6 +90,8 @@
   레이어**다. 이건 1-1 결정론 불변식의 UI 쪽 표현이다.
 - **UI 메타데이터 때문에 `IGame`·`IRenderer`·프로토콜·서버 계약을 넓히지 않는다.**
   표시용 정보가 필요하면 `packages/app`(예: `GameRegistry`) 안에 둔다.
+  터치 조작이 이 원칙의 실례다 — `InputState`가 이미 4방향이라 계약을 안 넓히고,
+  "어디를 누르면 어느 방향인가"만 앱(`touchSchemes.ts`)에 뒀다.
 
 색과 이징의 정본은 `packages/app/index.html`의 `:root`다. 문서에 색값을 복제하지 않는다.
 모션은 CSS 우선, 동적 좌표가 꼭 필요할 때만 Web Animations. 애니메이션 라이브러리는 안 쓴다.

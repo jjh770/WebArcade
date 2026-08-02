@@ -121,9 +121,11 @@ export function renderNotices(): void {
   for (const notice of NOTICES) {
     const item = document.createElement("div");
     item.className = "notice-item";
+    // 본문은 문단이 아니라 목록이다 — 한 줄에 하나씩만 담긴다(siteContent.Notice).
+    const lines = notice.body.map((line) => `<li>${escapeHtml(line)}</li>`).join("");
     item.innerHTML = `<div class="notice-date">${escapeHtml(notice.date)}</div>`
       + `<div class="notice-title">${escapeHtml(notice.title)}</div>`
-      + `<div class="notice-body">${escapeHtml(notice.body)}</div>`;
+      + `<ul class="notice-body">${lines}</ul>`;
     wrapper.appendChild(item);
   }
 }
