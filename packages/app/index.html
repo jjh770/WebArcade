@@ -433,7 +433,9 @@
         display: flex; align-items: center;
         background: color-mix(in srgb, var(--bg) 92%, transparent);
         backdrop-filter: blur(6px); }
-      #site-header { top: 0; height: 52px; padding: 0 18px; gap: 18px; border-bottom: 1px solid var(--border); }
+      /* 오른쪽 여백이 18px가 아닌 이유: 소리 토글(#sound-toggle)이 헤더 밖 고정
+         요소라 헤더가 자리를 비워 주지 않으면 내비 위에 겹쳐 앉는다. */
+      #site-header { top: 0; height: 52px; padding: 0 62px 0 18px; gap: 18px; border-bottom: 1px solid var(--border); }
       #site-footer { bottom: 0; min-height: 40px; padding: 8px 18px; gap: 16px; justify-content: center;
         flex-wrap: wrap; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
       body.playing #site-header, body.playing #site-footer { display: none; }
@@ -453,6 +455,24 @@
         box-shadow: none; }
       #site-footer a:hover, #site-footer button:hover:not(:disabled) { color: var(--text-primary);
         transform: none; box-shadow: none; filter: none; background: none; }
+
+      /* 소리 토글 — 헤더 안이 아니라 헤더 밖 고정 요소다. 소리를 가장 끄고 싶은
+         순간이 플레이 중인데, 헤더는 그때 숨는다(body.playing). HUD(좌상단)와
+         좌우로 짝을 이뤄 플레이 화면에서도 자리가 자연스럽다.
+         상태를 아이콘 모양만이 아니라 색·취소선으로도 알린다(색각 이상 대비). */
+      #sound-toggle { position: fixed; top: 9px; right: 16px; z-index: 40;
+        width: 34px; height: 34px; padding: 0; display: flex; align-items: center; justify-content: center;
+        font-size: 15px; line-height: 1; border-radius: 9px;
+        background: color-mix(in srgb, var(--surface) 82%, transparent);
+        border: 1px solid var(--border); color: var(--text-primary); box-shadow: none; }
+      #sound-toggle:hover:not(:disabled) { background: var(--surface-elevated);
+        border-color: var(--primary); transform: none; box-shadow: none; filter: none; }
+      #sound-toggle.off { color: var(--text-muted); }
+      /* 플레이 중에는 아래로 내려간다. 우상단은 관전 칼럼(#side-views)이 쓰는 자리라
+         판이 화면 폭을 꽉 채우는 창 비율에서 첫 관전창의 모서리를 덮는다.
+         아래쪽은 항상 비어 있다 — 관전 칼럼은 위에서부터 채우고, 조이스틱은
+         가운데(가로 화면에선 왼쪽)에 앉는다. */
+      body.playing #sound-toggle { top: auto; bottom: calc(14px + env(safe-area-inset-bottom)); }
 
       /* 콘텐츠 화면(공지/소개/커뮤니티): 헤더/푸터 사이에 스크롤 카드. */
       .screen { padding: 62px 16px 50px; }
@@ -515,6 +535,9 @@
         <div id="hud-gauge-track"><div id="hud-gauge-fill"></div></div>
       </div>
     </div>
+    <!-- 소리 토글. 헤더 안이 아니다 — 플레이 중에도 남아야 해서 형제로 둔다.
+         라벨은 상태가 아니라 "누르면 일어날 일"을 말한다(main.ts가 갱신). -->
+    <button id="sound-toggle" type="button" aria-label="소리 끄기" title="소리 끄기">🔊</button>
     <!-- 사이트 헤더: 로고 + 내비 -->
     <header id="site-header">
       <button class="brand" data-nav="game">🎯 Arcade</button>

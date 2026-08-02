@@ -2,6 +2,7 @@ import { NetClient, StateMachine } from "@arcade/core";
 import type { RankEntry, ServerMessage } from "@arcade/shared";
 import { formatTicks } from "@arcade/shared";
 import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
+import { initAudio, isMuted, play, setMuted } from "./audio";
 import { initBgDecor } from "./bgDecor";
 import {
   byId,
@@ -250,6 +251,31 @@ document.querySelectorAll<HTMLElement>("[data-nav]").forEach((element) => {
     navTo(element.dataset.nav);
   });
 });
+/* ---- 소리 -----------------------------------------------------------------
+   클릭음은 버튼마다 걸지 않고 document에 한 번 위임한다. 버튼이 늘어나도 여기
+   손댈 일이 없고, 동적으로 그려지는 게임 카드·목록 버튼까지 자동으로 포함된다.
+   ⚠️ 버블 단계라 각 버튼의 자기 핸들러보다 **나중에** 돈다 — 그래서 소리 토글을
+   켜는 클릭은 이 줄에서 소리가 나고(켜졌음을 귀로 확인), 끄는 클릭은 조용하다.
+   확인음을 따로 만들 필요가 없다. */
+document.addEventListener("click", (event) => {
+  if ((event.target as HTMLElement | null)?.closest("button")) play("click");
+});
+
+const soundToggle = byId<HTMLButtonElement>("sound-toggle");
+function renderSoundToggle(): void {
+  const off = isMuted();
+  soundToggle.textContent = off ? "🔇" : "🔊";
+  soundToggle.classList.toggle("off", off);
+  // 라벨은 상태("소리 켜짐")가 아니라 누르면 일어날 일을 말한다.
+  const label = off ? "소리 켜기" : "소리 끄기";
+  soundToggle.setAttribute("aria-label", label);
+  soundToggle.title = label;
+}
+soundToggle.addEventListener("click", () => {
+  setMuted(!isMuted());
+  renderSoundToggle();
+});
+
 byId("footer-legal").addEventListener("click", () => toast("이용약관·개인정보는 준비 중입니다."));
 byId("gamelist-back").addEventListener("click", () => transition("back_main"));
 
@@ -469,6 +495,8 @@ function tryAutoJoin(): void {
 }
 
 initBgDecor(document.querySelector<HTMLElement>(".bg-spot")!);
+initAudio(); // 저장된 소리 설정을 읽는다. AudioContext는 첫 클릭 때 만들어진다.
+renderSoundToggle();
 
 // 시작 시점에는 서버에 연결하지 않는다. 연결은 방에 들어갈 때 맺는다
 // — 덕분에 서버가 자고 있어도 연습 모드는 그대로 돌아간다.

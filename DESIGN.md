@@ -132,6 +132,7 @@ WebArcade/
 │     ├─ touchSchemes.ts   # 터치 조작 방식(매핑·조작면·안내를 한 줄로 묶음)
 │     ├─ touchHint.ts      # 카운트다운 동안 뜨는 조작 안내
 │     ├─ joystick.ts       # 조이스틱 위젯의 노브 표현(입력은 TouchInput 몫)
+│     ├─ audio.ts          # 효과음을 코드로 합성(음원 파일 없음) + 켬/끔
 │     └─ siteContent.ts    # 공지 등 사이트 콘텐츠 데이터
 └─ tests/                  # Vitest — 결정론·클럭·FSM·방·서버 통합
 ```
