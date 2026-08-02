@@ -23,7 +23,7 @@
 import { loadMuted, saveMuted } from "./prefs";
 
 /** 지금 낼 수 있는 소리. 늘어나면 SOUNDS에 줄을 추가한다. */
-export type SoundId = "click";
+export type SoundId = "click" | "count" | "go" | "death" | "result";
 
 type Tone = {
   /** 파형. square는 각진 8비트 소리, triangle은 같은 음정이라도 덜 날카롭다. */
@@ -36,11 +36,24 @@ type Tone = {
   gain: number;
 };
 
-/** 슬러그 → 소리. 부르는 쪽은 이 표의 내용을 모른다. */
+/** 슬러그 → 소리. 부르는 쪽은 이 표의 내용을 모른다.
+ *  음 하나하나가 step 안에서 완전히 감쇠하므로 여러 음은 이어지지 않고 또박또박 끊긴다
+ *  — 아케이드 효과음의 결이다. */
 const SOUNDS: Record<SoundId, Tone> = {
   // UI 클릭: 짧고 높게. 연타해도 피곤하지 않도록 square가 아니라 triangle.
   click: { wave: "triangle", freq: [880], step: 0.045, gain: 0.6 },
+  // 카운트다운 3·2·1: 같은 음을 세 번. 변하지 않아야 다음 "시작"이 도드라진다.
+  count: { wave: "triangle", freq: [523], step: 0.08, gain: 0.5 },
+  // 시작: 올라가는 두 음. 카운트다운보다 밝고 길어 "지금부터"가 분명하다.
+  go: { wave: "square", freq: [659, 988], step: 0.11, gain: 0.45 },
+  // 사망: 떨어지는 세 음. 아래로 향하는 선율이 곧 나쁜 소식이다.
+  death: { wave: "square", freq: [392, 262, 165], step: 0.12, gain: 0.4 },
+  // 결과: 올라가는 아르페지오(C-E-G-C). 판이 끝났다는 마침표.
+  result: { wave: "triangle", freq: [523, 659, 784, 1047], step: 0.1, gain: 0.45 },
 };
+
+/** 표에 있는 모든 소리 이름. 테스트가 하나도 빠뜨리지 않고 훑는 데 쓴다. */
+export const SOUND_IDS = Object.keys(SOUNDS) as readonly SoundId[];
 
 /** 마스터 음량. 합성음은 같은 수치의 음원 파일보다 크게 들려 낮게 잡았다. */
 const MASTER_GAIN = 0.25;

@@ -4,7 +4,7 @@
    잠든 컨텍스트를 깨우는가, 목소리가 무한정 쌓이는가, 오디오가 없는 환경에서
    던지는가. */
 import { beforeEach, describe, expect, it } from "vitest";
-import { initAudio, isMuted, play, resetAudioForTest, setMuted } from "../packages/app/src/audio";
+import { initAudio, isMuted, play, resetAudioForTest, setMuted, SOUND_IDS } from "../packages/app/src/audio";
 
 type GainCall = [kind: string, value: number, at: number];
 
@@ -167,6 +167,47 @@ describe("소리 — 재생 스케줄", () => {
     play("click");
     expect(audio.resumed).toBe(1);
     expect(audio.oscillators).toHaveLength(2);
+  });
+});
+
+describe("소리 — 표 전체", () => {
+  beforeEach(() => {
+    resetAudioForTest();
+    FakeContext.last = null;
+    (globalThis as unknown as Globals).localStorage = fakeStorage();
+    installAudio();
+  });
+
+  it("표에 있는 모든 소리가 실제로 울린다 — 음 수가 동시 발음 한도를 넘으면 영원히 안 난다", () => {
+    expect(SOUND_IDS.length).toBeGreaterThan(0);
+    for (const id of SOUND_IDS) {
+      resetAudioForTest(); // 앞 소리가 자리를 차지한 채로 재지 않는다
+      FakeContext.last = null;
+      play(id);
+      expect(ctx().oscillators.length, `${id}가 소리를 내지 않았다`).toBeGreaterThan(0);
+    }
+  });
+
+  it("여러 음짜리 소리는 음마다 시각을 밀어 또박또박 끊어 낸다", () => {
+    play("result"); // 올라가는 아르페지오
+    const oscs = ctx().oscillators;
+    expect(oscs.length).toBeGreaterThan(1);
+    for (let i = 1; i < oscs.length; i++) {
+      expect(oscs[i].startedAt).toBeGreaterThan(oscs[i - 1].startedAt);
+      // 앞 음은 다음 음이 시작할 때까지 끝난다 — 겹치면 화음이 되어 결이 달라진다.
+      expect(oscs[i - 1].stoppedAt).toBeLessThanOrEqual(oscs[i].startedAt + 1e-9);
+    }
+  });
+
+  it("음정은 소리마다 다르다 — 카운트다운과 시작이 같은 소리면 구분이 안 된다", () => {
+    const pitchOf = (id: (typeof SOUND_IDS)[number]) => {
+      resetAudioForTest();
+      FakeContext.last = null;
+      play(id);
+      return ctx().oscillators.map((o) => o.frequency.calls[0][1]);
+    };
+    const signatures = SOUND_IDS.map((id) => pitchOf(id).join(","));
+    expect(new Set(signatures).size).toBe(SOUND_IDS.length);
   });
 });
 

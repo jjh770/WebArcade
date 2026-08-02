@@ -134,6 +134,7 @@ function onLocalDeath(): void {
   const score = session.getScore();
   if (score === null) return;
   deathFx(); // 화면 흔들림 + 붉은 섬광(임팩트).
+  play("death"); // 떨어지는 세 음 — 흔들림·섬광과 같은 순간에 얹힌다.
   fallScreen(); // 내 화면이 아래로 떨어진다.
   // 연습은 죽는 순간이 곧 끝이다. 관전할 남도, 기다릴 서버도 없다.
   if (soloMode) return showSoloResult(score);
@@ -309,6 +310,7 @@ function startSolo(): void {
   const seed = randomSeed();
   runLocalCountdown(gameId, seed, () => {
     resetScreenFx(); // 새 라운드 — 떨어졌던 화면 복구.
+    play("go");
     updateHud(0, null); // 지난 판 숫자가 첫 프레임에 잠깐 비치지 않게.
     setAliveHud("연습");
     if (!session.start(gameId, seed, performance.now())) {
@@ -335,6 +337,7 @@ function runLocalCountdown(gameId: GameId, seed: number, onDone: () => void): vo
     if (number !== lastNumber) {
       lastNumber = number;
       setCountdown(number);
+      play("count"); // 숫자가 바뀌는 순간에만 — 50ms 폴링마다가 아니다.
     }
   };
   clearInterval(countdownTimer);
@@ -342,6 +345,8 @@ function runLocalCountdown(gameId: GameId, seed: number, onDone: () => void): vo
   step();
 }
 
+/** ⚠️ 여기서는 결과음을 내지 않는다 — onLocalDeath가 같은 프레임에 부르므로
+ *  사망음 위에 겹친다. 연습에서 판이 끝났다는 신호는 사망음 하나로 충분하다. */
 function showSoloResult(score: number): void {
   if (!transition("game_over")) return;
   finalRanks = [{ id: SOLO_ID, rank: 1, nickname: myNickname, survivalTicks: score }];
@@ -437,6 +442,7 @@ function startCountdown(seed: number, startTime: number, gameId: string): void {
     if (number === lastNumber) return;
     lastNumber = number;
     setCountdown(number);
+    play("count"); // 숫자가 바뀌는 순간에만 — 50ms 폴링마다가 아니다.
   };
   clearInterval(countdownTimer);
   countdownTimer = window.setInterval(update, 50);
@@ -446,6 +452,7 @@ function startCountdown(seed: number, startTime: number, gameId: string): void {
 function beginPlay(gameId: string, seed: number, startTime: number): void {
   finalRanks = [];
   resetScreenFx(); // 새 라운드 — 떨어졌던 화면 복구.
+  play("go");
   updateHud(0, null); // 지난 판 숫자가 첫 프레임에 잠깐 비치지 않게.
   setAliveHud("생존 …");
   if (!session.start(gameId, seed, net.serverTimeToPerformance(startTime))) {
@@ -469,6 +476,9 @@ function showResult(ranks: readonly RankEntry[]): void {
   if (!appState.can("game_over")) return;
   clearTimeout(fallTimer); // 낙하 중 게임이 끝났으면 관전 전환을 취소한다.
   finalRanks = ranks;
+  // 판이 끝났다는 마침표. 멀티에서만 낸다 — 연습은 죽는 순간이 곧 결과라
+  // 사망음과 같은 프레임에 겹쳐 둘 다 뭉개진다(showSoloResult 참조).
+  play("result");
   renderResult(ranks, myId, amHost);
   setAliveHud("", true);
   session.stopRound();
