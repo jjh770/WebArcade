@@ -1,6 +1,9 @@
-import { Canvas2DRenderer, GameRunner, InputManager, type GameView } from "@arcade/core";
+import { Canvas2DRenderer, CompositeInput, GameRunner, InputManager, TouchInput, type GameView } from "@arcade/core";
 import type { IGame, PeerSnapshot, PlayerPublic, SpawnContext } from "@arcade/shared";
-import { GAME_REGISTRY, isGameId, type GameId } from "./GameRegistry";
+import { GAME_REGISTRY, isGameId, type GameEntry, type GameId } from "./GameRegistry";
+import { TouchHint, hasCoarsePointer, shouldShowHint } from "./touchHint";
+import { Joystick } from "./joystick";
+import { TOUCH_SCHEMES } from "./touchSchemes";
 
 const SIDE_SLOTS = 3;
 
@@ -10,6 +13,11 @@ type MainViewMode = "self" | "spectating";
 export type GameSessionOptions = {
   mainCanvas: HTMLCanvasElement;
   sideCanvases: readonly HTMLCanvasElement[];
+  /** 터치 조작 안내 오버레이. 메인 캔버스 위에 겹쳐 뜬다. */
+  touchHint: HTMLElement;
+  /** 조이스틱 위젯(뿌리 / 노브). 사방으로 움직이는 게임에서만 뜬다. */
+  stick: HTMLElement;
+  stickKnob: HTMLElement;
   /** 게임 좌표계 크기. 화면 크기와 무관하게 고정 — 게임은 항상 이 좌표로만 그린다. */
   logicalWidth: number;
   logicalHeight: number;
@@ -25,7 +33,17 @@ export type GameSessionOptions = {
 
 /** 한 라운드의 게임 인스턴스, 입력, 관전 대상과 멀티 뷰를 소유한다. */
 export class GameSession {
-  private readonly input = new InputManager();
+  // 키보드와 손가락은 같은 InputState를 낸다. 러너는 둘을 구분하지 않는다.
+  private readonly keyboard = new InputManager();
+  // 조작면이 둘이라 소스도 둘이다. 게임에 맞는 쪽에만 매핑을 끼우고 나머지는 비운다
+  // — 요소를 바꿔 끼우는 것보다 리스너 수명이 단순하다.
+  private readonly touchCanvas: TouchInput;
+  private readonly touchStick: TouchInput;
+  private readonly input: CompositeInput;
+  private readonly hint: TouchHint;
+  private readonly joystick: Joystick;
+  /** 이번 게임에 터치 조작이 있는가 — 안내를 띄울지 판단에만 쓴다. */
+  private touchable = false;
   private readonly mainRenderer: Canvas2DRenderer;
   private readonly sideRenderers: Canvas2DRenderer[];
   private game: IGame | null = null;
@@ -41,6 +59,12 @@ export class GameSession {
 
   constructor(private readonly options: GameSessionOptions) {
     const { logicalWidth: w, logicalHeight: h } = options;
+    // 판 터치는 메인 캔버스 위에서만 받는다 — 관전 슬롯이나 HUD를 눌러 꺾이면 안 된다.
+    this.touchCanvas = new TouchInput(options.mainCanvas);
+    this.touchStick = new TouchInput(options.stick);
+    this.input = new CompositeInput(this.keyboard, this.touchCanvas, this.touchStick);
+    this.hint = new TouchHint(options.touchHint, options.mainCanvas);
+    this.joystick = new Joystick(options.stick, options.stickKnob);
     this.mainRenderer = new Canvas2DRenderer(options.mainCanvas, w, h);
     this.sideRenderers = options.sideCanvases.map((canvas) => new Canvas2DRenderer(canvas, w, h));
     this.resizeViews();
@@ -53,6 +77,8 @@ export class GameSession {
     this.sideRenderers.forEach((renderer, index) => {
       this.fitRenderer(renderer, this.options.sideCanvases[index]);
     });
+    // 안내 오버레이도 캔버스를 따라간다. 떠 있지 않을 때 맞춰 둬도 해가 없다.
+    this.hint.syncBox();
   }
 
   private fitRenderer(renderer: Canvas2DRenderer, canvas: HTMLCanvasElement): void {
@@ -75,6 +101,8 @@ export class GameSession {
     this.ensureRunner(gameId);
     this.runner?.setViews([{ renderer: this.mainRenderer, target: null }]);
     this.runner?.prime(seed, this.selfContext());
+    // 조작 안내는 카운트다운 동안 판 위에 깔린다(숫자 뒤). start()에서 걷힌다.
+    if (shouldShowHint(this.touchable, hasCoarsePointer())) this.hint.show();
     return true;
   }
 
@@ -98,12 +126,15 @@ export class GameSession {
     this.runner?.start(seed, epochPerformanceMs, this.selfContext());
     this.syncGamePeers();
     this.rebuildViews();
+    // 카운트다운 동안 깔려 있던 조작 안내를 걷는다 — 플레이 화면은 가리지 않는다.
+    this.hint.hide();
     return true;
   }
 
   stopRound(): void {
     this.roundActive = false;
     this.runner?.stop();
+    this.hint.hide();
   }
 
   leaveRoom(): void {
@@ -213,7 +244,17 @@ export class GameSession {
   private ensureRunner(gameId: GameId): void {
     if (this.activeGameId === gameId) return;
     this.runner?.stop();
-    this.game = GAME_REGISTRY[gameId].factory();
+    // 터치 매핑은 게임마다 다르다. 없는 게임은 그대로 키보드 전용으로 돈다.
+    // (레지스트리는 satisfies라 항목마다 리터럴 타입이다 — 선택 필드를 보려면 계약으로 넓힌다.)
+    const entry: GameEntry = GAME_REGISTRY[gameId];
+    const scheme = entry.touch ? TOUCH_SCHEMES[entry.touch] : null;
+    // 이 게임이 쓰는 조작면에만 매핑을 끼운다. 나머지 면은 눌러도 아무 일이 없다.
+    this.touchCanvas.setMapper(scheme?.surface === "canvas" ? scheme.map : null);
+    this.touchStick.setMapper(scheme?.surface === "stick" ? scheme.map : null);
+    this.joystick.setVisible(scheme?.surface === "stick" && hasCoarsePointer());
+    this.hint.setScheme(entry.touch ?? null);
+    this.touchable = entry.touch !== undefined;
+    this.game = entry.factory();
     this.runner = new GameRunner(this.game, this.input, this.options.onLocalDeath, this.options.onHud, (debuffs) => this.handleFire(debuffs));
     this.activeGameId = gameId;
   }

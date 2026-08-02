@@ -56,6 +56,9 @@ const net = new NetClient();
 const session = new GameSession({
   mainCanvas,
   sideCanvases,
+  touchHint: byId("touch-zones"),
+  stick: byId("stick"),
+  stickKnob: byId("stick-knob"),
   logicalWidth: LOGICAL_WIDTH,
   logicalHeight: LOGICAL_HEIGHT,
   onLocalDeath,
@@ -91,6 +94,9 @@ function relayout(): void {
 relayout();
 // 창 크기·모니터(DPR) 변경 시 다시 맞춘다.
 window.addEventListener("resize", relayout);
+// 폰을 눕히면 resize보다 orientationchange가 먼저 오거나, iOS에서는 resize 시점의
+// innerWidth가 아직 회전 전 값인 경우가 있다. 한 번 더 맞춰 두면 어느 쪽이든 맞는다.
+window.addEventListener("orientationchange", () => setTimeout(relayout, 0));
 
 /** 방에 연결된 상태인가. 서버 연결은 방에 들어갈 때 맺고 나올 때 끊는다
  *  — 앱 시작 시점에는 연결하지 않는다(연습 모드는 서버가 없어도 돌아간다). */

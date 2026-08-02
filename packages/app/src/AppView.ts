@@ -52,10 +52,6 @@ export function renderState(state: AppState): void {
    Canvas2DRenderer가 이 크기를 읽어 DPR만큼 맞춘다 — 소유권이 갈려 있다.
    게임 좌표계(논리 800x800, 정사각형)는 화면 크기와 무관하게 불변이다. */
 
-/** #play의 gap / padding (CSS와 일치시킬 것). */
-const PLAY_GAP = 14;
-const PLAY_PADDING = 16;
-
 /** 이 폭 미만이면 관전 칼럼을 접고 메인 화면에 공간을 전부 준다(모바일·좁은 창). */
 const NARROW_VIEWPORT = 900;
 /** 관전 칼럼 폭 = 뷰포트 폭의 이 비율, 단 [min, max]로 제한. */
@@ -69,7 +65,16 @@ const SIDE_WIDTH_MAX = 260;
  *  캔버스 해상도는 이 크기를 읽어 Canvas2DRenderer가 DPR에 맞춘다. */
 export function layoutPlayArea(aspect: number): void {
   const narrow = window.innerWidth < NARROW_VIEWPORT;
-  byId("play").classList.toggle("narrow", narrow);
+  const play = byId("play");
+  play.classList.toggle("narrow", narrow);
+
+  // 여백·간격은 CSS가 정본이다. 폰에서 여백을 줄이거나 노치를 피하려고 safe-area를
+  // 더해도 여기서 다시 읽으므로 두 곳을 맞출 필요가 없다.
+  // (창 크기가 바뀔 때만 재는 것이라 매 프레임 측정이 아니다.)
+  const style = getComputedStyle(play);
+  const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+  const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  const gap = parseFloat(style.columnGap) || 0;
 
   // 접히면 칼럼이 display:none → flex gap도 사라지므로 계산에서 함께 뺀다.
   const sideWidth = narrow
@@ -79,8 +84,8 @@ export function layoutPlayArea(aspect: number): void {
   sideViews.style.setProperty("--side-w", `${Math.floor(sideWidth)}px`);
   sideViews.style.setProperty("--side-h", `${Math.floor(sideWidth / aspect)}px`);
 
-  const availableWidth = window.innerWidth - PLAY_PADDING * 2 - sideWidth - (narrow ? 0 : PLAY_GAP);
-  const availableHeight = window.innerHeight - PLAY_PADDING * 2;
+  const availableWidth = window.innerWidth - padX - sideWidth - (narrow ? 0 : gap);
+  const availableHeight = window.innerHeight - padY;
   let width = Math.max(1, availableWidth);
   let height = width / aspect;
   if (height > availableHeight) {

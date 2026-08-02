@@ -11,6 +11,7 @@
    ============================================================ */
 
 import type { InputState } from "@arcade/shared";
+import type { InputSource } from "./InputSource";
 
 /** 브라우저 방향키 코드 → InputState 필드 매핑. */
 const KEY_MAP: Record<string, keyof InputState> = {
@@ -20,7 +21,7 @@ const KEY_MAP: Record<string, keyof InputState> = {
   ArrowRight: "right",
 };
 
-export class InputManager {
+export class InputManager implements InputSource {
   private listening = false;
   private readonly state: InputState = {
     up: false,

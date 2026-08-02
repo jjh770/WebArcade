@@ -13,7 +13,7 @@
 
 import type { IGame, IRenderer, SpectateTarget, SpawnContext } from "@arcade/shared";
 import { GameLoop } from "./GameLoop";
-import { InputManager } from "./input/InputManager";
+import type { InputSource } from "./input/InputSource";
 
 /** 한 화면(뷰). target=null이면 자기 화면(render), 있으면 그 대상(남) 관전(renderSpectator). */
 export type GameView = { renderer: IRenderer; target: SpectateTarget | null };
@@ -27,7 +27,8 @@ export class GameRunner {
 
   constructor(
     private readonly game: IGame,
-    private readonly input: InputManager,
+    /** 키보드든 터치든 InputState를 내는 것이면 된다 — 러너는 출처를 모른다. */
+    private readonly input: InputSource,
     /** 로컬 사망이 처음 감지된 순간 한 번 호출(멀티에서 player_died 전송용).
      *  게임이 뭔지는 모른다 — IGame.isPlayerDead()만 관찰. */
     private readonly onDeath?: () => void,
