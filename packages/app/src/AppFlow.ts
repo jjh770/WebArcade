@@ -34,7 +34,9 @@ export const APP_TRANSITIONS = {
   dying: { keep_result: "deadResult", watch: "spectating", game_over: "result" },
   deadResult: { game_over: "result" },
   spectating: { game_over: "result" },
-  result: { return_ready: "ready", start_solo: "countdown", leave_room: "lobby" },
+  // nav_ranking: 결과에서 전체 순위표로 빠지는 길. **혼자 플레이에서만** 쓰인다 —
+  // 멀티에서는 버튼이 숨고 navTo가 방에 있는 동안을 막는다(방을 두고 나가면 안 되므로).
+  result: { return_ready: "ready", start_solo: "countdown", leave_room: "lobby", nav_ranking: "ranking" },
   notice: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
   about: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
   community: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },

@@ -106,6 +106,15 @@ describe("연습(싱글) 모드 흐름", () => {
     expect(flow.state).toBe("main");
   });
 
+  it("결과 화면에서 전체 순위표로 갈 수 있다", () => {
+    // 방금 낸 기록의 등수가 제일 궁금한 순간이다. (멀티는 버튼이 숨고 navTo가 막는다)
+    const flow = createFlow();
+    advance(flow, [...toLobby, "start_solo", "countdown_done", "game_over"]);
+    expect(flow.state).toBe("result");
+    flow.transition("nav_ranking");
+    expect(flow.state).toBe("ranking");
+  });
+
   it("플레이 중에는 순위를 열 수 없다 — 판이 사라진다", () => {
     const flow = createFlow();
     advance(flow, [...toLobby, "start_solo", "countdown_done"]);

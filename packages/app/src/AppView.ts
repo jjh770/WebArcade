@@ -222,6 +222,9 @@ export function renderResult(
     body.appendChild(row);
   }
   byId("result-sub").textContent = myRank ? `내 순위 ${myRank}위` : "";
+  // 전체 순위표로 가는 곁길은 혼자 플레이에서만. 멀티에서 방을 두고 나가면
+  // 남은 사람들의 다음 판 시작 신호를 놓친다.
+  byId("result-rank-btn").hidden = !solo;
   const again = byId<HTMLButtonElement>("again-btn");
   again.style.display = amHost ? "" : "none";
   again.textContent = solo ? "다시 하기" : "대기실로";

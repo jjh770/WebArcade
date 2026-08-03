@@ -455,6 +455,14 @@
         font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
         font-variant-numeric: tabular-nums; }
 
+      /* 카드 안의 곁길. 버튼 모양이면 주 행동(플레이·방 만들기)과 눈에서 경쟁하므로
+         밑줄 링크로 낮춰 둔다 — 있는 줄은 알되 먼저 보이지는 않게. */
+      .textlink { background: none; border: none; box-shadow: none; color: var(--text-muted);
+        font: inherit; font-size: 13px; font-weight: 600; text-decoration: underline;
+        padding: 10px 6px; cursor: pointer; }
+      .textlink:hover:not(:disabled) { color: var(--text-primary); background: none;
+        transform: none; box-shadow: none; filter: none; }
+
       /* 순위표의 게임 고르기. 내비와 같은 방식으로 현재 항목을 표시한다
          — 색만이 아니라 배경 블록으로도(색각 이상 대비). */
       .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
@@ -688,7 +696,8 @@
               <input id="join-code" maxlength="4" placeholder="코드 4자리" style="text-transform:uppercase" />
               <button id="join-btn" style="flex:0 0 auto">입장</button>
             </div>
-            <button id="lobby-back" class="secondary" style="width:100%; margin-top:14px">뒤로</button>
+            <button id="lobby-rank-btn" class="textlink" style="width:100%">이 게임 순위 보기</button>
+            <button id="lobby-back" class="secondary" style="width:100%; margin-top:6px">뒤로</button>
           </div>
         </section>
 
@@ -718,7 +727,9 @@
         <!-- 최종 결과: 마지막 플레이 프레임 위에 표시 -->
         <section id="screen-result" class="screen play-overlay">
           <div class="card">
-            <h1>순위표</h1>
+            <!-- "순위표"였는데 전역 순위표가 생기면서 같은 말이 두 곳을 가리키게 됐다.
+                 여기는 방금 끝난 한 판의 결과다 — 이름으로 구분해 준다. -->
+            <h1>이번 판 결과</h1>
             <h2 id="result-sub"></h2>
             <table class="ranks"><tbody id="result-body"></tbody></table>
             <div class="stack">
@@ -727,6 +738,9 @@
               <button id="again-btn" style="width:100%">다시 하기</button>
               <button id="result-leave-btn" class="secondary" style="width:100%">나가기</button>
             </div>
+            <!-- 혼자 플레이에서만 보인다. 멀티에서 여길 누르면 방을 두고 나가는 셈이라
+                 남은 사람들의 다음 판 시작 신호를 놓친다(renderResult가 숨긴다). -->
+            <button id="result-rank-btn" class="textlink" style="width:100%">전체 순위표 보기</button>
             <p class="hint" id="result-hint"></p>
           </div>
         </section>
