@@ -8,8 +8,6 @@ import {
   renderGameList,
   renderLobby,
   renderNotices,
-  renderRanking,
-  renderRankingTabs,
   renderReady,
   renderResult,
   renderState,
@@ -33,22 +31,31 @@ import {
 } from "./screenFx";
 import { GAME_REGISTRY, isGameId, type GameId } from "./GameRegistry";
 import { GameSession } from "./GameSession";
-import { recordBest } from "./personalBest";
 import { loadNickname, saveNickname } from "./prefs";
-import { fetchBoard, submitScore, takeTicket, type SoloTicket } from "./soloRanking";
+import { createRankingScreen } from "./rankingScreen";
+import { createSoloPlay } from "./soloPlay";
 
 /** 게임 좌표계(논리) 크기. 캔버스 픽셀 크기와 별개다 — 표시 크기는 CSS/DPR이 정하고,
  *  Canvas2DRenderer가 논리->픽셀 변환을 맡는다. 게임 로직은 항상 이 좌표만 본다. */
 const LOGICAL_WIDTH = 800;
 const LOGICAL_HEIGHT = 800; // 정사각형 — 원형 경기장에 맞춤(죽림고수 config와 일치).
 const POSITION_SEND_MS = 100;
-/** 카운트다운 길이(ms). 멀티는 서버가 이 값으로 startTime을 잡고, 솔로는 로컬로 센다. */
-const COUNTDOWN_MS = 3000;
 
 const mainCanvas = byId<HTMLCanvasElement>("game");
 const sideCanvases = Array.from({ length: 3 }, (_, index) => byId<HTMLCanvasElement>(`side-${index}`));
 
-const appState = new StateMachine<AppState, AppEvent>("nickname", APP_TRANSITIONS, ({ to }) => renderState(to));
+const appState = new StateMachine<AppState, AppEvent>("nickname", APP_TRANSITIONS, ({ to }) => {
+  renderState(to);
+  syncRankingHash(to);
+});
+
+/** 순위 화면만 주소에 남긴다 — 링크로 보낼 수 있게. 방 코드 자동 참가(#ABCD)와는
+ *  글자가 겹치지 않고, replaceState라 뒤로 가기 기록을 더럽히지 않는다. */
+function syncRankingHash(state: AppState): void {
+  const want = state === "ranking" ? "#ranking" : "";
+  if (location.hash === want) return;
+  history.replaceState(null, "", want || location.pathname + location.search);
+}
 const net = new NetClient();
 const session = new GameSession({
   mainCanvas,
@@ -99,27 +106,48 @@ window.addEventListener("resize", relayout);
 window.addEventListener("orientationchange", () => setTimeout(relayout, 0));
 
 /** 방에 연결된 상태인가. 서버 연결은 방에 들어갈 때 맺고 나올 때 끊는다
- *  — 앱 시작 시점에는 연결하지 않는다(연습 모드는 서버가 없어도 돌아간다). */
+ *  — 앱 시작 시점에는 연결하지 않는다(혼자 플레이는 서버가 없어도 돌아간다). */
 let inRoom = false;
 let selectedGameId: GameId | null = null;
 let myId: string | null = null;
 let myNickname = "";
 let amHost = false;
 let finalRanks: readonly RankEntry[] = [];
-/** 연습(싱글) 모드 여부. 서버를 한 번도 거치지 않는 라운드다 —
+/** 혼자 플레이 모드 여부. 서버를 한 번도 거치지 않는 라운드다 —
  *  사망·결과·재시작을 전부 로컬에서 처리하고, 네트워크 메시지를 보내지 않는다. */
 let soloMode = false;
-/** 연습 결과표에서 "나"를 가리키는 가짜 id. 서버가 준 실제 id와 절대 겹치지 않게 둔다. */
-const SOLO_ID = "solo";
-/** 이번 연습 판의 랭킹 티켓. null이면 서버 없이 시작한 판이라 기록을 낼 수 없다. */
-let soloTicket: string | null = null;
-/** 연습 판 일련번호. 늦게 도착한 순위 응답이 **다음 판** 결과창에 끼어드는 걸 막는다. */
-let soloRound = 0;
 
 function transition(event: AppEvent): boolean {
   if (!appState.can(event)) return false;
   appState.transition(event);
   return true;
+}
+
+/* 한 판의 흐름과 순위 화면은 각자 자기 상태를 들고 있어 따로 산다(티켓·판 일련번호·
+   보던 게임). main은 그 둘을 앱 상태에 이어 주는 일만 한다. */
+
+const solo = createSoloPlay({
+  session,
+  transition,
+  isResultOpen: () => appState.state === "result",
+  nickname: () => myNickname,
+  onStarted: () => {
+    soloMode = true;
+    finalRanks = [];
+  },
+  setRanks: (ranks) => {
+    finalRanks = ranks;
+  },
+  resetHud: () => updateHud(0, null),
+});
+
+const ranking = createRankingScreen({
+  isOpen: () => appState.state === "ranking",
+  nickname: () => myNickname,
+});
+
+function startSolo(): void {
+  if (selectedGameId) void solo.start(selectedGameId);
 }
 
 function ensureNetwork(): boolean {
@@ -139,8 +167,8 @@ function onLocalDeath(): void {
   deathFx(); // 화면 흔들림 + 붉은 섬광(임팩트).
   play("death"); // 떨어지는 세 음 — 흔들림·섬광과 같은 순간에 얹힌다.
   fallScreen(); // 내 화면이 아래로 떨어진다.
-  // 연습은 죽는 순간이 곧 끝이다. 관전할 남도, 기다릴 서버도 없다.
-  if (soloMode) return showSoloResult(score);
+  // 혼자 하면 죽는 순간이 곧 끝이다. 관전할 남도, 기다릴 서버도 없다.
+  if (soloMode) return solo.finish(selectedGameId, score);
   net.send({ type: "player_died", survivalTicks: score });
   transition("local_death"); // → dying (카드 없음, 낙하만 재생)
   // 낙하가 끝나면 자동으로 관전 전환. 선택 화면은 없다.
@@ -250,30 +278,26 @@ function navTo(target: string | undefined): void {
       : target === "community" ? "nav_community"
         : target === "ranking" ? "nav_ranking"
           : myNickname ? "nav_game_main" : "nav_game_nickname";
+  // ⚠️ 방에 있는 동안은 읽을거리로 새지 않는다. FSM만으로는 못 막는다 — 결과 화면에서
+  //    순위표로 가는 길을 열어 뒀는데(혼자 플레이용), 그 길이 멀티에서도 열려 있으면
+  //    남은 사람들의 다음 판 시작 신호를 놓친 채 방을 떠나게 된다.
+  if (inRoom && target !== "game") return toast("방을 나간 뒤 다른 페이지로 이동할 수 있습니다.");
   if (target === "notice") renderNotices();
   if (!transition(event)) return toast("방을 나간 뒤 다른 페이지로 이동할 수 있습니다.");
-  // 화면이 실제로 열렸을 때만 불러온다 — 방 안에서 막힌 경우에는 부를 필요가 없다.
-  if (target === "ranking") void openRanking(rankingGameId ?? selectedGameId ?? FIRST_GAME_ID);
+  // 화면이 실제로 열렸을 때만 불러온다 — 막힌 경우에는 부를 필요가 없다.
+  // 헤더로 열면 마지막에 보던 게임으로 돌아간다(없으면 고른 게임, 그것도 없으면 첫 게임).
+  if (target === "ranking") ranking.show(ranking.lastViewed() ?? selectedGameId ?? FIRST_GAME_ID);
 }
 
-/* ---- 순위 화면 -------------------------------------------------------------
-   서버에 저장된 혼자 플레이 기록을 게임별로 보여준다. 여는 순간 한 번 불러오고,
-   탭을 바꿀 때마다 다시 불러온다(캐시하지 않는다 — 남이 방금 세운 기록이 안 보이는
-   것보다 매번 한 번 더 부르는 쪽이 낫다). */
+/** 특정 게임의 순위표로 곧장 간다(로비·결과 화면의 곁길). 헤더 내비와 달리
+ *  **보던 게임을 지정**한다 — 방금 한 판의 순위가 궁금한 것이지 지난번에 본
+ *  게임의 순위가 궁금한 게 아니다. */
+function goRanking(gameId: GameId): void {
+  if (!transition("nav_ranking")) return;
+  ranking.show(gameId);
+}
 
 const FIRST_GAME_ID = Object.keys(GAME_REGISTRY)[0] as GameId;
-/** 순위 화면에서 보고 있는 게임. 게임을 고른 적이 있으면 그 게임으로 연다. */
-let rankingGameId: GameId | null = null;
-
-async function openRanking(gameId: GameId): Promise<void> {
-  rankingGameId = gameId;
-  renderRankingTabs(gameId, (id) => void openRanking(id));
-  renderRanking({ state: "loading" }, myNickname);
-  const rows = await fetchBoard(gameId);
-  // 기다리는 동안 다른 탭을 눌렀거나 화면을 떠났으면 늦게 온 목록을 그리지 않는다.
-  if (rankingGameId !== gameId || appState.state !== "ranking") return;
-  renderRanking(rows ? { state: "ready", rows } : { state: "failed" }, myNickname);
-}
 
 document.querySelectorAll<HTMLElement>("[data-nav]").forEach((element) => {
   element.addEventListener("click", (event) => {
@@ -281,6 +305,8 @@ document.querySelectorAll<HTMLElement>("[data-nav]").forEach((element) => {
     navTo(element.dataset.nav);
   });
 });
+byId("lobby-rank-btn").addEventListener("click", () => goRanking(selectedGameId ?? FIRST_GAME_ID));
+byId("result-rank-btn").addEventListener("click", () => goRanking(selectedGameId ?? FIRST_GAME_ID));
 byId("footer-legal").addEventListener("click", () => toast("이용약관·개인정보는 준비 중입니다."));
 byId("gamelist-back").addEventListener("click", () => transition("back_main"));
 
@@ -288,120 +314,10 @@ function selectGame(id: GameId): void {
   selectedGameId = id;
   renderLobby(id);
   transition("select_game");
-  prefetchTicket(id); // 여기서 다음 행동은 대개 "연습"이다 — 미리 받아 둔다.
+  solo.prefetch(id); // 여기서 다음 행동은 대개 "혼자 플레이"다 — 티켓을 미리 받아 둔다.
 }
 
-/* ---- 연습(싱글) 모드 -------------------------------------------------------
-   방도 상대도 없다. 사망·결과·재시작을 전부 로컬에서 처리하고, 게임 코드는 멀티와
-   완전히 동일하다 — 결정론 코어가 시드만 다르게 돌 뿐이다.
-
-   서버와는 딱 두 번, 그것도 **없어도 되는** 방식으로 만난다. 시작할 때 랭킹 티켓을
-   받고(실패하면 로컬 시드로 그냥 논다), 죽으면 기록을 낸다(실패하면 그냥 안 올라간다).
-   그래서 서버가 자고 있어도, 친구가 없어도 게임은 된다. */
-
-/** 라운드 시드. 게임 로직이 아니라 "시드 고르기"라 Math.random을 써도 결정론과 무관하다
- *  (서버도 같은 일을 한다). 이 시드가 정해진 뒤로는 모든 것이 시드와 tick에서만 파생된다.
- *  ⚠️ 이 시드로 시작한 판은 **랭킹에 올라가지 않는다** — 서버가 발급하지 않은 판이라
- *     기록을 묶을 티켓이 없다. */
-function randomSeed(): number {
-  return Math.floor(Math.random() * 0xffffffff) >>> 0;
-}
-
-/** 미리 받아 둔 티켓. **버튼을 누른 뒤에** 서버를 왕복하면 그 시간만큼 판이 늦게 뜬다 —
- *  서버가 죽어 있을 때는 시간 초과를 다 기다려 2초 넘게 멈추는 게 실제로 측정됐다.
- *  그래서 "연습을 누를 것 같은 시점"(게임 선택·결과 화면)에 미리 받아 둔다. 안 쓴 티켓은
- *  버려도 아무 비용이 없다 — 서버는 발급을 저장하지 않고, 쓴 티켓만 기억한다. */
-let pendingTicket: { gameId: GameId; promise: Promise<SoloTicket | null> } | null = null;
-
-function prefetchTicket(gameId: GameId): void {
-  pendingTicket = { gameId, promise: takeTicket(gameId) };
-}
-
-/** 미리 받아 둔 게 있으면 그걸 쓰고, 없으면(다른 게임이거나 이미 썼으면) 지금 받는다. */
-function claimTicket(gameId: GameId): Promise<SoloTicket | null> {
-  const pending = pendingTicket?.gameId === gameId ? pendingTicket.promise : takeTicket(gameId);
-  pendingTicket = null; // 티켓 하나로 한 판. 다음 판은 다시 받는다.
-  return pending;
-}
-
-/** 티켓을 받는 동안 시작 버튼이 다시 눌리는 걸 막는다(왕복이 있어 즉시 시작이 아니다). */
-let soloStarting = false;
-
-async function startSolo(): Promise<void> {
-  const gameId = selectedGameId;
-  if (!gameId || soloStarting) return;
-
-  // 랭킹 도전 판의 시드는 서버가 준다 — 그래야 기록이 이 한 판에 묶이고, 쉬운 시드가
-  // 나올 때까지 다시 뽑을 수 없다. 서버가 자고 있으면 짧게 포기하고 로컬 시드로 논다.
-  soloStarting = true;
-  const ticket = await claimTicket(gameId);
-  soloStarting = false;
-
-  if (!transition("start_solo")) return; // → countdown (기다리는 사이 화면을 떠났을 수 있다)
-  soloMode = true;
-  soloTicket = ticket?.ticket ?? null;
-  soloRound++; // 지난 판의 늦은 순위 응답은 이 시점부터 무시된다.
-  finalRanks = [];
-  session.setRoster([], null); // 남이 없다 → peer도, 관전 뷰도 없다.
-  setAliveHud("혼자 플레이");
-  // 멀티처럼 카운트다운 3초 뒤 시작. 멀티는 서버시각 기준이지만 솔로는 서버가
-  // 없으므로 로컬시각으로 센다. 시드도 여기서 정해 카운트다운/플레이가 공유한다.
-  const seed = ticket?.seed ?? randomSeed();
-  slideInScreen(); // 카운트다운 동안 게임판이 위에서 내려와 자리잡는다.
-  session.showReadyFrame(gameId, seed); // 내려오는 판에 경기장을 미리 그려둔다.
-  // 솔로는 서버가 없으므로 로컬시각으로 센다(멀티는 서버시각 — 재는 방법만 다르다).
-  const start = performance.now();
-  runCountdown(() => COUNTDOWN_MS - (performance.now() - start), () => {
-    if (!transition("countdown_done")) return;
-    resetScreenFx(); // 새 라운드 — 떨어졌던 화면 복구.
-    play("go");
-    updateHud(0, null); // 지난 판 숫자가 첫 프레임에 잠깐 비치지 않게.
-    setAliveHud("혼자 플레이");
-    if (!session.start(gameId, seed, performance.now())) {
-      toast(`게임을 시작할 수 없습니다: ${gameId}`);
-    }
-  });
-}
-
-/** ⚠️ 여기서는 결과음을 내지 않는다 — onLocalDeath가 같은 프레임에 부르므로
- *  사망음 위에 겹친다. 연습에서 판이 끝났다는 신호는 사망음 하나로 충분하다. */
-function showSoloResult(score: number): void {
-  if (!transition("game_over")) return;
-  finalRanks = [{ id: SOLO_ID, rank: 1, nickname: myNickname, survivalTicks: score }];
-  // amHost=true로 넘겨 "다시 하기"를 보이게 한다(연습은 언제나 내가 방장이다).
-  renderResult(finalRanks, SOLO_ID, true, true);
-  // 연습은 순위(1위)가 의미 없다 — 그 자리에 개인 최고기록을 보여준다.
-  if (selectedGameId) {
-    const { best, isNew } = recordBest(selectedGameId, score);
-    byId("result-sub").textContent = `${isNew ? "새 기록! " : ""}최고 ${formatTicks(best)}`;
-  }
-  submitSoloScore(score);
-  // 여기서 가장 흔한 다음 행동은 "다시 하기"다 — 결과를 보는 동안 다음 티켓을 받아 둔다.
-  if (selectedGameId) prefetchTicket(selectedGameId);
-  setAliveHud("", true);
-  session.stopRound();
-}
-
-/** 랭킹 도전 판이었다면 기록을 낸다.
- *
- *  ⚠️ 기다리지 않는다. 결과창은 이미 떠 있고, 전체 등수는 도착하는 대로 뒤에 붙는다 —
- *     서버 응답 때문에 결과창이 늦게 뜨면 죽은 순간과 화면이 어긋난다. */
-function submitSoloScore(score: number): void {
-  const ticket = soloTicket;
-  soloTicket = null; // 티켓은 일회용 — 같은 판에서 두 번 내지 않는다.
-  if (!ticket || !myNickname) return;
-
-  const round = soloRound;
-  void (async () => {
-    const result = await submitScore(ticket, myNickname, score);
-    // 늦게 왔다. 그새 다음 판이 시작했으면 지금 결과창은 남의 판 것이다.
-    if (!result || result.rank === null || round !== soloRound) return;
-    if (appState.state !== "result") return;
-    byId("result-sub").textContent += ` · 전체 ${result.rank}위`;
-  })();
-}
-
-byId("solo-btn").addEventListener("click", () => void startSolo());
+byId("solo-btn").addEventListener("click", startSolo);
 
 async function enterRoom(code: string): Promise<void> {
   inRoom = await joinRoom(net, code, myNickname);
@@ -486,8 +402,8 @@ function showResult(ranks: readonly RankEntry[]): void {
   if (!appState.can("game_over")) return;
   clearTimeout(fallTimer); // 낙하 중 게임이 끝났으면 관전 전환을 취소한다.
   finalRanks = ranks;
-  // 판이 끝났다는 마침표. 멀티에서만 낸다 — 연습은 죽는 순간이 곧 결과라
-  // 사망음과 같은 프레임에 겹쳐 둘 다 뭉개진다(showSoloResult 참조).
+  // 판이 끝났다는 마침표. 멀티에서만 낸다 — 혼자 할 때는 죽는 순간이 곧 결과라
+  // 사망음과 같은 프레임에 겹쳐 둘 다 뭉개진다(soloPlay.finish 참조).
   play("result");
   renderResult(ranks, myId, amHost, soloMode);
   setAliveHud("", true);
@@ -496,8 +412,8 @@ function showResult(ranks: readonly RankEntry[]): void {
 }
 
 byId("again-btn").addEventListener("click", () => {
-  // 연습: 대기실이 없으므로 새 시드로 곧장 다시 시작한다. 멀티: 호스트가 전원을 대기실로.
-  if (soloMode) return void startSolo();
+  // 혼자: 대기실이 없으므로 새 시드로 곧장 다시 시작한다. 멀티: 호스트가 전원을 대기실로.
+  if (soloMode) return startSolo();
   net.send({ type: "return_to_ready" });
 });
 
@@ -518,5 +434,9 @@ initAudio(); // 저장된 소리 설정을 읽는다. AudioContext는 첫 클릭
 initSoundShell(); // 소리 토글 버튼 + 클릭음 위임(앱 상태와 무관한 껍데기).
 
 // 시작 시점에는 서버에 연결하지 않는다. 연결은 방에 들어갈 때 맺는다
-// — 덕분에 서버가 자고 있어도 연습 모드는 그대로 돌아간다.
+// — 덕분에 서버가 자고 있어도 혼자 플레이는 그대로 돌아간다.
 renderState(appState.state);
+
+// #ranking으로 들어오면 순위표부터 연다. 닉네임을 정하기 전에도 볼 수 있다 —
+// 남이 보낸 링크를 받은 사람에게 이름부터 지으라고 할 이유가 없다.
+if (location.hash.slice(1).toLowerCase() === "ranking") navTo("ranking");

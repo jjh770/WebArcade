@@ -137,6 +137,8 @@ WebArcade/
 │     ├─ screenFx.ts       # 어떻게 움직일까 — 낙하·관전 전환·디버프·탄환
 │     ├─ playLayout.ts     # 캔버스 표시 크기 배분(여백·조작 영역은 CSS가 정본)
 │     ├─ GameSession.ts    # 한 라운드의 게임 인스턴스와 러너
+│     ├─ soloPlay.ts       # 혼자 플레이 한 판(티켓·카운트다운·결과·기록 제출)
+│     ├─ rankingScreen.ts  # 순위 화면 내용 채우기(전이는 main 몫)
 │     ├─ peerViews.ts      # 남들의 상태 + 누구를 어느 화면에 띄우는가
 │     ├─ touchControls.ts  # 판 밖 조작면 일체(입력 소스 + 세로 예산)
 │     ├─ GameRegistry.ts   # ⭐ 새 게임은 여기에만 등록
