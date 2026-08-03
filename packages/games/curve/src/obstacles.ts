@@ -72,7 +72,7 @@ export function drawObstacle(r: IRenderer, ob: Obstacle, color: string, segmentW
 }
 
 /** 점 (px,py)에서 선분 (x1,y1)-(x2,y2)까지 거리의 제곱. sqrt 회피용. */
-export function segPointDist2(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+function segPointDist2(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1;
   const dy = y2 - y1;
   const lenSq = dx * dx + dy * dy;

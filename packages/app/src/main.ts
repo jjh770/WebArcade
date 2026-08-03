@@ -60,11 +60,14 @@ const session = new GameSession({
   touchHint: byId("touch-zones"),
   stick: byId("stick"),
   stickKnob: byId("stick-knob"),
+  dpad: byId("dpad"),
   logicalWidth: LOGICAL_WIDTH,
   logicalHeight: LOGICAL_HEIGHT,
   onLocalDeath,
   onSideSlot: setSideSlot,
   onHud: updateHud,
+  // 조작 영역이 생기거나 사라지면 판이 쓸 세로가 달라진다 — 판 크기를 다시 잡는다.
+  onControlsChange: () => relayout(),
   // 서버로 조준 발사를 보내고, 내 화면에는 그 관전창으로 탄환이 날아가 명중하는 연출을 건다.
   onFire: (kind, durationMs, targetId, slotIndex) => {
     net.send({ type: "fire_effect", kind, durationMs, targetId });
@@ -263,7 +266,10 @@ document.querySelectorAll<HTMLElement>("[data-nav]").forEach((element) => {
    켜는 클릭은 이 줄에서 소리가 나고(켜졌음을 귀로 확인), 끄는 클릭은 조용하다.
    확인음을 따로 만들 필요가 없다. */
 document.addEventListener("click", (event) => {
-  if ((event.target as HTMLElement | null)?.closest("button")) play("click");
+  const button = (event.target as HTMLElement | null)?.closest("button");
+  // ⚠️ 방향키 버튼은 뺀다. UI 버튼이 아니라 조작이라 누를 때마다 클릭음이 나면
+  //    한 판 내내 딸깍거린다 — 게임 소리(부서짐)가 그 밑에 묻힌다.
+  if (button && !button.closest("#dpad")) play("click");
 });
 
 const soundToggle = byId<HTMLButtonElement>("sound-toggle");

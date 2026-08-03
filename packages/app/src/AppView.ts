@@ -109,7 +109,7 @@ export function toast(message: string): void {
   toastTimer = window.setTimeout(() => element.classList.remove("show"), 3000);
 }
 
-export function escapeHtml(value: string): string {
+function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] as string,
   );

@@ -20,8 +20,6 @@ import { mergeInputs } from "./InputSource";
  *  좌표는 이 매핑이 붙은 요소 기준이다 — 게임판일 수도, 조이스틱 위젯일 수도 있다. */
 export type TouchMapper = (nx: number, ny: number) => Partial<InputState>;
 
-export type Point = { x: number; y: number };
-
 /** 좌/우 절반. 커브 피버처럼 좌우로만 꺾는 게임용. */
 export const splitLeftRight: TouchMapper = (nx) => (nx < 0.5 ? { left: true } : { right: true });
 

@@ -1,12 +1,32 @@
-import { Canvas2DRenderer, CompositeInput, GameRunner, InputManager, TouchInput, type GameView } from "@arcade/core";
+import {
+  ButtonInput,
+  Canvas2DRenderer,
+  CompositeInput,
+  GameRunner,
+  InputManager,
+  TouchInput,
+  type Direction,
+  type DirectionButton,
+  type GameView,
+} from "@arcade/core";
 import type { IGame, PeerSnapshot, PlayerPublic, SpawnContext } from "@arcade/shared";
 import { isSoundId, play } from "./audio";
 import { GAME_REGISTRY, isGameId, type GameEntry, type GameId } from "./GameRegistry";
 import { TouchHint, hasCoarsePointer, shouldShowHint } from "./touchHint";
 import { Joystick } from "./joystick";
-import { TOUCH_SCHEMES } from "./touchSchemes";
+import { TOUCH_SCHEMES, type TouchScheme } from "./touchSchemes";
 
 const SIDE_SLOTS = 3;
+
+/** 방향키 버튼의 방향은 **마크업이 정본**이다(`data-dir`). 여기서 이름을 다시 적으면
+ *  버튼을 하나 옮길 때 두 곳을 맞춰야 한다. 모르는 값은 조용히 버린다. */
+const DIRECTIONS = ["up", "down", "left", "right"] as const;
+function readDirectionButtons(root: HTMLElement): DirectionButton[] {
+  return [...root.querySelectorAll<HTMLElement>("[data-dir]")].flatMap((element) => {
+    const dir = element.dataset.dir as Direction;
+    return DIRECTIONS.includes(dir) ? [{ element, direction: dir }] : [];
+  });
+}
 
 type Peer = { nickname: string; alive: boolean; x: number; y: number };
 type MainViewMode = "self" | "spectating";
@@ -19,6 +39,8 @@ export type GameSessionOptions = {
   /** 조이스틱 위젯(뿌리 / 노브). 사방으로 움직이는 게임에서만 뜬다. */
   stick: HTMLElement;
   stickKnob: HTMLElement;
+  /** 방향키 버튼 뿌리. 격자를 한 칸씩 옮기는 게임에서만 뜬다. */
+  dpad: HTMLElement;
   /** 게임 좌표계 크기. 화면 크기와 무관하게 고정 — 게임은 항상 이 좌표로만 그린다. */
   logicalWidth: number;
   logicalHeight: number;
@@ -30,6 +52,9 @@ export type GameSessionOptions = {
    *  slotIndex는 그 대상이 떠 있는 관전 슬롯 번호 — 탄환 연출이 날아갈 목적지다.
    *  타깃이 없으면(혼자 남음 등) 아예 호출되지 않는다. */
   onFire: (kind: string, durationMs: number, targetId: string, slotIndex: number) => void;
+  /** 조작 영역의 유무가 바뀌어 **판이 쓸 세로가 달라졌다.** 판 크기를 다시 잡아야 한다
+   *  — 세션은 자기가 캔버스를 얼마나 크게 쓸지 정하지 않는다(레이아웃은 앱 몫). */
+  onControlsChange: () => void;
 };
 
 /** 한 라운드의 게임 인스턴스, 입력, 관전 대상과 멀티 뷰를 소유한다. */
@@ -40,11 +65,17 @@ export class GameSession {
   // — 요소를 바꿔 끼우는 것보다 리스너 수명이 단순하다.
   private readonly touchCanvas: TouchInput;
   private readonly touchStick: TouchInput;
+  /** 방향키 버튼. 좌표를 방향으로 바꾸는 게 아니라 버튼 하나가 방향 하나다. */
+  private readonly buttons: ButtonInput;
   private readonly input: CompositeInput;
   private readonly hint: TouchHint;
   private readonly joystick: Joystick;
   /** 이번 게임에 터치 조작이 있는가 — 안내를 띄울지 판단에만 쓴다. */
   private touchable = false;
+  /** 이 게임이 쓰는 판 밖 조작 방식. 마우스만 있는 기기면 null. */
+  private controlScheme: TouchScheme | null = null;
+  /** 지금 조작이 먹히는가. 관전 중이면 false — 죽은 뒤엔 눌러도 아무 일이 없다. */
+  private controlsUsable = false;
   private readonly mainRenderer: Canvas2DRenderer;
   private readonly sideRenderers: Canvas2DRenderer[];
   private game: IGame | null = null;
@@ -63,7 +94,8 @@ export class GameSession {
     // 판 터치는 메인 캔버스 위에서만 받는다 — 관전 슬롯이나 HUD를 눌러 꺾이면 안 된다.
     this.touchCanvas = new TouchInput(options.mainCanvas);
     this.touchStick = new TouchInput(options.stick);
-    this.input = new CompositeInput(this.keyboard, this.touchCanvas, this.touchStick);
+    this.buttons = new ButtonInput(readDirectionButtons(options.dpad));
+    this.input = new CompositeInput(this.keyboard, this.touchCanvas, this.touchStick, this.buttons);
     this.hint = new TouchHint(options.touchHint, options.mainCanvas);
     this.joystick = new Joystick(options.stick, options.stickKnob);
     this.mainRenderer = new Canvas2DRenderer(options.mainCanvas, w, h);
@@ -100,6 +132,10 @@ export class GameSession {
   showReadyFrame(gameId: string, seed: number): boolean {
     if (!isGameId(gameId)) return false;
     this.ensureRunner(gameId);
+    // 조작을 먼저 세운다 — 판 크기가 조작 영역에 달렸으므로, 그리기 전에 자리가 정해져야
+    // 카운트다운 동안 내려오는 판이 곧바로 제 크기다.
+    this.controlsUsable = true;
+    this.applyControls();
     this.runner?.setViews([{ renderer: this.mainRenderer, target: null }]);
     this.runner?.prime(seed, this.selfContext());
     // 조작 안내는 카운트다운 동안 판 위에 깔린다(숫자 뒤). start()에서 걷힌다.
@@ -124,6 +160,10 @@ export class GameSession {
     this.spectateId = null;
     this.sideShown = [];
     this.roundActive = true;
+    // ⚠️ ensureRunner는 같은 게임이면 일찍 빠져나간다. 조작 상태를 거기서만 세우면
+    //    관전으로 걷힌 조작이 "다시 하기"에서 안 돌아온다.
+    this.controlsUsable = true;
+    this.applyControls();
     this.runner?.start(seed, epochPerformanceMs, this.selfContext());
     this.syncGamePeers();
     this.rebuildViews();
@@ -136,6 +176,10 @@ export class GameSession {
     this.roundActive = false;
     this.runner?.stop();
     this.hint.hide();
+    // 라운드가 끝나면 조작면도 걷는다. CSS가 body.playing으로 이미 감추지만,
+    // 세로 예산 클래스는 남아 다음 라운드까지 판을 괜히 작게 잡는다.
+    this.controlsUsable = false;
+    this.applyControls();
   }
 
   leaveRoom(): void {
@@ -214,6 +258,10 @@ export class GameSession {
   }
 
   watchRandomSurvivor(): boolean {
+    // 죽은 뒤의 조작면은 눌러도 아무 일이 없다. 화면만 먹고 관전 힌트와도 겹치므로
+    // 걷는다 — 그만큼 세로가 남아 관전 화면이 커진다.
+    this.controlsUsable = false;
+    this.applyControls();
     this.pickMainSpectate();
     if (!this.spectateId) return false;
     this.viewMode = "spectating";
@@ -242,6 +290,28 @@ export class GameSession {
       .map((player) => player.id);
   }
 
+  /** 판 밖 조작면을 지금 상태에 맞춘다. 띄울지 말지는 두 가지가 함께 정한다:
+   *  **이 게임이 쓰는 방식**(controlScheme, 마우스 기기면 null)과
+   *  **지금 조작이 먹히는가**(controlsUsable, 관전 중이면 false).
+   *
+   *  뜨면 body 클래스가 붙고 CSS가 그만큼 #play의 아래 패딩을 키운다. 레이아웃이 그
+   *  패딩을 읽어 판을 줄이므로 판과 조작이 세로를 나눠 갖는다.
+   *  ⚠️ 클래스가 바뀌었으면 반드시 다시 재야 한다(onControlsChange). 안 그러면 다음
+   *     창 크기 변경까지 예전 크기의 판이 남는다. */
+  private applyControls(): void {
+    const scheme = this.controlsUsable ? this.controlScheme : null;
+    const stick = scheme === "joystick";
+    const buttons = scheme === "buttons";
+    this.joystick.setVisible(stick);
+    this.options.dpad.hidden = !buttons;
+    const changed =
+      document.body.classList.contains("controls-stick") !== stick ||
+      document.body.classList.contains("controls-buttons") !== buttons;
+    document.body.classList.toggle("controls-stick", stick);
+    document.body.classList.toggle("controls-buttons", buttons);
+    if (changed) this.options.onControlsChange();
+  }
+
   private ensureRunner(gameId: GameId): void {
     if (this.activeGameId === gameId) return;
     this.runner?.stop();
@@ -252,7 +322,10 @@ export class GameSession {
     // 이 게임이 쓰는 조작면에만 매핑을 끼운다. 나머지 면은 눌러도 아무 일이 없다.
     this.touchCanvas.setMapper(scheme?.surface === "canvas" ? scheme.map : null);
     this.touchStick.setMapper(scheme?.surface === "stick" ? scheme.map : null);
-    this.joystick.setVisible(scheme?.surface === "stick" && hasCoarsePointer());
+    // 손가락 기기에서만 띄운다. 마우스만 있는 화면에 조작 요소가 뜨면 방향키를
+    // 쓰는 사람에게 방해일 뿐 아니라, 세로 예산까지 축내 판이 괜히 작아진다.
+    // (실제로 띄우는 건 applyControls — 관전 중인지도 함께 봐야 하기 때문이다.)
+    this.controlScheme = hasCoarsePointer() ? (entry.touch ?? null) : null;
     this.hint.setScheme(entry.touch ?? null);
     this.touchable = entry.touch !== undefined;
     this.game = entry.factory();

@@ -4,26 +4,33 @@
    게임은 방식의 **이름 하나만** 고른다(GameRegistry). 매핑·조작면·안내가
    여기 한 줄로 묶여 있어 "좌우로 조작하는데 끌라고 안내"하는 어긋난 조합이
    애초에 표현되지 않는다.
+
+   조작면은 세 가지고, 그중 둘만 좌표를 방향으로 바꾼다:
+   - canvas / stick : 누른 **자리**가 방향이다 → TouchMapper가 필요하다.
+   - buttons        : 누른 **버튼**이 방향이다 → 매핑이라는 개념이 없다.
+   그래서 SchemeSpec은 판별 유니온이다. buttons에 map을 다는 실수가 타입에서 막힌다.
    ============================================================ */
 
 import { joystick8, splitLeftRight, type TouchMapper } from "@arcade/core";
 
-export type TouchScheme = "halves" | "joystick";
+export type TouchScheme = "halves" | "joystick" | "buttons";
 
-type SchemeSpec = {
-  map: TouchMapper;
-  /** 어디를 만지는가. canvas = 게임판 자체, stick = 판 밖의 조이스틱 위젯. */
-  surface: "canvas" | "stick";
-  /** 카운트다운 동안 판 위에 안내 오버레이를 깔아 화면을 어둡게 덮는가.
-   *  덮는 방식은 카운트다운의 반투명 막을 걷어도 숫자가 읽힌다(자기가 막을 까니까).
-   *  안 덮는 방식(조이스틱)은 막을 그대로 둬야 한다 — 걷으면 숫자가 밝은 게임판
-   *  위에 1.3:1로 남아 안 보인다. */
-  dimsBoard: boolean;
-};
+/** 카운트다운 동안 판 위에 안내 오버레이를 깔아 화면을 어둡게 덮는가.
+ *  덮는 방식은 카운트다운의 반투명 막을 걷어도 숫자가 읽힌다(자기가 막을 까니까).
+ *  안 덮는 방식(위젯·버튼)은 막을 그대로 둬야 한다 — 걷으면 숫자가 밝은 게임판
+ *  위에 1.3:1로 남아 안 보인다. */
+type SchemeSpec =
+  | { surface: "canvas" | "stick"; map: TouchMapper; dimsBoard: boolean }
+  | { surface: "buttons"; dimsBoard: boolean };
 
 export const TOUCH_SCHEMES: Record<TouchScheme, SchemeSpec> = {
   // 커브 피버: 좌우로만 꺾으므로 판을 반으로 나눠 누르고 있는다.
   halves: { map: splitLeftRight, surface: "canvas", dimsBoard: true },
-  // 죽림고수: 사방으로 움직이므로 조이스틱. 판 위에서 조작하면 손가락이 화살을 가린다.
+  // 죽림고수: 사방으로 연속 이동이라 조이스틱. 판 위에서 조작하면 손가락이 화살을 가린다.
   joystick: { map: joystick8, surface: "stick", dimsBoard: false },
+  // 무너지는 바닥: 격자를 한 칸씩 옮기므로 방향키 버튼 넷.
+  // ⚠️ 미는 위젯(조이스틱)으로 하지 않는다. 대각선 구간에서 두 방향이 동시에
+  //    눌리는데 격자는 한 칸만 가고, 무엇보다 위젯이 세로를 크게 먹어 폰 세로
+  //    화면에서 판을 덮는다. 버튼은 자기 크기가 곧 표적이라 경계가 눈에 보인다.
+  buttons: { surface: "buttons", dimsBoard: false },
 };

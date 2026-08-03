@@ -50,7 +50,8 @@ export const GAME_REGISTRY = {
     description: floorConfig.description,
     scoreDirection: floorConfig.scoreDirection,
     factory: () => new FloorGame(),
-    // 조이스틱은 8방향이라 4방향 격자와 결이 안 맞는다. 폰 조작은 별도 단계에서.
+    // 격자를 한 칸씩 옮기므로 미는 위젯이 아니라 방향키 버튼(touchSchemes 참조).
+    touch: "buttons",
   },
 } satisfies Record<string, GameEntry>;
 
