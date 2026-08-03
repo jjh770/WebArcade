@@ -1,11 +1,10 @@
-{
+﻿{
   "name": "@arcade/game-floor",
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
   "dependencies": {
-    "@arcade/shared": "*",
-    "@arcade/core": "*"
+    "@arcade/shared": "*"
   },
   "scripts": {
     "typecheck": "tsc -b"

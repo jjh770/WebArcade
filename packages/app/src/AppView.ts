@@ -1,7 +1,15 @@
+﻿/* ============================================================
+   AppView — 상태에 맞는 화면과 카드 내용을 그린다
+   ------------------------------------------------------------
+   "무엇을 보여줄까"만 맡는다. 같은 DOM에 시간축을 얹는 연출(낙하·관전 전환·
+   디버프·탄환)은 screenFx.ts, 캔버스 크기 배분은 playLayout.ts에 있다.
+   ============================================================ */
+
 import type { PlayerPublic, RankEntry } from "@arcade/shared";
 import { formatTicks } from "@arcade/shared";
 import { GAME_REGISTRY, type GameId } from "./GameRegistry";
 import { PLAY_STATES, type AppState } from "./AppFlow";
+import { byId } from "./dom";
 import { NOTICES } from "./siteContent";
 import { newcomers, staggerIndex } from "./stagger";
 
@@ -17,12 +25,6 @@ let toastTimer = 0;
 // 직전 렌더의 명단과 비교해야만 알 수 있어 여기 남겨 둔다(방이 바뀌면 버린다).
 let readyCode = "";
 let readyIds: ReadonlySet<string> = new Set();
-
-export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
-  const element = document.getElementById(id);
-  if (!element) throw new Error(`#${id} 요소를 찾을 수 없습니다.`);
-  return element as T;
-};
 
 export function renderState(state: AppState): void {
   let screen: ScreenName | null = null;
@@ -45,60 +47,6 @@ export function renderState(state: AppState): void {
   document.querySelectorAll<HTMLElement>("#site-header .site-nav button").forEach((button) => {
     button.classList.toggle("on", button.dataset.nav === navKey);
   });
-}
-
-/* ---- 플레이 영역 레이아웃 -------------------------------------------------
-   메인 캔버스의 **표시 크기(CSS px)** 를 여기서 정한다. 캔버스 해상도(백킹스토어)는
-   Canvas2DRenderer가 이 크기를 읽어 DPR만큼 맞춘다 — 소유권이 갈려 있다.
-   게임 좌표계(논리 800x800, 정사각형)는 화면 크기와 무관하게 불변이다. */
-
-/** 이 폭 미만이면 관전 칼럼을 접고 메인 화면에 공간을 전부 준다(모바일·좁은 창). */
-const NARROW_VIEWPORT = 900;
-/** 관전 칼럼 폭 = 뷰포트 폭의 이 비율, 단 [min, max]로 제한. */
-const SIDE_WIDTH_RATIO = 0.18;
-const SIDE_WIDTH_MIN = 150;
-const SIDE_WIDTH_MAX = 260;
-
-/** 플레이 영역 전체 레이아웃. 각 캔버스의 **표시 크기(CSS px)** 만 정한다.
- *  - 관전 칼럼: 뷰포트에 비례(좁으면 아예 접음). 메인보다 먼저 정해야 남는 폭이 나온다.
- *  - 메인: 남는 공간에서 게임 비율(aspect)을 유지하는 최대 사각형(레터박스).
- *  캔버스 해상도는 이 크기를 읽어 Canvas2DRenderer가 DPR에 맞춘다. */
-export function layoutPlayArea(aspect: number): void {
-  const narrow = window.innerWidth < NARROW_VIEWPORT;
-  const play = byId("play");
-  play.classList.toggle("narrow", narrow);
-
-  // 여백·간격은 CSS가 정본이다. 폰에서 여백을 줄이거나 노치를 피하려고 safe-area를
-  // 더해도 여기서 다시 읽으므로 두 곳을 맞출 필요가 없다.
-  // (창 크기가 바뀔 때만 재는 것이라 매 프레임 측정이 아니다.)
-  const style = getComputedStyle(play);
-  const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-  const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-  const gap = parseFloat(style.columnGap) || 0;
-
-  // 접히면 칼럼이 display:none → flex gap도 사라지므로 계산에서 함께 뺀다.
-  const sideWidth = narrow
-    ? 0
-    : clamp(window.innerWidth * SIDE_WIDTH_RATIO, SIDE_WIDTH_MIN, SIDE_WIDTH_MAX);
-  const sideViews = byId("side-views");
-  sideViews.style.setProperty("--side-w", `${Math.floor(sideWidth)}px`);
-  sideViews.style.setProperty("--side-h", `${Math.floor(sideWidth / aspect)}px`);
-
-  const availableWidth = window.innerWidth - padX - sideWidth - (narrow ? 0 : gap);
-  const availableHeight = window.innerHeight - padY;
-  let width = Math.max(1, availableWidth);
-  let height = width / aspect;
-  if (height > availableHeight) {
-    height = Math.max(1, availableHeight);
-    width = height * aspect;
-  }
-  const game = byId<HTMLCanvasElement>("game");
-  game.style.width = `${Math.floor(width)}px`;
-  game.style.height = `${Math.floor(height)}px`;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 export function toast(message: string): void {
@@ -237,173 +185,6 @@ export function setCountdown(number: number): void {
 export function setSideSlot(index: number, visible: boolean, label: string): void {
   byId(`slot-${index}`).classList.toggle("on", visible);
   if (visible) byId(`label-${index}`).textContent = label;
-}
-
-/* ---- 메인 화면 전환 연출 --------------------------------------------------
-   전부 메인 캔버스(#game) 하나에 건다. 살아있는 남의 사이드 뷰는 건드리지 않는다. */
-
-/** 죽는 순간: 내 화면이 아래로 떨어진다. */
-export function fallScreen(): void {
-  const el = byId("game");
-  el.classList.remove("slide-in");
-  el.classList.add("fallen");
-}
-
-/** 사망 임팩트: 화면을 짧게 흔들고 붉은 섬광을 번쩍인다(순수 시각). 낙하와 함께 부른다.
- *  같은 클래스를 즉시 다시 붙여도 재생되도록 리플로우로 애니메이션을 재시작시킨다. */
-export function deathFx(): void {
-  const play = byId("play");
-  const flash = byId("death-flash");
-  play.classList.remove("shake");
-  flash.classList.remove("flash");
-  void play.offsetWidth; // 리플로우 강제 — 연달아 죽어도 매번 재생된다.
-  play.classList.add("shake");
-  flash.classList.add("flash");
-}
-
-/** 관전 전환: 남의 화면이 위에서 미끄러져 들어온다. 낙하가 끝난 뒤 호출한다.
- *  같은 캔버스를 재사용하므로 클래스를 지웠다가 리플로우로 애니메이션을 재시작시킨다. */
-export function slideInScreen(): void {
-  const el = byId("game");
-  el.classList.remove("fallen");
-  el.classList.remove("slide-in");
-  void el.offsetWidth; // 리플로우 강제 — 클래스를 즉시 다시 붙여도 애니메이션이 재생된다.
-  el.classList.add("slide-in");
-}
-
-/** 관전 대상을 넘길 때: 방향(+1 다음 / -1 이전)에 맞춰 좌우에서 밀려 들어온다. */
-export function swapSpectateScreen(direction: number): void {
-  const el = byId("game");
-  el.classList.remove("swap-l", "swap-r");
-  void el.offsetWidth; // 리플로우 — 같은 클래스를 즉시 다시 붙여도 애니메이션이 재생된다.
-  el.classList.add(direction > 0 ? "swap-r" : "swap-l");
-}
-
-/* ---- 피격 디버프 연출(victim 화면) ---------------------------------------
-   남의 발사에 맞으면 "무엇에 맞았는지" 큰 배너로 알리고, 시각계 디버프(blur·shake·
-   cloud)는 내 메인 화면에 직접 건다. 조작계(invert·sluggish)는 게임이 머리에 표시하고
-   여기선 배너만 띄운다. 전부 순수 시각/CSS라 게임 로직·결정론과 무관하다. */
-const DEBUFF_META: Record<string, { icon: string; label: string }> = {
-  // 게임마다 뒤집는 축이 다르다(커브=좌우 회전, 죽림고수=상하좌우) → 배너는 축을 안 박는다.
-  invert: { icon: "⇄", label: "조작 반전" },
-  sluggish: { icon: "🐌", label: "조작 둔화" },
-  blur: { icon: "🌫️", label: "시야 흐림" },
-  shake: { icon: "🌀", label: "화면 흔들림" },
-  cloud: { icon: "☁️", label: "시야 가림" },
-};
-let debuffTimer = 0;
-
-/** 시각 디버프 클래스/요소를 모두 내린다(라운드 리셋·중복 피격·정리용). */
-function clearDebuffFx(): void {
-  clearTimeout(debuffTimer);
-  byId("game").classList.remove("debuff-blur");
-  byId("play").classList.remove("debuff-shake");
-  byId("debuff-cloud").classList.remove("on");
-  byId("debuff-banner").classList.remove("on");
-}
-
-/** 남의 발사에 맞았다. kind에 맞는 배너 + 시각 디버프를 durationMs 동안 건다. */
-export function debuffFx(kind: string, durationMs: number): void {
-  const meta = DEBUFF_META[kind];
-  if (!meta) return; // 모르는 디버프는 무시(옛 클라 안전)
-  clearDebuffFx();
-
-  // 배너 — 무엇에 맞았는지 화면 중앙에 크게 announce(짧게, 지속시간과 무관).
-  const banner = byId("debuff-banner");
-  banner.textContent = `${meta.icon} ${meta.label}!`;
-  void banner.offsetWidth; // 리플로우 — 연달아 맞아도 매번 재생.
-  banner.classList.add("on");
-
-  // 시각계 디버프 본체 — durationMs 동안 유지하고 타이머로 내린다.
-  if (kind === "blur") {
-    byId("game").classList.add("debuff-blur");
-  } else if (kind === "shake") {
-    byId("play").classList.add("debuff-shake");
-  } else if (kind === "cloud") {
-    const cloud = byId("debuff-cloud");
-    cloud.style.setProperty("--dur", `${durationMs}ms`);
-    void cloud.offsetWidth;
-    cloud.classList.add("on");
-  }
-  debuffTimer = window.setTimeout(clearDebuffFx, durationMs);
-}
-
-/* ---- 발사 연출(shooter 화면) ---------------------------------------------
-   스릴 게이지를 채워 쐈을 때 **발사한 사람 화면에만** 보이는 연출. 내 메인 화면
-   중앙에서 조준한 우측 관전창까지 탄환이 날아가 명중한다 — "저 사람을 맞혔다"를
-   보여주는 게 목적이라 실제 디버프 적용(서버 릴레이)과는 완전히 별개다. */
-const BULLET_FLIGHT_MS = 420;
-const SLOT_HIT_MS = 500;
-/** 아직 날아가는 중인 탄환들. 라운드가 끝나면 도착 전에 취소해야 한다. */
-const bulletsInFlight = new Set<Animation>();
-
-/** 명중: 맞은 관전창이 번쩍인다. */
-function slotHitFx(slot: HTMLElement): void {
-  slot.classList.remove("hit");
-  void slot.offsetWidth; // 리플로우 — 연달아 맞혀도 매번 재생.
-  slot.classList.add("hit");
-  window.setTimeout(() => slot.classList.remove("hit"), SLOT_HIT_MS);
-}
-
-/** 내가 쐈다. 메인 화면 중앙 → slotIndex번 관전창으로 탄환을 날리고 명중시킨다.
- *  좌표는 발사 때마다 레이아웃에서 직접 읽는다(창 크기·슬롯 개수가 계속 변한다). */
-export function bulletFx(slotIndex: number, kind: string): void {
-  const slot = document.getElementById(`slot-${slotIndex}`);
-  if (!slot) return;
-  const to = slot.getBoundingClientRect();
-  if (to.width <= 0 || to.height <= 0) return; // 좁은 화면 = 관전 칼럼이 접힘 → 쏠 곳이 없다
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    slotHitFx(slot); // 모션 민감 사용자에겐 날리지 않고 명중만 알린다
-    return;
-  }
-
-  const from = byId("game").getBoundingClientRect();
-  const originX = from.left + from.width / 2;
-  const originY = from.top + from.height / 2;
-  const dx = to.left + to.width / 2 - originX;
-  const dy = to.top + to.height / 2 - originY;
-
-  const bullet = document.createElement("div");
-  bullet.className = "fire-bullet";
-  bullet.textContent = DEBUFF_META[kind]?.icon ?? "✦"; // 무슨 디버프를 쐈는지 탄환이 들고 간다
-  bullet.style.left = `${originX}px`;
-  bullet.style.top = `${originY}px`;
-  document.body.appendChild(bullet);
-
-  const flight = bullet.animate(
-    [
-      { transform: "translate(-50%, -50%) scale(.5) rotate(0deg)", opacity: 0.35 },
-      {
-        transform: `translate(calc(${dx}px - 50%), calc(${dy}px - 50%)) scale(1.15) rotate(320deg)`,
-        opacity: 1,
-      },
-    ],
-    { duration: BULLET_FLIGHT_MS, easing: "cubic-bezier(.45,0,.75,.6)" },
-  );
-  bulletsInFlight.add(flight);
-  flight.onfinish = () => {
-    bulletsInFlight.delete(flight);
-    bullet.remove();
-    // 날아가는 동안 그 슬롯이 비었으면(상대 사망 등) 명중 연출은 생략한다.
-    if (slot.classList.contains("on")) slotHitFx(slot);
-  };
-  flight.oncancel = () => {
-    bulletsInFlight.delete(flight);
-    bullet.remove();
-  };
-}
-
-/** 날아가던 탄환을 즉시 치운다(라운드 종료·로비 복귀). */
-function clearBullets(): void {
-  for (const flight of [...bulletsInFlight]) flight.cancel(); // oncancel이 요소를 지운다
-  bulletsInFlight.clear();
-}
-
-/** 새 라운드·로비 복귀 등 연출을 모두 지우고 캔버스를 기본 상태로. */
-export function resetScreenFx(): void {
-  byId("game").classList.remove("fallen", "slide-in", "swap-l", "swap-r");
-  clearDebuffFx();
-  clearBullets();
 }
 
 function badge(text: string, className: string): HTMLElement {

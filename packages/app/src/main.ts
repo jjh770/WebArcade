@@ -2,11 +2,9 @@ import { NetClient, StateMachine } from "@arcade/core";
 import type { RankEntry, ServerMessage } from "@arcade/shared";
 import { formatTicks } from "@arcade/shared";
 import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
-import { initAudio, isMuted, play, setMuted } from "./audio";
+import { initAudio, play } from "./audio";
 import { initBgDecor } from "./bgDecor";
 import {
-  byId,
-  layoutPlayArea,
   renderGameList,
   renderLobby,
   renderNotices,
@@ -14,17 +12,23 @@ import {
   renderResult,
   renderState,
   setAliveHud,
-  deathFx,
-  debuffFx,
-  bulletFx,
-  fallScreen,
-  slideInScreen,
-  swapSpectateScreen,
-  resetScreenFx,
-  setCountdown,
   setSideSlot,
   toast,
 } from "./AppView";
+import { cancelCountdown, runCountdown } from "./countdown";
+import { byId } from "./dom";
+import { layoutPlayArea } from "./playLayout";
+import { ROOM_CODE_PATTERN, createRoom, joinRoom } from "./roomConnect";
+import { initSoundShell } from "./soundShell";
+import {
+  bulletFx,
+  deathFx,
+  debuffFx,
+  fallScreen,
+  resetScreenFx,
+  slideInScreen,
+  swapSpectateScreen,
+} from "./screenFx";
 import { GAME_REGISTRY, isGameId, type GameId } from "./GameRegistry";
 import { GameSession } from "./GameSession";
 import { recordBest } from "./personalBest";
@@ -37,17 +41,6 @@ const LOGICAL_HEIGHT = 800; // 정사각형 — 원형 경기장에 맞춤(죽�
 const POSITION_SEND_MS = 100;
 /** 카운트다운 길이(ms). 멀티는 서버가 이 값으로 startTime을 잡고, 솔로는 로컬로 센다. */
 const COUNTDOWN_MS = 3000;
-
-/** 게임 서버 주소(호스트까지만. 경로는 용도별로 붙인다).
- *  - 배포: VITE_WS_URL을 반드시 지정한다(예: wss://...). HTTPS 페이지에서 ws:// 로 붙으면
- *    브라우저가 mixed content로 차단하므로 wss:// 여야 한다.
- *  - 로컬 개발: 값이 없으면 같은 호스트의 8787(`npm run dev:server`)로 붙는다. */
-const WS_URL = import.meta.env.VITE_WS_URL ?? `ws://${location.hostname || "localhost"}:8787`;
-
-/** 방 만들기만 HTTP다. WebSocket은 붙는 순간 방이 정해지므로(방 하나 = 서버 인스턴스 하나),
- *  "접속한 뒤 방을 만든다"가 불가능하다. 코드를 먼저 받고 그 코드로 접속한다.
- *  주소는 하나만 설정하면 되도록 ws→http, wss→https로 유도한다. */
-const HTTP_URL = WS_URL.replace(/^ws/, "http");
 
 const mainCanvas = byId<HTMLCanvasElement>("game");
 const sideCanvases = Array.from({ length: 3 }, (_, index) => byId<HTMLCanvasElement>(`side-${index}`));
@@ -259,34 +252,6 @@ document.querySelectorAll<HTMLElement>("[data-nav]").forEach((element) => {
     navTo(element.dataset.nav);
   });
 });
-/* ---- 소리 -----------------------------------------------------------------
-   클릭음은 버튼마다 걸지 않고 document에 한 번 위임한다. 버튼이 늘어나도 여기
-   손댈 일이 없고, 동적으로 그려지는 게임 카드·목록 버튼까지 자동으로 포함된다.
-   ⚠️ 버블 단계라 각 버튼의 자기 핸들러보다 **나중에** 돈다 — 그래서 소리 토글을
-   켜는 클릭은 이 줄에서 소리가 나고(켜졌음을 귀로 확인), 끄는 클릭은 조용하다.
-   확인음을 따로 만들 필요가 없다. */
-document.addEventListener("click", (event) => {
-  const button = (event.target as HTMLElement | null)?.closest("button");
-  // ⚠️ 방향키 버튼은 뺀다. UI 버튼이 아니라 조작이라 누를 때마다 클릭음이 나면
-  //    한 판 내내 딸깍거린다 — 게임 소리(부서짐)가 그 밑에 묻힌다.
-  if (button && !button.closest("#dpad")) play("click");
-});
-
-const soundToggle = byId<HTMLButtonElement>("sound-toggle");
-function renderSoundToggle(): void {
-  const off = isMuted();
-  soundToggle.textContent = off ? "🔇" : "🔊";
-  soundToggle.classList.toggle("off", off);
-  // 라벨은 상태("소리 켜짐")가 아니라 누르면 일어날 일을 말한다.
-  const label = off ? "소리 켜기" : "소리 끄기";
-  soundToggle.setAttribute("aria-label", label);
-  soundToggle.title = label;
-}
-soundToggle.addEventListener("click", () => {
-  setMuted(!isMuted());
-  renderSoundToggle();
-});
-
 byId("footer-legal").addEventListener("click", () => toast("이용약관·개인정보는 준비 중입니다."));
 byId("gamelist-back").addEventListener("click", () => transition("back_main"));
 
@@ -318,7 +283,12 @@ function startSolo(): void {
   // 멀티처럼 카운트다운 3초 뒤 시작. 멀티는 서버시각 기준이지만 솔로는 서버가
   // 없으므로 로컬시각으로 센다. 시드도 여기서 정해 카운트다운/플레이가 공유한다.
   const seed = randomSeed();
-  runLocalCountdown(gameId, seed, () => {
+  slideInScreen(); // 카운트다운 동안 게임판이 위에서 내려와 자리잡는다.
+  session.showReadyFrame(gameId, seed); // 내려오는 판에 경기장을 미리 그려둔다.
+  // 솔로는 서버가 없으므로 로컬시각으로 센다(멀티는 서버시각 — 재는 방법만 다르다).
+  const start = performance.now();
+  runCountdown(() => COUNTDOWN_MS - (performance.now() - start), () => {
+    if (!transition("countdown_done")) return;
     resetScreenFx(); // 새 라운드 — 떨어졌던 화면 복구.
     play("go");
     updateHud(0, null); // 지난 판 숫자가 첫 프레임에 잠깐 비치지 않게.
@@ -327,32 +297,6 @@ function startSolo(): void {
       toast(`게임을 시작할 수 없습니다: ${gameId}`);
     }
   });
-}
-
-/** 솔로용 로컬 카운트다운. 멀티의 startCountdown과 같은 연출(판이 내려오고 숫자가
- *  줄어듦)이지만 서버시각 대신 performance.now()로 센다. */
-function runLocalCountdown(gameId: GameId, seed: number, onDone: () => void): void {
-  slideInScreen(); // 카운트다운 동안 게임판이 위에서 내려와 자리잡는다.
-  session.showReadyFrame(gameId, seed); // 내려오는 판에 경기장을 미리 그려둔다.
-  const start = performance.now();
-  let lastNumber = -1;
-  const step = (): void => {
-    const remaining = COUNTDOWN_MS - (performance.now() - start);
-    if (remaining <= 0) {
-      clearInterval(countdownTimer);
-      if (transition("countdown_done")) onDone();
-      return;
-    }
-    const number = Math.ceil(remaining / 1000);
-    if (number !== lastNumber) {
-      lastNumber = number;
-      setCountdown(number);
-      play("count"); // 숫자가 바뀌는 순간에만 — 50ms 폴링마다가 아니다.
-    }
-  };
-  clearInterval(countdownTimer);
-  countdownTimer = window.setInterval(step, 50);
-  step();
 }
 
 /** ⚠️ 여기서는 결과음을 내지 않는다 — onLocalDeath가 같은 프레임에 부르므로
@@ -373,41 +317,24 @@ function showSoloResult(score: number): void {
 
 byId("solo-btn").addEventListener("click", startSolo);
 
-/** 방 코드로 접속하고 참가까지 마친다.
- *  ⚠️ 서버는 방마다 인스턴스가 따로다(Durable Object). 그래서 "접속 후 방 선택"이 아니라
- *     "방을 정하고 접속"하는 순서다. 방을 옮기려면 연결부터 새로 맺어야 한다. */
 async function enterRoom(code: string): Promise<void> {
-  try {
-    await net.connect(`${WS_URL}/ws?code=${code}`);
-  } catch {
-    inRoom = false;
-    return toast("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
-  }
-  inRoom = true;
-  net.send({ type: "join_room", code, nickname: myNickname });
+  inRoom = await joinRoom(net, code, myNickname);
+  if (!inRoom) toast("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
 }
 
 byId("create-btn").addEventListener("click", () => {
   // 클릭 시점의 선택을 고정한다 — 아래는 비동기라, 그 사이 선택이 바뀌면 엉뚱한 방이 생긴다.
   const gameId = selectedGameId;
   if (!gameId) return;
-  // 방 만들기는 HTTP로 코드를 먼저 받는다 — WebSocket은 붙는 순간 방이 정해지므로
-  // 방이 없는 상태로는 접속할 곳이 없다.
   void (async () => {
-    let code: string;
-    try {
-      const response = await fetch(`${HTTP_URL}/rooms?gameId=${encodeURIComponent(gameId)}`, { method: "POST" });
-      if (!response.ok) return toast("방을 만들 수 없습니다. 잠시 후 다시 시도해 주세요.");
-      ({ code } = (await response.json()) as { code: string });
-    } catch {
-      return toast("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
-    }
+    const code = await createRoom(gameId);
+    if (!code) return toast("방을 만들 수 없습니다. 잠시 후 다시 시도해 주세요.");
     await enterRoom(code);
   })();
 });
 byId("join-btn").addEventListener("click", () => {
   const code = byId<HTMLInputElement>("join-code").value.trim().toUpperCase();
-  if (!/^[A-HJ-NP-Z]{4}$/.test(code)) return toast("유효한 방 코드 4자리를 입력하세요.");
+  if (!ROOM_CODE_PATTERN.test(code)) return toast("유효한 방 코드 4자리를 입력하세요.");
   void enterRoom(code);
 });
 byId("lobby-back").addEventListener("click", () => transition("back_games"));
@@ -427,6 +354,7 @@ function leaveRoom(): void {
   }
   soloMode = false;
   clearTimeout(fallTimer);
+  cancelCountdown(); // 카운트다운 중에 나갔을 수 있다 — 숫자와 소리가 계속 돌면 안 된다.
   resetScreenFx(); // 로비로 나가니 다음 판을 위해 복구.
   session.leaveRoom();
   finalRanks = [];
@@ -434,29 +362,15 @@ function leaveRoom(): void {
   transition("leave_room");
 }
 
-let countdownTimer = 0;
 function startCountdown(seed: number, startTime: number, gameId: string): void {
   if (!isGameId(gameId)) return toast(`알 수 없는 게임입니다: ${gameId}`);
   if (!net.isClockSynchronized || !transition("game_start")) return;
   slideInScreen(); // 카운트다운 3초 동안 게임판이 위에서 내려와 자리잡는다(0.55s).
   session.showReadyFrame(gameId, seed); // 내려오는 판에 원형 경기장을 미리 그려둔다.
-  let lastNumber = -1;
-  const update = (): void => {
-    const remaining = startTime - net.getServerNow();
-    if (remaining <= 0) {
-      clearInterval(countdownTimer);
-      if (transition("countdown_done")) beginPlay(gameId, seed, startTime);
-      return;
-    }
-    const number = Math.ceil(remaining / 1000);
-    if (number === lastNumber) return;
-    lastNumber = number;
-    setCountdown(number);
-    play("count"); // 숫자가 바뀌는 순간에만 — 50ms 폴링마다가 아니다.
-  };
-  clearInterval(countdownTimer);
-  countdownTimer = window.setInterval(update, 50);
-  update();
+  // 멀티는 **서버시각** 기준이다 — 각자의 로컬시각으로 세면 시작 tick이 어긋난다.
+  runCountdown(() => startTime - net.getServerNow(), () => {
+    if (transition("countdown_done")) beginPlay(gameId, seed, startTime);
+  });
 }
 
 function beginPlay(gameId: string, seed: number, startTime: number): void {
@@ -516,7 +430,7 @@ function tryAutoJoin(): void {
 
 initBgDecor(document.querySelector<HTMLElement>(".bg-spot")!);
 initAudio(); // 저장된 소리 설정을 읽는다. AudioContext는 첫 클릭 때 만들어진다.
-renderSoundToggle();
+initSoundShell(); // 소리 토글 버튼 + 클릭음 위임(앱 상태와 무관한 껍데기).
 
 // 시작 시점에는 서버에 연결하지 않는다. 연결은 방에 들어갈 때 맺는다
 // — 덕분에 서버가 자고 있어도 연습 모드는 그대로 돌아간다.

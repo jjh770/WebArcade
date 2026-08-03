@@ -90,11 +90,11 @@ WebArcade/
 │  ├─ shared/src/          # 계약 — 구현 없음. 모두가 의존한다.
 │  │  ├─ IGame.ts          # 게임이 구현할 인터페이스
 │  │  ├─ IRenderer.ts      # 렌더 계약 (⚠️ core가 아니라 여기. 아래 근거 참조)
+│  │  ├─ SeededRNG.ts      # mulberry32 시드 PRNG (⚠️ core가 아니라 여기 — 아래 근거)
 │  │  ├─ protocol.ts       # WebSocket 메시지 타입
 │  │  └─ types.ts          # InputState, PeerState, RoomState 등
 │  ├─ core/src/            # 엔진 — 게임을 모름
 │  │  ├─ GameLoop.ts       # 고정 타임스텝 (rAF + setInterval 폴백)
-│  │  ├─ SeededRNG.ts      # mulberry32 시드 PRNG
 │  │  ├─ StateMachine.ts   # 게임을 모르는 범용 FSM (허용 안 된 전이는 예외)
 │  │  ├─ ClockSync.ts      # RTT 최소 표본으로 서버 시각 보정
 │  │  ├─ GameRunner.ts     # IGame을 받아 구동 + 멀티 뷰 렌더
@@ -130,14 +130,22 @@ WebArcade/
 │  └─ app/src/             # 진입점 — 위의 조각들을 엮는 곳
 │     ├─ main.ts           # 오케스트레이션 (네트워크 ↔ 상태 ↔ 뷰)
 │     ├─ AppFlow.ts        # 앱 상태 전이표 (StateMachine에 주입)
-│     ├─ AppView.ts        # DOM·화면 전환·플레이 영역 레이아웃
-│     ├─ GameSession.ts    # 한 라운드의 게임·입력·관전·멀티뷰 소유
+│     ├─ dom.ts            # byId — 없는 id면 즉시 던진다(유일한 요소 접근 통로)
+│     ├─ AppView.ts        # 무엇을 보여줄까 — 화면 전환·카드 내용
+│     ├─ screenFx.ts       # 어떻게 움직일까 — 낙하·관전 전환·디버프·탄환
+│     ├─ playLayout.ts     # 캔버스 표시 크기 배분(여백·조작 영역은 CSS가 정본)
+│     ├─ GameSession.ts    # 한 라운드의 게임 인스턴스와 러너
+│     ├─ peerViews.ts      # 남들의 상태 + 누구를 어느 화면에 띄우는가
+│     ├─ touchControls.ts  # 판 밖 조작면 일체(입력 소스 + 세로 예산)
 │     ├─ GameRegistry.ts   # ⭐ 새 게임은 여기에만 등록
-│     ├─ touchSchemes.ts   # 터치 조작 방식(매핑·조작면·안내를 한 줄로 묶음)
+│     ├─ touchSchemes.ts   # 터치 조작 방식(조작면·매핑을 한 줄로 묶음)
 │     ├─ touchHint.ts      # 카운트다운 동안 뜨는 조작 안내
 │     ├─ joystick.ts       # 조이스틱 위젯의 노브 표현(입력은 TouchInput 몫)
 │                          #   방향키 버튼은 표현이 CSS뿐이라 대응 파일이 없다
+│     ├─ countdown.ts      # 시작 전 3초(멀티=서버시각 / 솔로=로컬시각, 재는 법만 다름)
+│     ├─ roomConnect.ts    # 서버 주소 + 방 만들기·접속 절차(화면은 안 건드림)
 │     ├─ audio.ts          # 효과음을 코드로 합성(음원 파일 없음) + 켬/끔
+│     ├─ soundShell.ts     # 소리 토글 버튼 + 클릭음 위임(앱 상태와 무관)
 │     └─ siteContent.ts    # 공지 등 사이트 콘텐츠 데이터
 └─ tests/                  # Vitest — 결정론·클럭·FSM·방·서버 통합
 ```
@@ -147,6 +155,18 @@ WebArcade/
 묶인다. 계약(`IRenderer`)은 `shared`에, 구현(`Canvas2DRenderer`)은 `core`에 두면 게임은 **"무엇을
 그릴지"만 알고 "어떻게 그리는지"는 모른다.** PixiJS로 갈아끼워도 게임 코드는 한 줄도 안 바뀐다.
 `IGame`이 게임 → 엔진 방향의 계약이라면, `IRenderer`는 엔진 → 게임 방향의 계약이다. 둘 다 `shared`.
+
+**왜 `SeededRNG`도 `shared`에 있는가?** 같은 이유다. 한때 `core`에 있었고, 세 게임이 **오직 이것
+하나 때문에** 엔진을 import했다 — 렌더러·웹소켓·터치 입력이 든 패키지에 게임이 묶여 있었다는 뜻이다.
+시드 PRNG는 엔진 기능이 아니라 결정론 계약의 일부이므로 `shared`로 옮겼다. 그 결과:
+
+```
+shared (잎)  ←  core  ←  app
+      ↖ games ↗            ↖ edge
+```
+
+게임의 의존은 이제 `shared` **하나뿐**이다. "core는 게임을 모른다"의 짝인 **"게임도 엔진을 모른다"**가
+성립한다. 순환도 역방향도 없다.
 
 ### IGame 계약 (잠정 — 두 번째 게임이 검증할 때까지 확정하지 않음)
 

@@ -1,35 +1,27 @@
+/* ============================================================
+   GameSession — 한 라운드의 게임 인스턴스와 러너를 소유한다
+   ------------------------------------------------------------
+   가진 것: 게임 인스턴스, 러너, 캔버스 렌더러, 라운드 진행 여부.
+   맡기는 것:
+   - 손가락 조작면 일체 → TouchControls (입력 소스이자 레이아웃 정책)
+   - 남들의 상태와 화면 배분 → PeerViews (관전·슬롯·조준)
+
+   세션이 하는 일은 그 둘을 게임/러너에 이어 주는 것뿐이다.
+   ============================================================ */
+
 import {
-  ButtonInput,
   Canvas2DRenderer,
   CompositeInput,
   GameRunner,
   InputManager,
-  TouchInput,
-  type Direction,
-  type DirectionButton,
-  type GameView,
 } from "@arcade/core";
-import type { IGame, PeerSnapshot, PlayerPublic, SpawnContext } from "@arcade/shared";
+import type { IGame, PeerSnapshot, PlayerPublic } from "@arcade/shared";
 import { isSoundId, play } from "./audio";
 import { GAME_REGISTRY, isGameId, type GameEntry, type GameId } from "./GameRegistry";
-import { TouchHint, hasCoarsePointer, shouldShowHint } from "./touchHint";
-import { Joystick } from "./joystick";
-import { TOUCH_SCHEMES, type TouchScheme } from "./touchSchemes";
+import { PeerViews } from "./peerViews";
+import { TouchControls } from "./touchControls";
 
 const SIDE_SLOTS = 3;
-
-/** 방향키 버튼의 방향은 **마크업이 정본**이다(`data-dir`). 여기서 이름을 다시 적으면
- *  버튼을 하나 옮길 때 두 곳을 맞춰야 한다. 모르는 값은 조용히 버린다. */
-const DIRECTIONS = ["up", "down", "left", "right"] as const;
-function readDirectionButtons(root: HTMLElement): DirectionButton[] {
-  return [...root.querySelectorAll<HTMLElement>("[data-dir]")].flatMap((element) => {
-    const dir = element.dataset.dir as Direction;
-    return DIRECTIONS.includes(dir) ? [{ element, direction: dir }] : [];
-  });
-}
-
-type Peer = { nickname: string; alive: boolean; x: number; y: number };
-type MainViewMode = "self" | "spectating";
 
 export type GameSessionOptions = {
   mainCanvas: HTMLCanvasElement;
@@ -57,47 +49,37 @@ export type GameSessionOptions = {
   onControlsChange: () => void;
 };
 
-/** 한 라운드의 게임 인스턴스, 입력, 관전 대상과 멀티 뷰를 소유한다. */
 export class GameSession {
   // 키보드와 손가락은 같은 InputState를 낸다. 러너는 둘을 구분하지 않는다.
   private readonly keyboard = new InputManager();
-  // 조작면이 둘이라 소스도 둘이다. 게임에 맞는 쪽에만 매핑을 끼우고 나머지는 비운다
-  // — 요소를 바꿔 끼우는 것보다 리스너 수명이 단순하다.
-  private readonly touchCanvas: TouchInput;
-  private readonly touchStick: TouchInput;
-  /** 방향키 버튼. 좌표를 방향으로 바꾸는 게 아니라 버튼 하나가 방향 하나다. */
-  private readonly buttons: ButtonInput;
+  private readonly touch: TouchControls;
   private readonly input: CompositeInput;
-  private readonly hint: TouchHint;
-  private readonly joystick: Joystick;
-  /** 이번 게임에 터치 조작이 있는가 — 안내를 띄울지 판단에만 쓴다. */
-  private touchable = false;
-  /** 이 게임이 쓰는 판 밖 조작 방식. 마우스만 있는 기기면 null. */
-  private controlScheme: TouchScheme | null = null;
-  /** 지금 조작이 먹히는가. 관전 중이면 false — 죽은 뒤엔 눌러도 아무 일이 없다. */
-  private controlsUsable = false;
+  private readonly views: PeerViews;
   private readonly mainRenderer: Canvas2DRenderer;
   private readonly sideRenderers: Canvas2DRenderer[];
   private game: IGame | null = null;
   private runner: GameRunner | null = null;
   private activeGameId: GameId | null = null;
-  private roster: readonly PlayerPublic[] = [];
-  private myId: string | null = null;
-  private readonly peers = new Map<string, Peer>();
-  private spectateId: string | null = null;
-  private sideShown: string[] = [];
-  private viewMode: MainViewMode = "self";
   private roundActive = false;
 
   constructor(private readonly options: GameSessionOptions) {
     const { logicalWidth: w, logicalHeight: h } = options;
-    // 판 터치는 메인 캔버스 위에서만 받는다 — 관전 슬롯이나 HUD를 눌러 꺾이면 안 된다.
-    this.touchCanvas = new TouchInput(options.mainCanvas);
-    this.touchStick = new TouchInput(options.stick);
-    this.buttons = new ButtonInput(readDirectionButtons(options.dpad));
-    this.input = new CompositeInput(this.keyboard, this.touchCanvas, this.touchStick, this.buttons);
-    this.hint = new TouchHint(options.touchHint, options.mainCanvas);
-    this.joystick = new Joystick(options.stick, options.stickKnob);
+    this.touch = new TouchControls({
+      // 판 터치는 메인 캔버스 위에서만 받는다 — 관전 슬롯이나 HUD를 눌러 꺾이면 안 된다.
+      board: options.mainCanvas,
+      hint: options.touchHint,
+      stick: options.stick,
+      stickKnob: options.stickKnob,
+      dpad: options.dpad,
+      onSpaceChange: options.onControlsChange,
+    });
+    this.input = new CompositeInput(this.keyboard, this.touch);
+    this.views = new PeerViews({
+      slots: SIDE_SLOTS,
+      logicalWidth: w,
+      logicalHeight: h,
+      onSideSlot: options.onSideSlot,
+    });
     this.mainRenderer = new Canvas2DRenderer(options.mainCanvas, w, h);
     this.sideRenderers = options.sideCanvases.map((canvas) => new Canvas2DRenderer(canvas, w, h));
     this.resizeViews();
@@ -111,7 +93,7 @@ export class GameSession {
       this.fitRenderer(renderer, this.options.sideCanvases[index]);
     });
     // 안내 오버레이도 캔버스를 따라간다. 떠 있지 않을 때 맞춰 둬도 해가 없다.
-    this.hint.syncBox();
+    this.touch.syncHintBox();
   }
 
   private fitRenderer(renderer: Canvas2DRenderer, canvas: HTMLCanvasElement): void {
@@ -123,8 +105,7 @@ export class GameSession {
   }
 
   setRoster(players: readonly PlayerPublic[], myId: string | null): void {
-    this.roster = players;
-    this.myId = myId;
+    this.views.setRoster(players, myId);
   }
 
   /** 카운트다운 동안 메인 화면에 빈 경기장 + 중앙 플레이어를 미리 그려둔다.
@@ -134,60 +115,41 @@ export class GameSession {
     this.ensureRunner(gameId);
     // 조작을 먼저 세운다 — 판 크기가 조작 영역에 달렸으므로, 그리기 전에 자리가 정해져야
     // 카운트다운 동안 내려오는 판이 곧바로 제 크기다.
-    this.controlsUsable = true;
-    this.applyControls();
+    this.touch.setUsable(true);
     this.runner?.setViews([{ renderer: this.mainRenderer, target: null }]);
-    this.runner?.prime(seed, this.selfContext());
+    this.runner?.prime(seed, this.views.selfContext());
     // 조작 안내는 카운트다운 동안 판 위에 깔린다(숫자 뒤). start()에서 걷힌다.
-    if (shouldShowHint(this.touchable, hasCoarsePointer())) this.hint.show();
+    this.touch.showHint();
     return true;
-  }
-
-  /** 이 클라의 스폰 신원. 멀티(인원 2+)에서만 유효 — 로스터 내 순번과 인원을 준다.
-   *  솔로거나 아직 나 혼자면 undefined(게임이 단일 스폰을 쓴다). 전원이 같은
-   *  로스터를 공유하므로 같은 스폰 집합에서 각자 다른 슬롯을 고르게 된다. */
-  private selfContext(): SpawnContext | undefined {
-    if (!this.myId || this.roster.length <= 1) return undefined;
-    const index = this.roster.findIndex((player) => player.id === this.myId);
-    return index < 0 ? undefined : { index, count: this.roster.length };
   }
 
   start(gameId: string, seed: number, epochPerformanceMs: number): boolean {
     if (!isGameId(gameId)) return false;
     this.ensureRunner(gameId);
-    this.buildPeers();
-    this.viewMode = "self";
-    this.spectateId = null;
-    this.sideShown = [];
+    this.views.reset();
     this.roundActive = true;
     // ⚠️ ensureRunner는 같은 게임이면 일찍 빠져나간다. 조작 상태를 거기서만 세우면
     //    관전으로 걷힌 조작이 "다시 하기"에서 안 돌아온다.
-    this.controlsUsable = true;
-    this.applyControls();
-    this.runner?.start(seed, epochPerformanceMs, this.selfContext());
-    this.syncGamePeers();
-    this.rebuildViews();
+    this.touch.setUsable(true);
+    this.runner?.start(seed, epochPerformanceMs, this.views.selfContext());
+    this.refresh();
     // 카운트다운 동안 깔려 있던 조작 안내를 걷는다 — 플레이 화면은 가리지 않는다.
-    this.hint.hide();
+    this.touch.hideHint();
     return true;
   }
 
   stopRound(): void {
     this.roundActive = false;
     this.runner?.stop();
-    this.hint.hide();
+    this.touch.hideHint();
     // 라운드가 끝나면 조작면도 걷는다. CSS가 body.playing으로 이미 감추지만,
     // 세로 예산 클래스는 남아 다음 라운드까지 판을 괜히 작게 잡는다.
-    this.controlsUsable = false;
-    this.applyControls();
+    this.touch.setUsable(false);
   }
 
   leaveRoom(): void {
     this.stopRound();
-    this.peers.clear();
-    this.spectateId = null;
-    this.sideShown = [];
-    for (let index = 0; index < SIDE_SLOTS; index++) this.options.onSideSlot(index, false, "");
+    this.views.clear();
   }
 
   getScore(): number | null {
@@ -205,39 +167,9 @@ export class GameSession {
 
   applySnapshot(snapshot: readonly PeerSnapshot[]): void {
     if (!this.roundActive) return;
-    for (const state of snapshot) {
-      if (state.id === this.myId) continue;
-      // 남이 낸 시각 이벤트는 그 사람 관전 화면에 그대로 재현한다(서버는 한 번만 실어 보낸다).
-      if (state.ev !== undefined) this.game?.applyPeerEvent?.(state.id, state.ev);
-      const existing = this.peers.get(state.id);
-      if (existing) {
-        existing.x = state.px;
-        existing.y = state.py;
-      } else {
-        const player = this.roster.find((candidate) => candidate.id === state.id);
-        this.peers.set(state.id, {
-          nickname: player?.nickname ?? "플레이어",
-          alive: true,
-          x: state.px,
-          y: state.py,
-        });
-      }
-    }
-    this.syncGamePeers();
-    this.rebuildViews();
-  }
-
-  /** 게임이 발사를 냈다(디버프 풀 도착). 풀에서 랜덤 1개를 뽑고, 우측 관전 슬롯(sideShown)에
-   *  지금 떠 있는 살아있는 상대 중 랜덤 1명을 조준해 전송한다 — "보이는 사람만 맞힌다".
-   *  정말 혼자 남아 조준 대상이 없으면 발사를 흘려버린다(마지막 생존자는 어차피 이긴 상황).
-   *  Math.random은 네트워킹/연출용이라 게임 결정론과 무관하다. */
-  private handleFire(debuffs: readonly { kind: string; durationMs: number }[]): void {
-    const targets = this.sideShown.filter((id) => this.peers.get(id)?.alive);
-    if (targets.length === 0 || debuffs.length === 0) return;
-    const targetId = targets[Math.floor(Math.random() * targets.length)]!;
-    const debuff = debuffs[Math.floor(Math.random() * debuffs.length)]!;
-    // 슬롯 번호는 sideShown 기준(targets는 살아있는 것만 걸러낸 부분집합이라 번호가 다르다).
-    this.options.onFire(debuff.kind, debuff.durationMs, targetId, this.sideShown.indexOf(targetId));
+    // 남이 낸 시각 이벤트는 그 사람 관전 화면에 그대로 재현한다(서버는 한 번만 실어 보낸다).
+    this.views.applySnapshot(snapshot, (id, ev) => this.game?.applyPeerEvent?.(id, ev));
+    this.refresh();
   }
 
   /** 남의 발사에 맞았다. 라운드 중이고 내가 아직 살아있을 때만 게임에 조작계 효과를 적용한다.
@@ -250,84 +182,51 @@ export class GameSession {
   }
 
   markPeerDead(id: string): void {
-    const peer = this.peers.get(id);
-    if (peer) peer.alive = false;
-    if (id === this.spectateId) this.pickMainSpectate();
-    this.syncGamePeers();
-    this.rebuildViews();
+    this.views.markDead(id);
+    this.refresh();
   }
 
   watchRandomSurvivor(): boolean {
     // 죽은 뒤의 조작면은 눌러도 아무 일이 없다. 화면만 먹고 관전 힌트와도 겹치므로
     // 걷는다 — 그만큼 세로가 남아 관전 화면이 커진다.
-    this.controlsUsable = false;
-    this.applyControls();
-    this.pickMainSpectate();
-    if (!this.spectateId) return false;
-    this.viewMode = "spectating";
-    this.rebuildViews();
+    this.touch.setUsable(false);
+    if (!this.views.watchRandom()) return false;
+    this.refresh();
     return true;
   }
 
-  /** 관전 중 메인 대상을 다음(+1)/이전(-1) 생존자로 넘긴다. 넘어갔으면 true.
-   *  대상을 "고르는" 게 아니라 살아있는 사람들을 순환한다 — 오른쪽에 보이던 사람이
-   *  메인으로 올라오는 카드 넘기기 느낌. 생존자가 1명뿐이면 넘길 곳이 없다. */
   cycleSpectate(direction: number): boolean {
-    if (this.viewMode !== "spectating") return false;
-    const order = this.aliveSpectateOrder();
-    if (order.length <= 1) return false;
-    const current = this.spectateId ? order.indexOf(this.spectateId) : -1;
-    const next = (((current + direction) % order.length) + order.length) % order.length;
-    this.spectateId = order[next];
-    this.rebuildViews();
+    if (!this.views.cycle(direction)) return false;
+    this.refresh();
     return true;
   }
 
-  /** 순환 순서 = 로스터(입장) 순으로 고정된 살아있는 남들. 순서가 고정돼야 ←/→가 예측 가능하다. */
-  private aliveSpectateOrder(): string[] {
-    return this.roster
-      .filter((player) => player.id !== this.myId && this.peers.get(player.id)?.alive)
-      .map((player) => player.id);
+  /** 게임이 발사를 냈다(디버프 풀 도착). 풀에서 랜덤 1개를 뽑고, 지금 우측에 떠 있는
+   *  살아있는 상대 하나를 조준해 앱에 넘긴다. Math.random은 연출·네트워킹용이라
+   *  게임 결정론과 무관하다. */
+  private handleFire(debuffs: readonly { kind: string; durationMs: number }[]): void {
+    if (debuffs.length === 0) return;
+    const aim = this.views.pickFireTarget();
+    if (!aim) return;
+    const debuff = debuffs[Math.floor(Math.random() * debuffs.length)]!;
+    this.options.onFire(debuff.kind, debuff.durationMs, aim.targetId, aim.slotIndex);
   }
 
-  /** 판 밖 조작면을 지금 상태에 맞춘다. 띄울지 말지는 두 가지가 함께 정한다:
-   *  **이 게임이 쓰는 방식**(controlScheme, 마우스 기기면 null)과
-   *  **지금 조작이 먹히는가**(controlsUsable, 관전 중이면 false).
-   *
-   *  뜨면 body 클래스가 붙고 CSS가 그만큼 #play의 아래 패딩을 키운다. 레이아웃이 그
-   *  패딩을 읽어 판을 줄이므로 판과 조작이 세로를 나눠 갖는다.
-   *  ⚠️ 클래스가 바뀌었으면 반드시 다시 재야 한다(onControlsChange). 안 그러면 다음
-   *     창 크기 변경까지 예전 크기의 판이 남는다. */
-  private applyControls(): void {
-    const scheme = this.controlsUsable ? this.controlScheme : null;
-    const stick = scheme === "joystick";
-    const buttons = scheme === "buttons";
-    this.joystick.setVisible(stick);
-    this.options.dpad.hidden = !buttons;
-    const changed =
-      document.body.classList.contains("controls-stick") !== stick ||
-      document.body.classList.contains("controls-buttons") !== buttons;
-    document.body.classList.toggle("controls-stick", stick);
-    document.body.classList.toggle("controls-buttons", buttons);
-    if (changed) this.options.onControlsChange();
+  /** 남의 상태가 바뀌었다 — 게임에 알리고(관전 화면 재구성용) 뷰 배분을 다시 한다.
+   *  둘은 항상 같이 간다. 하나만 하면 화면과 내용이 어긋난다. */
+  private refresh(): void {
+    if (!this.runner || !this.roundActive) return;
+    this.game?.syncPeers(this.views.alivePeers());
+    this.runner.setViews(this.views.buildViews(this.mainRenderer, this.sideRenderers));
   }
 
   private ensureRunner(gameId: GameId): void {
     if (this.activeGameId === gameId) return;
     this.runner?.stop();
-    // 터치 매핑은 게임마다 다르다. 없는 게임은 그대로 키보드 전용으로 돈다.
+    // 터치 조작은 게임마다 다르다. 없는 게임은 그대로 키보드 전용으로 돈다.
     // (레지스트리는 satisfies라 항목마다 리터럴 타입이다 — 선택 필드를 보려면 계약으로 넓힌다.)
     const entry: GameEntry = GAME_REGISTRY[gameId];
-    const scheme = entry.touch ? TOUCH_SCHEMES[entry.touch] : null;
-    // 이 게임이 쓰는 조작면에만 매핑을 끼운다. 나머지 면은 눌러도 아무 일이 없다.
-    this.touchCanvas.setMapper(scheme?.surface === "canvas" ? scheme.map : null);
-    this.touchStick.setMapper(scheme?.surface === "stick" ? scheme.map : null);
-    // 손가락 기기에서만 띄운다. 마우스만 있는 화면에 조작 요소가 뜨면 방향키를
-    // 쓰는 사람에게 방해일 뿐 아니라, 세로 예산까지 축내 판이 괜히 작아진다.
-    // (실제로 띄우는 건 applyControls — 관전 중인지도 함께 봐야 하기 때문이다.)
-    this.controlScheme = hasCoarsePointer() ? (entry.touch ?? null) : null;
-    this.hint.setScheme(entry.touch ?? null);
-    this.touchable = entry.touch !== undefined;
+    this.touch.useScheme(entry.touch);
     this.game = entry.factory();
     this.runner = new GameRunner(
       this.game,
@@ -342,64 +241,5 @@ export class GameSession {
       },
     );
     this.activeGameId = gameId;
-  }
-
-  private buildPeers(): void {
-    this.peers.clear();
-    for (const player of this.roster) {
-      if (player.id === this.myId) continue;
-      // 첫 스냅샷이 오기 전 임시 위치: 게임 좌표계 중앙.
-      // (캔버스 픽셀 크기는 DPR·화면 크기에 따라 변하므로 절대 쓰지 않는다.)
-      this.peers.set(player.id, {
-        nickname: player.nickname,
-        alive: player.alive,
-        x: this.options.logicalWidth / 2,
-        y: this.options.logicalHeight / 2,
-      });
-    }
-  }
-
-  private syncGamePeers(): void {
-    this.game?.syncPeers([...this.peers.entries()]
-      .filter(([, peer]) => peer.alive)
-      .map(([id, peer]) => ({ id, x: peer.x, y: peer.y, label: peer.nickname })));
-  }
-
-  private pickMainSpectate(): void {
-    const candidates = [...this.peers.entries()].filter(([, peer]) => peer.alive).map(([id]) => id);
-    this.spectateId = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : null;
-  }
-
-  private rebuildViews(): void {
-    if (!this.runner || !this.roundActive) return;
-    let mainTarget: GameView["target"] = null;
-    if (this.viewMode === "spectating" && this.spectateId) {
-      const peer = this.peers.get(this.spectateId);
-      if (peer?.alive) mainTarget = { id: this.spectateId, x: peer.x, y: peer.y, label: peer.nickname };
-    }
-    const views: GameView[] = [{ renderer: this.mainRenderer, target: mainTarget }];
-
-    const excluded = this.viewMode === "spectating" ? this.spectateId : null;
-    const aliveOthers = [...this.peers.entries()]
-      .filter(([id, peer]) => peer.alive && id !== excluded)
-      .map(([id]) => id);
-    this.sideShown = this.sideShown.filter((id) => aliveOthers.includes(id));
-    const unshown = aliveOthers.filter((id) => !this.sideShown.includes(id));
-    while (unshown.length > 0 && this.sideShown.length < SIDE_SLOTS) {
-      const index = Math.floor(Math.random() * unshown.length);
-      this.sideShown.push(unshown.splice(index, 1)[0]);
-    }
-    this.sideShown.forEach((id, index) => {
-      const peer = this.peers.get(id);
-      if (peer) views.push({
-        renderer: this.sideRenderers[index],
-        target: { id, x: peer.x, y: peer.y, label: peer.nickname },
-      });
-    });
-    for (let index = 0; index < SIDE_SLOTS; index++) {
-      const id = this.sideShown[index];
-      this.options.onSideSlot(index, id !== undefined, id ? this.peers.get(id)?.nickname ?? "" : "");
-    }
-    this.runner.setViews(views);
   }
 }

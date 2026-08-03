@@ -14,9 +14,11 @@
       가로채면 조작 자체가 막힌다.
    ============================================================ */
 
-import { TOUCH_SCHEMES, type TouchScheme } from "./touchSchemes";
+import { type TouchScheme } from "./touchSchemes";
 
-/** 조작 방식별 한 줄 안내. 조이스틱은 위젯 자체가 보이므로 오버레이를 쓰지 않는다. */
+/** 조작 방식별 한 줄 안내. **여기 항목이 있다 = 판을 덮는 안내가 있다**이고, 그게 곧
+ *  카운트다운이 자기 막을 걷어도 되는 조건이다(아래 show 참조). 조이스틱·버튼은
+ *  조작 요소 자체가 화면에 보이므로 오버레이를 쓰지 않는다. */
 const CAPTIONS: Partial<Record<TouchScheme, string>> = {
   halves: "누르고 있는 동안 꺾입니다",
 };
@@ -72,9 +74,9 @@ export class TouchHint {
     if (!this.scheme || !CAPTIONS[this.scheme]) return;
     this.syncBox();
     this.element.classList.add("on");
-    // 이 오버레이가 자기 몫의 막을 깔았으니 카운트다운은 막을 걷는다 —
-    // 두 겹이면 안내가 묻힌다. 숫자 대비는 이 막이 대신 책임진다.
-    document.body.classList.toggle("hint-dims", TOUCH_SCHEMES[this.scheme].dimsBoard);
+    // 여기까지 왔다는 건 판을 덮는 안내가 깔렸다는 뜻이다. 그러니 카운트다운은 막을
+    // 걷는다 — 두 겹이면 안내가 묻힌다. 숫자 대비는 이 막이 대신 책임진다.
+    document.body.classList.add("hint-dims");
   }
 
   hide(): void {

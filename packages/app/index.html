@@ -365,7 +365,7 @@
       /* 판을 덮는 안내(좌/우 절반)가 깔렸을 때만 카운트다운이 막을 걷는다. 두 겹이면
          안내가 묻히고, 숫자 대비는 안내가 깐 막이 대신 책임진다.
          ⚠️ 조이스틱 방식에는 이 클래스가 안 붙는다 — 판을 덮는 게 없어서 막을 걷으면
-            숫자가 밝은 게임판 위에 1.3:1로 남아 안 보인다(touchSchemes.dimsBoard). */
+            숫자가 밝은 게임판 위에 1.3:1로 남아 안 보인다(touchHint의 CAPTIONS). */
       body.hint-dims #screen-countdown.play-overlay { background: transparent; }
       @keyframes cardIn { from { opacity: 0; transform: translateY(12px) scale(.97); }
         to { opacity: 1; transform: none; } }

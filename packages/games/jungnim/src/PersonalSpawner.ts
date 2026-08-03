@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    PersonalSpawner — 개인(플레이어 조준) 화살 레이어
    ------------------------------------------------------------
    공통(ArrowSpawner)과 나란히 존재하지만 성격이 정반대다:
@@ -17,7 +17,7 @@
    - ring   : 사방 여러 방향에서 동시에 플레이어로 조여듦
    ============================================================ */
 
-import type { SeededRNG } from "@arcade/core";
+import type { SeededRNG } from "@arcade/shared";
 import type { JungnimConfig } from "./config";
 import type { ArrowPool } from "./ArrowPool";
 

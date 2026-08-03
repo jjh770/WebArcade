@@ -1,4 +1,4 @@
-{
+﻿{
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
@@ -7,5 +7,5 @@
     "noEmit": false
   },
   "include": ["src"],
-  "references": [{ "path": "../../shared" }, { "path": "../../core" }]
+  "references": [{ "path": "../../shared" }]
 }

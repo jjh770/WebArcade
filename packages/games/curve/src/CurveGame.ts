@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    CurveGame — 커브 피버 (IGame 구현)
    ------------------------------------------------------------
    내 선 하나. 좌/우 회전, 꼬리 기록, 자기 꼬리·벽·장애물 충돌.
@@ -18,7 +18,7 @@
 
 import type { IGame, IRenderer, InputState, PeerState, SpawnContext, SpectateTarget } from "@arcade/shared";
 import { TICKS_PER_SECOND, formatTicks } from "@arcade/shared";
-import { SeededRNG } from "@arcade/core";
+import { SeededRNG } from "@arcade/shared";
 import { curveConfig as C } from "./config";
 import { drawObstacle, obstacleBlocks, obstacleClearance, type Obstacle } from "./obstacles";
 

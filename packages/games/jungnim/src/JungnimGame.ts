@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    JungnimGame — 죽림고수. IGame 구현.
    ------------------------------------------------------------
    이 클래스는 games/ 안에만 존재한다. core는 이걸 모른다.
@@ -17,7 +17,7 @@
 
 import type { IGame, IRenderer, InputState, SpectateTarget, PeerState } from "@arcade/shared";
 import { TICKS_PER_SECOND, formatTicks } from "@arcade/shared";
-import { SeededRNG } from "@arcade/core";
+import { SeededRNG } from "@arcade/shared";
 import { jungnimConfig } from "./config";
 import { ArrowSpawner } from "./ArrowSpawner";
 import { PersonalSpawner } from "./PersonalSpawner";

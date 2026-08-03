@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    FloorGame — 무너지는 바닥. IGame 구현. (세 번째 게임)
    ------------------------------------------------------------
    이 클래스는 games/ 안에만 존재한다. core는 이걸 모른다.
@@ -19,7 +19,7 @@
 
 import type { IGame, IRenderer, InputState, SpectateTarget, PeerState, SpawnContext } from "@arcade/shared";
 import { formatTicks } from "@arcade/shared";
-import { SeededRNG } from "@arcade/core";
+import { SeededRNG } from "@arcade/shared";
 import { floorConfig as C } from "./config";
 
 const BACKDROP = "#15171d"; // 격자 바깥 + 뚫린 칸(= 아래가 비쳐 보인다)

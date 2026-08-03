@@ -15,22 +15,18 @@ import { joystick8, splitLeftRight, type TouchMapper } from "@arcade/core";
 
 export type TouchScheme = "halves" | "joystick" | "buttons";
 
-/** 카운트다운 동안 판 위에 안내 오버레이를 깔아 화면을 어둡게 덮는가.
- *  덮는 방식은 카운트다운의 반투명 막을 걷어도 숫자가 읽힌다(자기가 막을 까니까).
- *  안 덮는 방식(위젯·버튼)은 막을 그대로 둬야 한다 — 걷으면 숫자가 밝은 게임판
- *  위에 1.3:1로 남아 안 보인다. */
 type SchemeSpec =
-  | { surface: "canvas" | "stick"; map: TouchMapper; dimsBoard: boolean }
-  | { surface: "buttons"; dimsBoard: boolean };
+  | { surface: "canvas" | "stick"; map: TouchMapper }
+  | { surface: "buttons" };
 
 export const TOUCH_SCHEMES: Record<TouchScheme, SchemeSpec> = {
   // 커브 피버: 좌우로만 꺾으므로 판을 반으로 나눠 누르고 있는다.
-  halves: { map: splitLeftRight, surface: "canvas", dimsBoard: true },
+  halves: { map: splitLeftRight, surface: "canvas" },
   // 죽림고수: 사방으로 연속 이동이라 조이스틱. 판 위에서 조작하면 손가락이 화살을 가린다.
-  joystick: { map: joystick8, surface: "stick", dimsBoard: false },
+  joystick: { map: joystick8, surface: "stick" },
   // 무너지는 바닥: 격자를 한 칸씩 옮기므로 방향키 버튼 넷.
   // ⚠️ 미는 위젯(조이스틱)으로 하지 않는다. 대각선 구간에서 두 방향이 동시에
   //    눌리는데 격자는 한 칸만 가고, 무엇보다 위젯이 세로를 크게 먹어 폰 세로
   //    화면에서 판을 덮는다. 버튼은 자기 크기가 곧 표적이라 경계가 눈에 보인다.
-  buttons: { surface: "buttons", dimsBoard: false },
+  buttons: { surface: "buttons" },
 };

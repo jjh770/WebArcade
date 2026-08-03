@@ -1,5 +1,10 @@
 /* shared 패키지 진입점 — 공유 계약을 한 곳에서 export */
 
+/** 결정론 난수. **엔진(core)이 아니라 계약(shared)에 둔다** — 게임이 이것 하나 때문에
+ *  렌더러·웹소켓이 들어 있는 엔진 패키지에 묶이면 안 된다. 덕분에 게임의 의존은
+ *  shared 하나뿐이고, "core는 게임을 모른다"의 짝인 "게임도 엔진을 모른다"가 성립한다. */
+export { SeededRNG } from "./SeededRNG";
+
 export type { IGame } from "./IGame";
 export type { IRenderer } from "./IRenderer";
 export type {
