@@ -14,6 +14,7 @@
    제약이 없다.
    ============================================================ */
 
+import { BoardObject, BOARD_NAME } from "./BoardObject";
 import type { Env } from "./env";
 import { RoomObject } from "./RoomObject";
 import { generateRoomCode } from "./roomCode";
@@ -22,7 +23,7 @@ import { GAME_ID } from "./validation";
 export type { Env };
 
 // wrangler가 마이그레이션에서 이 이름을 찾는다 — 반드시 export.
-export { RoomObject };
+export { RoomObject, BoardObject };
 
 /** 프론트(Vercel)와 서버(Workers)는 출처가 다르다. 방 만들기가 WebSocket이 아니라
  *  HTTP fetch가 되면서 CORS가 필요해졌다 — 이 헤더가 없으면 브라우저가 응답 읽기를
@@ -33,6 +34,9 @@ export { RoomObject };
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, OPTIONS",
+  // 기록 제출은 JSON 본문이라 content-type이 붙는다 — 이걸 빼면 브라우저가
+  // 프리플라이트에서 막아 요청 자체가 나가지 않는다.
+  "access-control-allow-headers": "content-type",
   "access-control-max-age": "86400",
 } as const;
 
@@ -45,6 +49,18 @@ const MAX_CODE_ATTEMPTS = 8;
 
 /** 방 오브젝트에 거는 내부 요청의 기준 URL. 호스트는 의미가 없다(스텁이 직접 받는다). */
 const DO_ORIGIN = "https://room";
+const BOARD_ORIGIN = "https://board";
+
+/** 혼자 기록 요청을 보드 오브젝트로 넘기고 응답에 CORS를 입힌다.
+ *  오브젝트는 브라우저와 직접 말하지 않으므로 CORS를 모른다 — 그 일은 여기 몫이다. */
+async function forwardToBoard(env: Env, path: string, request: Request): Promise<Response> {
+  const stub = env.BOARD.get(env.BOARD.idFromName(BOARD_NAME));
+  const response = await stub.fetch(new Request(`${BOARD_ORIGIN}${path}`, request));
+  return new Response(response.body, {
+    status: response.status,
+    headers: { ...CORS_HEADERS, "content-type": "application/json" },
+  });
+}
 
 async function createRoom(env: Env, gameId: string): Promise<Response> {
   if (!GAME_ID.test(gameId)) {
@@ -80,6 +96,24 @@ export default {
 
     if (url.pathname === "/rooms" && request.method === "POST") {
       return createRoom(env, url.searchParams.get("gameId") ?? "");
+    }
+
+    // 혼자 기록 랭킹. 게임 id는 여기서 형식을 걸러 오브젝트로 넘긴다
+    // (없는 게임 이름으로 빈 보드가 무한히 생기는 걸 막는다).
+    if (url.pathname.startsWith("/solo/")) {
+      const gameId = url.searchParams.get("gameId") ?? "";
+      if (url.pathname === "/solo/ticket" && request.method === "POST") {
+        if (!GAME_ID.test(gameId)) return json({ reason: "유효하지 않은 게임입니다." }, 400);
+        return forwardToBoard(env, `/ticket?gameId=${encodeURIComponent(gameId)}`, request);
+      }
+      // 기록 제출에는 gameId가 없다 — 어느 게임인지는 티켓 서명 안에 들어 있다.
+      if (url.pathname === "/solo/score" && request.method === "POST") {
+        return forwardToBoard(env, "/score", request);
+      }
+      if (url.pathname === "/solo/board" && request.method === "GET") {
+        if (!GAME_ID.test(gameId)) return json({ reason: "유효하지 않은 게임입니다." }, 400);
+        return forwardToBoard(env, `/board?gameId=${encodeURIComponent(gameId)}`, request);
+      }
     }
 
     if (url.pathname === "/ws") {

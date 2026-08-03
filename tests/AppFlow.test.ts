@@ -93,4 +93,23 @@ describe("연습(싱글) 모드 흐름", () => {
     expect(flow.state).toBe("ready");
     expect(flow.can("start_solo")).toBe(false);
   });
+
+  it("순위 화면은 다른 읽을거리 화면과 오갈 수 있다", () => {
+    const flow = createFlow();
+    advance(flow, ["nickname_submit", "nav_ranking"]);
+    expect(flow.state).toBe("ranking");
+    flow.transition("nav_about");
+    expect(flow.state).toBe("about");
+    flow.transition("nav_ranking");
+    expect(flow.state).toBe("ranking");
+    flow.transition("nav_game_main");
+    expect(flow.state).toBe("main");
+  });
+
+  it("플레이 중에는 순위를 열 수 없다 — 판이 사라진다", () => {
+    const flow = createFlow();
+    advance(flow, [...toLobby, "start_solo", "countdown_done"]);
+    expect(flow.state).toBe("playing");
+    expect(flow.can("nav_ranking")).toBe(false);
+  });
 });

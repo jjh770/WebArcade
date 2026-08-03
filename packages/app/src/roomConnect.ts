@@ -10,15 +10,7 @@
    ============================================================ */
 
 import type { NetClient } from "@arcade/core";
-
-/** 게임 서버 주소(호스트까지만. 경로는 용도별로 붙인다).
- *  - 배포: VITE_WS_URL을 반드시 지정한다(예: wss://...). HTTPS 페이지에서 ws:// 로 붙으면
- *    브라우저가 mixed content로 차단하므로 wss:// 여야 한다.
- *  - 로컬 개발: 값이 없으면 같은 호스트의 8787(`npm run dev:server`)로 붙는다. */
-const WS_URL = import.meta.env.VITE_WS_URL ?? `ws://${location.hostname || "localhost"}:8787`;
-
-/** 방 만들기만 HTTP다. 주소는 하나만 설정하면 되도록 ws→http, wss→https로 유도한다. */
-const HTTP_URL = WS_URL.replace(/^ws/, "http");
+import { HTTP_URL, WS_URL } from "./serverUrl";
 
 /** 방 코드 형식. I·O는 1·0과 헷갈려 빠져 있다(서버가 만드는 규칙과 같다). */
 export const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z]{4}$/;

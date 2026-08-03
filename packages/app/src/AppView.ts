@@ -11,11 +11,12 @@ import { GAME_REGISTRY, type GameId } from "./GameRegistry";
 import { PLAY_STATES, type AppState } from "./AppFlow";
 import { byId } from "./dom";
 import { NOTICES } from "./siteContent";
+import type { BoardRow } from "./soloRanking";
 import { newcomers, staggerIndex } from "./stagger";
 
 const SCREEN_NAMES = [
   "nickname", "main", "gamelist", "lobby", "ready", "countdown", "result",
-  "notice", "about", "community",
+  "notice", "about", "community", "ranking",
 ] as const;
 type ScreenName = (typeof SCREEN_NAMES)[number];
 
@@ -43,7 +44,9 @@ export function renderState(state: AppState): void {
   document.body.classList.toggle("playing", showPlay);
   byId("spectate-hint").hidden = state !== "spectating"; // 관전 중에만 ←/→ 힌트
 
-  const navKey = state === "notice" || state === "about" || state === "community" ? state : "game";
+  const navKey = state === "notice" || state === "about" || state === "community" || state === "ranking"
+    ? state
+    : "game";
   document.querySelectorAll<HTMLElement>("#site-header .site-nav button").forEach((button) => {
     button.classList.toggle("on", button.dataset.nav === navKey);
   });
@@ -89,6 +92,60 @@ export function renderGameList(onSelect: (id: GameId) => void): void {
       + `<div class="g-desc">${escapeHtml(entry.description)}</div>`;
     button.addEventListener("click", () => onSelect(id));
     wrapper.appendChild(button);
+  }
+}
+
+/** 순위표에 그릴 상태. "비어 있음"과 "못 불러옴"은 다른 말이라 섞으면 안 된다 —
+ *  전자는 첫 기록을 세우라는 초대이고, 후자는 서버가 대답하지 않았다는 뜻이다. */
+export type RankingView =
+  | { state: "loading" }
+  | { state: "failed" }
+  | { state: "ready"; rows: readonly BoardRow[] };
+
+export function renderRankingTabs(active: GameId, onSelect: (id: GameId) => void): void {
+  const wrapper = byId("rank-tabs");
+  wrapper.innerHTML = "";
+  for (const id of Object.keys(GAME_REGISTRY) as GameId[]) {
+    const button = document.createElement("button");
+    button.textContent = GAME_REGISTRY[id].title;
+    button.classList.toggle("on", id === active);
+    button.addEventListener("click", () => onSelect(id));
+    wrapper.appendChild(button);
+  }
+}
+
+/** ⚠️ 여기서 "나"는 **닉네임이 같은 줄**이다. 닉네임에는 소유권이 없어서 남이 같은
+ *  이름을 쓸 수 있지만, 서버가 발급한 id는 순위표에 남지 않으므로 이것 말고는
+ *  본인 줄을 짚을 방법이 없다. 강조는 거들 뿐이라 틀려도 손해는 없다. */
+export function renderRanking(view: RankingView, myNickname: string): void {
+  const body = byId("rank-body");
+  const note = byId("rank-note");
+  body.innerHTML = "";
+
+  if (view.state !== "ready") {
+    note.hidden = false;
+    note.textContent = view.state === "loading"
+      ? "불러오는 중…"
+      : "순위표를 불러오지 못했습니다. 잠시 후 다시 열어 주세요.";
+    return;
+  }
+  if (view.rows.length === 0) {
+    note.hidden = false;
+    note.textContent = "아직 기록이 없습니다. 혼자 플레이로 첫 기록을 세워 보세요!";
+    return;
+  }
+
+  note.hidden = true;
+  for (const [index, row] of view.rows.entries()) {
+    const line = document.createElement("tr");
+    line.classList.add("enter");
+    line.style.setProperty("--i", String(staggerIndex(index)));
+    if (index === 0) line.classList.add("top");
+    if (row.nickname === myNickname) line.classList.add("self");
+    line.innerHTML = `<td class="rank">${index + 1}</td>`
+      + `<td>${escapeHtml(row.nickname)}</td>`
+      + `<td class="time">${formatTicks(row.ticks)}</td>`;
+    body.appendChild(line);
   }
 }
 

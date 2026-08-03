@@ -3,18 +3,20 @@ import type { TransitionTable } from "@arcade/core";
 export type AppState =
   | "nickname" | "main" | "gamelist" | "lobby" | "ready" | "countdown"
   | "playing" | "dying" | "deadResult" | "spectating" | "result"
-  | "notice" | "about" | "community";
+  | "notice" | "about" | "community" | "ranking";
 
 export type AppEvent =
   | "nickname_submit" | "open_games" | "back_main" | "select_game" | "back_games"
   | "room_joined" | "start_solo" | "game_start" | "countdown_done" | "local_death" | "keep_result"
   | "watch" | "game_over" | "return_ready" | "leave_room"
-  | "nav_notice" | "nav_about" | "nav_community" | "nav_game_main" | "nav_game_nickname";
+  | "nav_notice" | "nav_about" | "nav_community" | "nav_ranking"
+  | "nav_game_main" | "nav_game_nickname";
 
 const CONTENT_TRANSITIONS = {
   nav_notice: "notice",
   nav_about: "about",
   nav_community: "community",
+  nav_ranking: "ranking",
 } as const;
 
 export const APP_TRANSITIONS = {
@@ -36,6 +38,7 @@ export const APP_TRANSITIONS = {
   notice: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
   about: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
   community: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
+  ranking: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
 } satisfies TransitionTable<AppState, AppEvent>;
 
 export const PLAY_STATES: ReadonlySet<AppState> = new Set([

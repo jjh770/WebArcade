@@ -20,7 +20,9 @@ const MAX_EFFECT_MS = 10000;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
-const isNickname = (value: unknown): value is string =>
+/** 혼자 기록 제출(BoardObject)도 같은 규칙을 쓴다 — 대기실에서 통과한 이름이
+ *  순위표에서는 거부되는 엇갈림을 막으려면 한 군데서만 정해야 한다. */
+export const isNickname = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length >= 1 && [...value.trim()].length <= 12;
 /** 플레이어 id 형식(서버가 crypto.randomUUID로 발급). 실제 존재 여부는 라우팅에서 확인. */
 const isPlayerId = (value: unknown): value is string =>

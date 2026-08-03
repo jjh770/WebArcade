@@ -13,8 +13,19 @@ compatibility_date = "2026-07-21"
 name = "ROOMS"
 class_name = "RoomObject"
 
+# 혼자 기록 랭킹. 방과 달리 오브젝트는 전 세계에 하나뿐이다 —
+# 순위표는 모두가 같은 목록을 봐야 하므로 나뉘면 안 된다.
+[[durable_objects.bindings]]
+name = "BOARD"
+class_name = "BoardObject"
+
 # ⚠️ 무료 플랜은 SQLite 백엔드 DO만 쓸 수 있다 (KV 백엔드는 유료).
 #    그래서 new_classes가 아니라 new_sqlite_classes로 만든다.
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RoomObject"]
+
+# 클래스를 나중에 추가할 때는 v1을 고치는 게 아니라 태그를 새로 단다.
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["BoardObject"]
