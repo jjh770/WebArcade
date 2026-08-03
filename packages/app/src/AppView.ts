@@ -136,10 +136,14 @@ export function renderReady(
   byId("ready-hint").textContent = amHost ? "인원이 모이면 시작을 누르세요." : "방장이 시작하기를 기다리는 중…";
 }
 
+/** 결과 화면. ⚠️ 위쪽 버튼은 **모드마다 하는 일이 다르다** — 연습은 곧장 새 판을
+ *  시작하고, 멀티는 전원을 대기실로 돌린다. 같은 버튼에 같은 이름을 붙이면 둘 중
+ *  하나는 반드시 거짓말이 되므로 문구를 여기서 갈라 준다. */
 export function renderResult(
   finalRanks: readonly RankEntry[],
   myId: string | null,
   amHost: boolean,
+  solo: boolean,
 ): void {
   const body = byId("result-body");
   body.innerHTML = "";
@@ -161,10 +165,14 @@ export function renderResult(
     body.appendChild(row);
   }
   byId("result-sub").textContent = myRank ? `내 순위 ${myRank}위` : "";
-  byId<HTMLButtonElement>("again-btn").style.display = amHost ? "" : "none";
-  byId("result-hint").textContent = amHost
-    ? "대기실로 돌아가 새 시드로 다시 시작할 수 있습니다."
-    : "방장이 대기실로 돌아가기를 기다리는 중…";
+  const again = byId<HTMLButtonElement>("again-btn");
+  again.style.display = amHost ? "" : "none";
+  again.textContent = solo ? "다시 하기" : "대기실로";
+  byId("result-hint").textContent = solo
+    ? "같은 게임을 새 시드로 다시 시작합니다."
+    : amHost
+      ? "대기실로 돌아가 새 시드로 다시 시작할 수 있습니다."
+      : "방장이 대기실로 돌아가기를 기다리는 중…";
 }
 
 export function setAliveHud(text: string, hidden = false): void {

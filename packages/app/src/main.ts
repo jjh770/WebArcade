@@ -1,4 +1,4 @@
-import { NetClient, StateMachine } from "@arcade/core";
+﻿import { NetClient, StateMachine } from "@arcade/core";
 import type { RankEntry, ServerMessage } from "@arcade/shared";
 import { formatTicks } from "@arcade/shared";
 import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
@@ -178,7 +178,7 @@ function handleServer(message: ServerMessage): void {
         if (appState.state === "lobby") transition("room_joined");
         else if (appState.state === "result") transition("return_ready");
       } else if (appState.state === "result" && finalRanks.length > 0) {
-        renderResult(finalRanks, myId, amHost);
+        renderResult(finalRanks, myId, amHost, soloMode);
       }
       break;
     case "game_start":
@@ -207,7 +207,7 @@ function handleServer(message: ServerMessage): void {
       break;
     case "host_changed":
       amHost = message.newHostId === myId;
-      if (appState.state === "result" && finalRanks.length > 0) renderResult(finalRanks, myId, amHost);
+      if (appState.state === "result" && finalRanks.length > 0) renderResult(finalRanks, myId, amHost, soloMode);
       break;
     case "error":
       toast(message.reason);
@@ -305,7 +305,7 @@ function showSoloResult(score: number): void {
   if (!transition("game_over")) return;
   finalRanks = [{ id: SOLO_ID, rank: 1, nickname: myNickname, survivalTicks: score }];
   // amHost=true로 넘겨 "다시 하기"를 보이게 한다(연습은 언제나 내가 방장이다).
-  renderResult(finalRanks, SOLO_ID, true);
+  renderResult(finalRanks, SOLO_ID, true, true);
   // 연습은 순위(1위)가 의미 없다 — 그 자리에 개인 최고기록을 보여준다.
   if (selectedGameId) {
     const { best, isNew } = recordBest(selectedGameId, score);
@@ -403,7 +403,7 @@ function showResult(ranks: readonly RankEntry[]): void {
   // 판이 끝났다는 마침표. 멀티에서만 낸다 — 연습은 죽는 순간이 곧 결과라
   // 사망음과 같은 프레임에 겹쳐 둘 다 뭉개진다(showSoloResult 참조).
   play("result");
-  renderResult(ranks, myId, amHost);
+  renderResult(ranks, myId, amHost, soloMode);
   setAliveHud("", true);
   session.stopRound();
   transition("game_over");
