@@ -76,8 +76,15 @@ export async function fetchBoard(gameId: string): Promise<BoardRow[] | null> {
   return body?.entries ?? null;
 }
 
-/** 기록을 낸다. 티켓은 일회용이라 같은 티켓으로 두 번 부르면 서버가 거부한다. */
+/** 기록을 낸다. 티켓은 일회용이라 같은 티켓으로 두 번 부르면 서버가 거부한다.
+ *
+ *  ⚠️ **0은 기록이 아니다 — 아예 보내지 않는다.** 숫자 야구에서 한 문제도 못 맞힌 판,
+ *     회피 게임에서 시작하자마자 죽은 판이 여기 해당한다. 순위표는 닉네임당 한 줄이라
+ *     0점짜리 줄이 남으면 이름만 차지하고, 그 사람이 다시 오기 전까지 순위표 아래쪽이
+ *     "아무것도 안 한 판"으로 채워진다. 서버가 아니라 여기서 막는 이유는 이게 게임
+ *     지식이 아니라 산수여서다 — 어느 게임에서든 0은 아무 일도 안 일어난 판이다. */
 export function submitScore(ticket: string, nickname: string, ticks: number): Promise<SoloRank | null> {
+  if (ticks <= 0) return Promise.resolve(null);
   return requestJson<SoloRank>(
     "/solo/score",
     {

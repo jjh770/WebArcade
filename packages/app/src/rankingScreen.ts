@@ -32,11 +32,11 @@ export function createRankingScreen(deps: RankingScreenDeps): RankingScreen {
   async function load(gameId: GameId): Promise<void> {
     current = gameId;
     renderRankingTabs(gameId, (id) => void load(id));
-    renderRanking({ state: "loading" }, deps.nickname());
+    renderRanking({ state: "loading" }, deps.nickname(), gameId);
     const rows = await fetchBoard(gameId);
     // 기다리는 사이 다른 탭을 눌렀거나 화면을 떠났다 — 지금 화면은 이 목록의 자리가 아니다.
     if (current !== gameId || !deps.isOpen()) return;
-    renderRanking(rows ? { state: "ready", rows } : { state: "failed" }, deps.nickname());
+    renderRanking(rows ? { state: "ready", rows } : { state: "failed" }, deps.nickname(), gameId);
   }
 
   return {

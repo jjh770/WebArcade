@@ -27,7 +27,8 @@ import { loadMuted, saveMuted } from "./prefs";
  *  모른다. 이름이 맞으면 울리고, 없으면 조용히 넘어간다(isSoundId). */
 export type SoundId =
   | "click" | "count" | "go" | "death" | "result"
-  | "pickup" | "graze" | "fire" | "hit" | "crack";
+  | "pickup" | "graze" | "fire" | "hit" | "crack"
+  | "type" | "solve" | "miss" | "out";
 
 type Tone = {
   /** 파형. square는 각진 8비트 소리, triangle은 같은 음정이라도 덜 날카롭다. */
@@ -70,6 +71,15 @@ const SOUNDS: Record<SoundId, Tone> = {
   // 바닥이 부서진다(무너지는 바닥). 잡음을 2200Hz에서 300Hz로 훑어 내려 「쩍…」.
   // 물결마다 나므로 크면 금방 피곤하다 — 존재감은 낮게, 결만 남긴다.
   crack: { wave: "square", freq: [2200, 300], step: 0.18, gain: 0.5, noise: true },
+  // 숫자 하나를 쳤다(숫자 야구). 한 판에 수십 번 나므로 클릭보다도 작고 짧게 —
+  // 여기서 존재감을 주면 타자 소리가 게임 소리를 다 덮는다.
+  type: { wave: "triangle", freq: [1047], step: 0.025, gain: 0.22 },
+  // 맞혔다: 올라가는 세 음. 결과 아르페지오의 짧은 판 — 판이 아니라 한 문제의 마침표다.
+  solve: { wave: "triangle", freq: [659, 880, 1319], step: 0.07, gain: 0.5 },
+  // 틀렸지만 단서는 얻었다(스트라이크나 볼이 있다). 짧은 두 음, 위로도 아래로도 안 간다.
+  miss: { wave: "square", freq: [494, 494], step: 0.05, gain: 0.3 },
+  // 아웃(하나도 안 맞음). 낮게 떨어지는 두 음 — 같은 실패라도 miss보다 나쁘다.
+  out: { wave: "square", freq: [330, 247], step: 0.07, gain: 0.32 },
 };
 
 /** 이 이름의 소리가 표에 있는가. 게임이 낸 슬러그를 거르는 데 쓴다 —

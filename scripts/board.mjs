@@ -28,7 +28,7 @@ const KEY_FILE = new URL("../.admin-key", import.meta.url);
 /** 순위표가 있는 게임 전부. `rm all`이 훑는 대상이다.
  *  ⚠️ 게임을 추가하면 여기도 추가한다 — 서버에 "게임 목록"을 묻는 경로가 없어서
  *     (서버는 gameId를 문자열로만 다룬다) 클라가 알 방법이 없다. */
-const GAMES = ["jungnim", "curve", "floor"];
+const GAMES = ["jungnim", "curve", "floor", "baseball"];
 
 const USAGE = `사용법:
   node scripts/board.mjs ls <게임id>              순위표 보기

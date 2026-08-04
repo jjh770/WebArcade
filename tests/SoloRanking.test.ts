@@ -92,6 +92,17 @@ describe("기록 내기", () => {
     expect(await fetchBoard("floor")).toEqual([]);
   });
 
+  it("0점은 아예 보내지 않는다 — 아무것도 안 한 판은 기록이 아니다", async () => {
+    // 순위표는 닉네임당 한 줄이라, 0점짜리가 남으면 이름만 차지한다.
+    const calls = stubFetch(() => ok({ rank: 1, best: 0, isBest: true, total: 1, entries: [] }));
+    expect(await submitScore("abc.def", "나그네", 0)).toBeNull();
+    expect(await submitScore("abc.def", "나그네", -5)).toBeNull();
+    expect(calls).toHaveLength(0); // 서버를 부르지도 않았다
+    // 1점부터는 기록이다.
+    expect(await submitScore("abc.def", "나그네", 1)).not.toBeNull();
+    expect(calls).toHaveLength(1);
+  });
+
   it("거부·불통은 모두 null — 결과창은 등수 없이 그대로 뜬다", async () => {
     stubFetch(() => rejected());
     expect(await submitScore("abc.def", "나그네", 900)).toBeNull();

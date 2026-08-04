@@ -24,6 +24,10 @@ export type Member = {
   px: number;
   py: number;
   hasPosition: boolean;
+  /** 이 사람이 마지막으로 알려온 기록(getScore). 살아 있는 동안 계속 덮어쓴다.
+   *  ⚠️ 서버는 이 값이 tick인지 점수인지 **모른다.** 아는 것은 하나뿐이다 —
+   *     연결이 끊겼을 때 최종 기록으로 쓸 값이 여기 있다는 것. */
+  lastScore: number;
   /** 다음 스냅샷에 한 번 실어 보낼 게임 정의 이벤트 슬러그. 보내고 나면 지운다.
    *  서버는 의미를 모른다 — 위치와 같은 관전용 근사 정보라 저장도 하지 않는다. */
   pendingEvent?: string;
@@ -101,7 +105,7 @@ export class Room {
 
   addMember(id: string, nickname: string): boolean {
     if (this.state !== "waiting" || this.connectedCount >= this.capacity || this.hasConnectedMember(id)) return false;
-    this.members.push({ id, nickname, alive: true, survivalTicks: 0, connected: true, px: 0, py: 0, hasPosition: false });
+    this.members.push({ id, nickname, alive: true, survivalTicks: 0, connected: true, px: 0, py: 0, hasPosition: false, lastScore: 0 });
     this.emptySince = null; // 사람이 들어왔다 → 유예 시계를 끈다.
     return true;
   }
@@ -130,6 +134,7 @@ export class Room {
       member.px = 0;
       member.py = 0;
       member.hasPosition = false;
+      member.lastScore = 0;
     }
   }
 
@@ -143,12 +148,13 @@ export class Room {
     return Math.max(0, Math.floor((now - this.startTime) / FIXED_STEP_MS));
   }
 
-  updatePosition(id: string, px: number, py: number, ev?: string): boolean {
+  updatePosition(id: string, px: number, py: number, ev?: string, sc?: number): boolean {
     const member = this.members.find((candidate) => candidate.id === id && candidate.connected && candidate.alive);
     if (!member) return false;
     member.px = px;
     member.py = py;
     member.hasPosition = true;
+    if (sc !== undefined) member.lastScore = sc;
     // ⚠️ 덮어쓰지 않는다 — 아직 못 내보낸 이벤트가 있으면 그게 우선(스냅샷은 10Hz라
     //    보내기 전에 다음 위치가 먼저 들어올 수 있다).
     if (ev !== undefined && member.pendingEvent === undefined) member.pendingEvent = ev;
@@ -173,7 +179,14 @@ export class Room {
       this.ensurePlaying(now);
       if (member.alive) {
         member.alive = false;
-        member.survivalTicks = this.state === "playing" ? this.elapsedTicks(now) : 0;
+        // ⚠️ 예전에는 여기서 `elapsedTicks(now)`를 썼다. 서버가 유일하게 **값을 지어내는**
+        //    자리였고, 그 값은 언제나 tick이었다 — 앞의 세 게임은 생존 tick이 곧 기록이라
+        //    맞았지만, 숫자 야구처럼 기록이 점수인 게임에서는 "80초"가 "4826점"으로 찍혔다.
+        //    이제는 그 사람이 마지막으로 알려온 기록을 그대로 쓴다. 서버는 여전히 그게
+        //    무엇인지 모르고, 다만 **지어내지 않는다.**
+        //    덤: 회피 게임에서도 이쪽이 정확하다. 끊긴 걸 서버가 알아채는 시각은 실제로
+        //    끊긴 시각보다 늦을 수 있어(하이버네이션·타임아웃), 흐른 시간은 늘 부풀려졌다.
+        member.survivalTicks = this.state === "playing" ? member.lastScore : 0;
         died = true;
       }
       member.connected = false;
@@ -200,6 +213,7 @@ export class Room {
       member.px = 0;
       member.py = 0;
       member.hasPosition = false;
+      member.lastScore = 0;
     }
   }
 

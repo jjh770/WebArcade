@@ -46,10 +46,14 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
     case "player_state": {
       // ev는 게임 정의 시각 이벤트 슬러그. 서버는 의미를 모르므로 형식만 본다(없어도 정상).
       if (!isFiniteNumber(value.px) || !isFiniteNumber(value.py)) return null;
-      if (value.ev === undefined) return { type: value.type, px: value.px, py: value.py };
-      return EFFECT_KIND.test(String(value.ev))
-        ? { type: value.type, px: value.px, py: value.py, ev: String(value.ev) }
-        : null;
+      // sc(지금까지의 기록)도 형식만 본다 — 이게 초인지 점수인지는 게임이 아는 일이다.
+      // ⚠️ 형식이 틀리면 메시지를 버리지 않고 **sc만 뺀다.** 위치는 10Hz로 오는 관전
+      //    정보라, 한 필드 때문에 통째로 버리면 남의 화면에서 그 사람이 얼어붙는다.
+      const sc = Number.isSafeInteger(value.sc) && Number(value.sc) >= 0 ? Number(value.sc) : undefined;
+      const ev = value.ev === undefined ? undefined : EFFECT_KIND.test(String(value.ev)) ? String(value.ev) : null;
+      if (ev === null) return null;
+      const base = { type: value.type, px: value.px, py: value.py };
+      return { ...base, ...(ev === undefined ? {} : { ev }), ...(sc === undefined ? {} : { sc }) };
     }
     case "player_died":
       return Number.isSafeInteger(value.survivalTicks) && Number(value.survivalTicks) >= 0

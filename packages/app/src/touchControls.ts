@@ -2,8 +2,13 @@
    touchControls — 판 밖 조작면 일체를 소유한다
    ------------------------------------------------------------
    한 게임의 "손가락으로 어떻게 조작하는가"에 필요한 것이 여기 다 모여 있다:
-   입력 소스 셋(판 절반 / 조이스틱 / 방향키 버튼), 조이스틱 노브 표현,
+   입력 소스 셋(판 절반 / 조이스틱 / 방향키 버튼), 숫자판, 조이스틱 노브 표현,
    카운트다운 안내, 그리고 **조작이 세로를 얼마나 먹는지**를 알리는 body 클래스.
+
+   ⚠️ 숫자판만 흐르는 길이 다르다. 앞의 셋은 InputState를 만들어 러너가 매 스텝
+      물어 가지만(폴링), 숫자판은 눌린 순간 슬러그를 밀어 넣는다(푸시 → IGame.typeKey).
+      그래서 `all` 컴포지트에 들어가지 않고 onKey 콜백으로 나간다. 여기 함께 사는
+      이유는 하나뿐이다 — **조작면이라서 세로 예산을 똑같이 다툰다.**
 
    왜 GameSession에서 뗐나: 세션은 라운드(게임 인스턴스·관전·뷰)의 주인이지
    화면 배치의 주인이 아니다. 조작면 유무는 판 크기를 바꾸는 **레이아웃 정책**이라
@@ -42,8 +47,13 @@ export type TouchControlsOptions = {
   stick: HTMLElement;
   stickKnob: HTMLElement;
   dpad: HTMLElement;
+  /** 숫자판 뿌리. 숫자를 치는 게임에서만 뜬다. */
+  keypad: HTMLElement;
   /** 조작면 유무가 바뀌어 판이 쓸 세로가 달라졌다 — 판 크기를 다시 잡아야 한다. */
   onSpaceChange: () => void;
+  /** 숫자판에서 글자 슬러그가 나왔다(`"0"`~`"9"`·`"back"`·`"enter"`).
+   *  방향과 달리 폴링이 아니라 여기로 밀어 넣는다 — 위 파일 주석 참조. */
+  onKey: (slug: string) => void;
 };
 
 export class TouchControls implements InputSource {
@@ -69,7 +79,23 @@ export class TouchControls implements InputSource {
     this.all = new CompositeInput(this.onBoard, this.onStick, this.onButtons);
     this.joystick = new Joystick(options.stick, options.stickKnob);
     this.hint = new TouchHint(options.hint, options.board);
+    // ⚠️ 리스너를 뿌리에 하나만 단다(위임). 버튼마다 달면 열두 개를 붙였다 떼야 하고,
+    //    숫자판은 뜨고 지는 일이 잦아 그 수명 관리가 곧 버그가 된다.
+    // ⚠️ click이 아니라 pointerdown이다 — 톡 치는 즉시 숫자가 찍혀야 한다. click은
+    //    손가락을 뗄 때 오고, 그 사이의 공백이 "안 눌렸나?" 하고 한 번 더 치게 만든다.
+    options.keypad.addEventListener("pointerdown", this.onPadDown);
   }
+
+  /** 숨어 있어도 리스너는 붙어 있지만, 숨은 요소는 pointerdown을 받지 못하므로
+   *  여기 오는 건 곧 "떠 있는 숫자판을 눌렀다"는 뜻이다. */
+  private onPadDown = (event: PointerEvent): void => {
+    const target = event.target as HTMLElement | null;
+    const slug = target?.closest<HTMLElement>("[data-key]")?.dataset.key;
+    if (!slug) return; // 버튼 사이 빈틈
+    // 기본 동작(포커스 이동·이어지는 click)을 막는다. 안 막으면 한 번 친 것이 두 번 든다.
+    event.preventDefault();
+    this.options.onKey(slug);
+  };
 
   /* ---- InputSource — 러너에게는 그냥 소스 하나다 ------------------------- */
   start(): void {
@@ -124,13 +150,17 @@ export class TouchControls implements InputSource {
     const active = this.usable ? this.scheme : null;
     const stick = active === "joystick";
     const buttons = active === "buttons";
+    const keypad = active === "keypad";
     this.joystick.setVisible(stick);
     this.options.dpad.hidden = !buttons;
+    this.options.keypad.hidden = !keypad;
     const changed =
       document.body.classList.contains("controls-stick") !== stick ||
-      document.body.classList.contains("controls-buttons") !== buttons;
+      document.body.classList.contains("controls-buttons") !== buttons ||
+      document.body.classList.contains("controls-keypad") !== keypad;
     document.body.classList.toggle("controls-stick", stick);
     document.body.classList.toggle("controls-buttons", buttons);
+    document.body.classList.toggle("controls-keypad", keypad);
     if (changed) this.options.onSpaceChange();
   }
 }

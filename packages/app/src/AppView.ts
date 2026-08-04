@@ -6,8 +6,7 @@
    ============================================================ */
 
 import type { PlayerPublic, RankEntry } from "@arcade/shared";
-import { formatTicks } from "@arcade/shared";
-import { GAME_REGISTRY, type GameId } from "./GameRegistry";
+import { GAME_REGISTRY, formatGameScore, type GameId } from "./GameRegistry";
 import { PLAY_STATES, type AppState } from "./AppFlow";
 import { byId } from "./dom";
 import { NOTICES } from "./siteContent";
@@ -117,7 +116,9 @@ export function renderRankingTabs(active: GameId, onSelect: (id: GameId) => void
 /** ⚠️ 여기서 "나"는 **닉네임이 같은 줄**이다. 닉네임에는 소유권이 없어서 남이 같은
  *  이름을 쓸 수 있지만, 서버가 발급한 id는 순위표에 남지 않으므로 이것 말고는
  *  본인 줄을 짚을 방법이 없다. 강조는 거들 뿐이라 틀려도 손해는 없다. */
-export function renderRanking(view: RankingView, myNickname: string): void {
+/** ⚠️ gameId를 받는 이유는 표기 단위 하나 때문이다 — 같은 열에 어떤 게임은 초를,
+ *  숫자 야구는 점을 쓴다. 탭으로 게임을 바꾸면 이 열의 뜻도 같이 바뀐다. */
+export function renderRanking(view: RankingView, myNickname: string, gameId: GameId): void {
   const body = byId("rank-body");
   const note = byId("rank-note");
   body.innerHTML = "";
@@ -144,7 +145,7 @@ export function renderRanking(view: RankingView, myNickname: string): void {
     if (row.nickname === myNickname) line.classList.add("self");
     line.innerHTML = `<td class="rank">${index + 1}</td>`
       + `<td>${escapeHtml(row.nickname)}</td>`
-      + `<td class="time">${formatTicks(row.ticks)}</td>`;
+      + `<td class="time">${formatGameScore(gameId, row.ticks)}</td>`;
     body.appendChild(line);
   }
 }
@@ -201,6 +202,7 @@ export function renderResult(
   myId: string | null,
   amHost: boolean,
   solo: boolean,
+  gameId: GameId | null,
 ): void {
   const body = byId("result-body");
   body.innerHTML = "";
@@ -218,7 +220,7 @@ export function renderResult(
     }
     row.innerHTML = `<td class="rank">${rank.rank}</td>`
       + `<td>${escapeHtml(rank.nickname)}</td>`
-      + `<td class="time">${formatTicks(rank.survivalTicks)}</td>`;
+      + `<td class="time">${formatGameScore(gameId, rank.survivalTicks)}</td>`;
     body.appendChild(row);
   }
   byId("result-sub").textContent = myRank ? `내 순위 ${myRank}위` : "";

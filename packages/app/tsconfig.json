@@ -12,6 +12,7 @@
     { "path": "../core" },
     { "path": "../games/jungnim" },
     { "path": "../games/curve" },
-    { "path": "../games/floor" }
+    { "path": "../games/floor" },
+    { "path": "../games/baseball" }
   ]
 }

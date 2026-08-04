@@ -5,7 +5,7 @@
    난이도 곡선 등을 여기서 조절하면 게임 로직은 안 건드려도 된다.
    ============================================================ */
 
-import type { ScoreDirection } from "@arcade/shared";
+import type { ScoreDirection, ScoreUnit } from "@arcade/shared";
 
 export const jungnimConfig = {
   id: "jungnim",
@@ -14,6 +14,8 @@ export const jungnimConfig = {
 
   /** 순위 방향: 생존시간이 길수록 좋음. */
   scoreDirection: "higher" as ScoreDirection,
+  /** 기록의 단위: 생존 tick → 화면에는 초로 찍힌다. */
+  scoreUnit: "ticks" as ScoreUnit,
 
   /** 화면(캔버스) 논리 크기(px). 렌더 좌표계 기준.
    *  원형 경기장이라 정사각형으로 둔다 — 4:3이면 좌우에 안 쓰는 검은 여백이 크게 남는다.

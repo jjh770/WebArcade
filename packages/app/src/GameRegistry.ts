@@ -8,17 +8,25 @@
       core는 한 줄도 바뀌지 않는다.
    ============================================================ */
 
-import type { IGame, ScoreDirection } from "@arcade/shared";
+import type { GaugeAlarm, IGame, ScoreDirection, ScoreUnit } from "@arcade/shared";
+import { formatScore } from "@arcade/shared";
 import type { TouchScheme } from "./touchSchemes";
 import { JungnimGame, jungnimConfig } from "@arcade/game-jungnim";
 import { CurveGame, curveConfig } from "@arcade/game-curve";
 import { FloorGame, floorConfig } from "@arcade/game-floor";
+import { BaseballGame, baseballConfig } from "@arcade/game-baseball";
 
 export type GameEntry = {
   id: string;
   title: string;
   description: string;
   scoreDirection: ScoreDirection;
+  /** getScore가 무엇을 돌려주는가 — 화면이 초로 쓸지 점으로 쓸지 정한다. */
+  scoreUnit: ScoreUnit;
+  /** HUD 게이지 이름. getGauge를 구현한 게임만 갖는다(없으면 게이지 줄이 안 뜬다). */
+  gaugeLabel?: string;
+  /** 게이지 경고색이 붙는 쪽(가득/비어감). 게임마다 게이지의 뜻이 반대라 필요하다. */
+  gaugeAlarm?: GaugeAlarm;
   /** 게임 인스턴스를 만드는 팩토리 — 목록이 표시용이 아니라 실행용인 이유. */
   factory: () => IGame;
   /** 터치 조작 방식(touchSchemes.ts). 없으면 그 게임은 키보드 전용이다.
@@ -33,6 +41,7 @@ export const GAME_REGISTRY = {
     title: jungnimConfig.title,
     description: jungnimConfig.description,
     scoreDirection: jungnimConfig.scoreDirection,
+    scoreUnit: jungnimConfig.scoreUnit,
     factory: () => new JungnimGame(),
     touch: "joystick",
   },
@@ -41,6 +50,9 @@ export const GAME_REGISTRY = {
     title: curveConfig.title,
     description: curveConfig.description,
     scoreDirection: curveConfig.scoreDirection,
+    scoreUnit: curveConfig.scoreUnit,
+    gaugeLabel: curveConfig.gaugeLabel,
+    gaugeAlarm: curveConfig.gaugeAlarm,
     factory: () => new CurveGame(),
     touch: "halves",
   },
@@ -49,11 +61,37 @@ export const GAME_REGISTRY = {
     title: floorConfig.title,
     description: floorConfig.description,
     scoreDirection: floorConfig.scoreDirection,
+    scoreUnit: floorConfig.scoreUnit,
     factory: () => new FloorGame(),
     // 격자를 한 칸씩 옮기므로 미는 위젯이 아니라 방향키 버튼(touchSchemes 참조).
     touch: "buttons",
   },
+  baseball: {
+    id: baseballConfig.id,
+    title: baseballConfig.title,
+    description: baseballConfig.description,
+    scoreDirection: baseballConfig.scoreDirection,
+    scoreUnit: baseballConfig.scoreUnit,
+    gaugeLabel: baseballConfig.gaugeLabel,
+    gaugeAlarm: baseballConfig.gaugeAlarm,
+    factory: () => new BaseballGame(),
+    // 방향이 아니라 숫자를 받으므로 앞의 세 방식이 하나도 맞지 않는다 — 화면 숫자판이
+    // 곧 조작이다. 이 게임에서는 조작면이 "있으면 편한 것"이 아니라 없으면 못 논다.
+    touch: "keypad",
+  },
 } satisfies Record<string, GameEntry>;
+
+/** 계약(GameEntry)으로 넓혀 꺼낸다. 레지스트리는 satisfies라 항목마다 리터럴 타입이고,
+ *  그래서 어떤 항목에만 있는 선택 필드(gaugeLabel 등)는 유니온에서 안 보인다. */
+export function gameEntry(id: GameId): GameEntry {
+  return GAME_REGISTRY[id];
+}
+
+/** 기록 하나를 그 게임의 단위로 적는다. 순위표·결과표·개인 최고 기록·HUD가 전부
+ *  이걸 부른다 — 한 곳만 formatTicks로 남으면 숫자 야구 점수가 "4.0s"로 찍힌다. */
+export function formatGameScore(gameId: GameId | null, value: number): string {
+  return formatScore(value, gameId ? GAME_REGISTRY[gameId].scoreUnit : "ticks");
+}
 
 /** 등록된 게임 id의 유니온 타입. 문자열 유니온이라 존재하지 않는 게임 id를
  *  참조하면 컴파일 타임에 걸린다. */

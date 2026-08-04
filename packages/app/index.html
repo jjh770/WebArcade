@@ -38,11 +38,21 @@
         --play-pad: 16px;
         /* 방향키 버튼 한 변. 십자 전체 높이는 3칸 + 틈 2개 = 이 값의 3배 + 12px. */
         --dpad-btn: 56px;
+        /* 숫자판 버튼 한 변. 세로에서는 5열×3줄이라 전체 높이가 이 값의 3배 + 12px다.
+           ⚠️ 세로가 귀한 화면에서 폰 자판처럼 3열×4줄로 두면 한 줄을 더 먹는다.
+              그래서 세로에서는 **넓고 낮게**, 가로에서는 반대로 좁고 높게 흐른다. */
+        --pad-btn: 56px;
         /* 판 밖 조작 영역이 뷰포트 아래에서 차지하는 세로(위젯 + 아래 여백).
            ⚠️ 여기 숫자와 #stick/#dpad의 크기·bottom은 한 몸이다. 한쪽만 고치면
               판이 조작 위에 얹히거나(작으면) 판이 괜히 작아진다(크면).
-           조이스틱 132 + 라벨 20 + 아래 20 = 172 / 버튼 180 + 아래 20 = 200 */
+           조이스틱 132 + 라벨 20 + 아래 20 = 172 / 버튼 180 + 아래 20 = 200
+           숫자판 3줄 180 + 아래 20 = 200 (방향키 버튼과 같은 몫) */
         --control-h: 0px;
+        /* 가로 화면에서 조작 영역이 **왼쪽에서** 차지하는 가로. 세로에서의 --control-h와
+           같은 일을 축만 바꿔 한다 — 가로에서는 조작이 판 아래가 아니라 옆에 앉으므로.
+           ⚠️ 조작면 셋의 오른쪽 끝 중 가장 먼 것 + 여유다:
+              조이스틱 20+132=152 / 방향키 12+132=144 / 숫자판 12+144=156 → 156+16 */
+        --control-w: 0px;
         --ease-out: cubic-bezier(.2, .7, .2, 1);      /* 감속 — 진입·전환의 기본 */
         --ease-in-sharp: cubic-bezier(.5, 0, .75, 0); /* 가속 — 사망 낙하의 무게감 */
       }
@@ -82,10 +92,20 @@
          판 크기를 정한다 — 상수를 CSS와 JS 양쪽에 두지 않았기 때문이다.
          ⚠️ 세로 화면에서만. 가로에서는 조작이 판 옆 여백에 앉으므로 세로를 안 먹는다. */
       body.controls-stick { --control-h: 172px; }
-      body.controls-buttons { --control-h: 200px; }
+      body.controls-buttons, body.controls-keypad { --control-h: 200px; }
       @media (orientation: portrait) {
-        body.controls-stick #play, body.controls-buttons #play {
+        body.controls-stick #play, body.controls-buttons #play, body.controls-keypad #play {
           padding-bottom: calc(var(--play-pad) + env(safe-area-inset-bottom) + var(--control-h)); }
+      }
+      /* 가로에서는 같은 문제가 축만 바꿔 나타난다. 조작은 판 **옆**에 앉는데, 판은
+         남는 가로 전체 기준 가운데 정렬이라 화면이 좁을수록 조작 위로 올라탄다
+         (667x375에서 9px 겹쳤다 — 세로에서 겪은 것과 똑같은 종류다).
+         고치는 방법도 같다: 조작이 자기 몫의 가로를 갖고, layoutPlayArea가 그 패딩을
+         읽어 판을 그만큼 안쪽에 잡는다. */
+      @media (orientation: landscape) {
+        body.controls-stick, body.controls-buttons, body.controls-keypad { --control-w: 172px; }
+        body.controls-stick #play, body.controls-buttons #play, body.controls-keypad #play {
+          padding-left: calc(var(--play-pad) + env(safe-area-inset-left) + var(--control-w)); }
       }
 
       /* 터치 조작 안내. 자리·크기는 JS가 캔버스에 맞춰 인라인으로 넣는다.
@@ -170,14 +190,57 @@
       #dpad .dpad-btn[data-dir="down"] { grid-area: 3 / 2; }
       #dpad .stick-label { grid-area: 2 / 2; position: static; align-self: center;
         font-size: 11px; line-height: 1.25; }
+
+      /* ---- 숫자판(숫자 야구) -------------------------------------------------
+         앞의 둘과 겉모습은 같은 계열이지만 내는 것이 다르다 — 방향이 아니라 글자다.
+         세로에서는 **5열 × 3줄**로 넓고 낮게 깐다. 폰 자판처럼 3열로 두면 4줄이 되어
+         가뜩이나 귀한 세로를 한 줄 더 먹는다(판이 그만큼 작아진다).
+         자리·z-index·pointer-events 규칙은 #stick과 같다(위 주석 참조). */
+      #keypad { position: fixed; z-index: 42; display: none;
+        grid-template-columns: repeat(5, var(--pad-btn));
+        grid-auto-rows: var(--pad-btn);
+        gap: 6px; width: max-content;
+        left: 0; right: 0; margin-inline: auto;
+        bottom: calc(20px + env(safe-area-inset-bottom));
+        user-select: none; -webkit-tap-highlight-color: transparent;
+        pointer-events: auto; }
+      body.playing #keypad:not([hidden]) { display: grid; }
+      /* 방향키 버튼과 달리 touch-action은 manipulation이다 — 이건 끄는 조작이 아니라
+         톡톡 치는 조작이라 none으로 막을 제스처가 없고, 두 번 눌러 확대만 꺼주면 된다. */
+      .pad-btn { display: flex; align-items: center; justify-content: center;
+        font-size: 22px; line-height: 1; padding: 0; border-radius: 14px;
+        color: var(--text-primary); touch-action: manipulation;
+        background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
+        border: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
+        transition: background .1s ease, border-color .1s ease, transform .1s ease; }
+      .pad-btn:active { background: color-mix(in srgb, var(--primary) 30%, transparent);
+        border-color: var(--primary); transform: scale(.94); }
+      /* 지우기·확인은 숫자가 아니라 **행동**이라 넓게 깔아 손가락이 헷갈리지 않게 한다.
+         셋째 줄 5칸을 2:3으로 나눈다 — 확인이 훨씬 자주 눌린다. */
+      #keypad .wide { font-size: 17px; }
+      #keypad [data-key="back"] { grid-column: span 2; }
+      #keypad [data-key="enter"] { grid-column: span 3; }
+      #keypad .go { color: var(--bg-deep); font-weight: 700;
+        background: color-mix(in srgb, var(--primary) 80%, transparent);
+        border-color: var(--primary); }
+      #keypad .go:active { background: var(--primary); }
       /* 가로 화면에는 판 아래 띠가 없다 — 가운데에 두면 판 한복판을 덮는다.
          대신 판 옆에 남는 여백으로 비켜 앉는다. */
       @media (orientation: landscape) {
-        #stick, #dpad { right: auto; margin-inline: 0; left: calc(20px + env(safe-area-inset-left)); }
+        #stick, #dpad, #keypad { right: auto; margin-inline: 0; left: calc(20px + env(safe-area-inset-left)); }
         /* 가로에서는 세로가 판 크기를 정하고 조작은 판 옆 여백에 앉는다. 그 여백이
            좁으므로 버튼을 44px(손가락 표적 하한)까지 줄이고 더 왼쪽에 붙인다 —
            700x380에서 48px면 판 왼쪽 가장자리를 8px 덮었다. */
         #dpad { --dpad-btn: 44px; left: calc(12px + env(safe-area-inset-left)); }
+        /* 숫자판은 세로와 **정반대로** 흐른다. 가로에서는 남는 것이 세로고 귀한 것이
+           가로라, 5열(244px)로 두면 판 왼쪽을 덮는다(700x380 기준 옆 여백 ~180px).
+           3열이면 144px라 여백 안에 들어간다. 아래가 아니라 세로 가운데에 앉힌다. */
+        #keypad { --pad-btn: 44px; left: calc(12px + env(safe-area-inset-left));
+          grid-template-columns: repeat(3, var(--pad-btn));
+          bottom: auto; top: 50%; transform: translateY(-50%); }
+        /* 3열에서는 나눌 칸이 없다 — 지우기·확인도 숫자와 같은 한 칸이다. */
+        #keypad [data-key="back"], #keypad [data-key="enter"] { grid-column: auto; }
+        #keypad .wide { font-size: 14px; }
       }
       .tz-label { font-size: 13px; color: var(--text-secondary); }
       /* 조작의 핵심은 "탭"이 아니라 "누르고 있기"라 문장으로 못 박는다. */
@@ -833,6 +896,25 @@
           <button type="button" class="dpad-btn" data-dir="right" aria-label="오른쪽으로">▶</button>
           <button type="button" class="dpad-btn" data-dir="down" aria-label="아래로">▼</button>
           <span class="stick-label">한 번에 한 칸</span>
+        </div>
+
+        <!-- 숫자판(숫자 야구). 앞의 두 조작면과 달리 방향이 아니라 **글자**를 낸다
+             (data-key → IGame.typeKey). 자리 규칙은 조이스틱과 같다(#stick 주석 참조).
+             ⚠️ DOM 순서가 곧 배치다 — 세로에서는 5열, 가로에서는 3열로 흐른다.
+                그래서 자리를 grid-area로 못 박지 않았다. -->
+        <div id="keypad" hidden>
+          <button type="button" class="pad-btn" data-key="1">1</button>
+          <button type="button" class="pad-btn" data-key="2">2</button>
+          <button type="button" class="pad-btn" data-key="3">3</button>
+          <button type="button" class="pad-btn" data-key="4">4</button>
+          <button type="button" class="pad-btn" data-key="5">5</button>
+          <button type="button" class="pad-btn" data-key="6">6</button>
+          <button type="button" class="pad-btn" data-key="7">7</button>
+          <button type="button" class="pad-btn" data-key="8">8</button>
+          <button type="button" class="pad-btn" data-key="9">9</button>
+          <button type="button" class="pad-btn" data-key="0">0</button>
+          <button type="button" class="pad-btn wide" data-key="back" aria-label="한 글자 지우기">⌫</button>
+          <button type="button" class="pad-btn wide go" data-key="enter" aria-label="제출">확인</button>
         </div>
 
         <div id="alive-hud" hidden></div>

@@ -111,6 +111,14 @@ export class GameRunner {
     return this.game.isPlayerDead();
   }
 
+  /** 글자 입력이 들어왔을 때 앱이 호출(키보드든 화면 자판이든). 게임이 글자를
+   *  받는 게임이면 그대로 넘긴다 — 러너는 슬러그의 뜻을 모른다.
+   *  ⚠️ 고정 스텝 밖에서 곧장 넘긴다. 다음 스텝까지 모아 두면 빠르게 친 글자가
+   *  한 tick씩 밀리는데, 로컬 입력이라 결정론과 무관하니 미룰 이유가 없다. */
+  typeKey(key: string): void {
+    this.game.typeKey?.(key);
+  }
+
   /** 남의 발사에 맞았을 때 앱이 호출. 게임이 아는 효과면 로컬에 적용한다.
    *  게임이 뭔지는 모른다 — IGame.applyEffect에 그대로 위임. */
   applyEffect(kind: string, durationMs: number): void {

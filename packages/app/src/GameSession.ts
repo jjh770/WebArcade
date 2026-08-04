@@ -14,6 +14,7 @@ import {
   CompositeInput,
   GameRunner,
   InputManager,
+  KeyEntry,
 } from "@arcade/core";
 import type { IGame, PeerSnapshot, PlayerPublic } from "@arcade/shared";
 import { isSoundId, play } from "./audio";
@@ -33,6 +34,8 @@ export type GameSessionOptions = {
   stickKnob: HTMLElement;
   /** 방향키 버튼 뿌리. 격자를 한 칸씩 옮기는 게임에서만 뜬다. */
   dpad: HTMLElement;
+  /** 숫자판 뿌리. 숫자를 치는 게임에서만 뜬다. */
+  keypad: HTMLElement;
   /** 게임 좌표계 크기. 화면 크기와 무관하게 고정 — 게임은 항상 이 좌표로만 그린다. */
   logicalWidth: number;
   logicalHeight: number;
@@ -52,6 +55,10 @@ export type GameSessionOptions = {
 export class GameSession {
   // 키보드와 손가락은 같은 InputState를 낸다. 러너는 둘을 구분하지 않는다.
   private readonly keyboard = new InputManager();
+  /** 글자 입력. 방향과 달리 **게임이 요구할 때만** 켠다 — 켜져 있으면 Enter·Backspace의
+   *  기본 동작을 삼키므로, 숫자를 안 받는 게임에서까지 켜 둘 이유가 없다. */
+  private readonly typing = new KeyEntry((slug) => this.runner?.typeKey(slug));
+  private typingOn = false;
   private readonly touch: TouchControls;
   private readonly input: CompositeInput;
   private readonly views: PeerViews;
@@ -71,7 +78,10 @@ export class GameSession {
       stick: options.stick,
       stickKnob: options.stickKnob,
       dpad: options.dpad,
+      keypad: options.keypad,
       onSpaceChange: options.onControlsChange,
+      // 손가락이 낸 슬러그도 키보드와 **같은 문으로** 들어간다 — 게임은 출처를 모른다.
+      onKey: (slug) => this.runner?.typeKey(slug),
     });
     this.input = new CompositeInput(this.keyboard, this.touch);
     this.views = new PeerViews({
@@ -131,6 +141,7 @@ export class GameSession {
     // ⚠️ ensureRunner는 같은 게임이면 일찍 빠져나간다. 조작 상태를 거기서만 세우면
     //    관전으로 걷힌 조작이 "다시 하기"에서 안 돌아온다.
     this.touch.setUsable(true);
+    this.setTyping(typeof this.game?.typeKey === "function");
     this.runner?.start(seed, epochPerformanceMs, this.views.selfContext());
     this.refresh();
     // 카운트다운 동안 깔려 있던 조작 안내를 걷는다 — 플레이 화면은 가리지 않는다.
@@ -141,6 +152,9 @@ export class GameSession {
   stopRound(): void {
     this.roundActive = false;
     this.runner?.stop();
+    // 판이 끝나면 키보드도 놓는다 — 결과 화면에서 Enter를 눌러 버튼을 누르는 길을
+    // 막으면 안 되고, 죽은 뒤의 숫자 입력은 게임이 이미 무시한다.
+    this.setTyping(false);
     this.touch.hideHint();
     // 라운드가 끝나면 조작면도 걷는다. CSS가 body.playing으로 이미 감추지만,
     // 세로 예산 클래스는 남아 다음 라운드까지 판을 괜히 작게 잡는다.
@@ -150,6 +164,15 @@ export class GameSession {
   leaveRoom(): void {
     this.stopRound();
     this.views.clear();
+  }
+
+  /** 글자 입력을 켜고 끈다. 두 번 켜도 리스너는 하나다(KeyEntry가 막지만
+   *  여기서도 상태를 들고 있어야 "지금 켜져 있나"를 밖에서 물을 수 있다). */
+  private setTyping(on: boolean): void {
+    if (on === this.typingOn) return;
+    this.typingOn = on;
+    if (on) this.typing.start();
+    else this.typing.stop();
   }
 
   getScore(): number | null {

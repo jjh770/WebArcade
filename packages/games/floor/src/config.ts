@@ -8,7 +8,7 @@
    메워지므로 판이 0으로 줄어들지는 않는다 — 버티기가 아니라 계속 읽고 옮기는 게임.
    ============================================================ */
 
-import type { ScoreDirection } from "@arcade/shared";
+import type { ScoreDirection, ScoreUnit } from "@arcade/shared";
 
 export const floorConfig = {
   id: "floor",
@@ -17,6 +17,8 @@ export const floorConfig = {
 
   /** 순위 방향: 오래 살아남을수록 좋음(생존 tick). 앞의 두 게임과 같다. */
   scoreDirection: "higher" as ScoreDirection,
+  /** 기록의 단위: 생존 tick → 화면에는 초로 찍힌다. */
+  scoreUnit: "ticks" as ScoreUnit,
 
   /** 화면(캔버스) 논리 크기(px). app의 LOGICAL_WIDTH/HEIGHT와 일치시킬 것. */
   screenWidth: 800,

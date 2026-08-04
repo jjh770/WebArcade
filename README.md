@@ -190,7 +190,7 @@ npm run board -- mv curve 옛이름 새이름  # 이름만 바꾸기 (기록·�
 지우면 순위표에 구멍이 생기지만 이름만 바꾸면 등수가 남는다. 무엇보다 **되돌릴 수 있다** —
 `rm`으로 지운 줄은 어디에도 남지 않아 복구할 방법이 없다.
 
-게임id는 `jungnim`(죽림고수) · `curve`(커브 피버) · `floor`(무너지는 바닥)다.
+게임id는 `jungnim`(죽림고수) · `curve`(커브 피버) · `floor`(무너지는 바닥) · `baseball`(숫자 야구)다.
 게임을 추가하면 `rm all`이 훑을 목록(`scripts/board.mjs`의 `GAMES`)에도 넣어야 한다 —
 서버에는 "게임 목록"을 묻는 경로가 없다(서버는 gameId를 문자열로만 다룬다).
 
@@ -217,13 +217,18 @@ npx wrangler secret put ADMIN_KEY --cwd packages/edge
 
 1. `packages/games/<name>/` 생성, `IGame`을 구현하는 클래스 작성
    (`init`/`update`/`render`/`renderSpectator`/`isPlayerDead`/`getPosition`/`syncPeers`/`getScore`).
-2. 게임 튜닝값은 `config.ts`에 데이터로 분리 (`scoreDirection` 포함).
+2. 게임 튜닝값은 `config.ts`에 데이터로 분리 (`scoreDirection`·`scoreUnit` 포함).
+   `scoreUnit`은 `getScore()`가 **무엇을** 돌려주는지다 — `"ticks"`면 화면에 `5.1s`,
+   `"points"`면 `240점`으로 찍힌다. 게이지가 있으면 `gaugeLabel`·`gaugeAlarm`도 함께 둔다.
 3. `packages/app/src/GameRegistry.ts`의 `GAME_REGISTRY`에 항목 추가 (factory 함수 포함).
+4. 순위표를 쓰면 `scripts/board.mjs`의 `GAMES`에도 id를 넣는다(`rm all`이 훑을 목록).
 
 **선택 메서드** — 구현하면 그 기능이 켜지고, 안 하면 없는 게임이 된다:
-`getGauge()`(HUD 게이지 줄) · `consumePendingFire()`(방해 발사) · `applyEffect(kind, ms)`(피격) ·
+`getGauge()`(HUD 게이지 줄) · `typeKey(slug)`(숫자·글자 입력) · `consumePendingFire()`(방해 발사) ·
+`applyEffect(kind, ms)`(피격) · `consumeSounds()`(소리) ·
 `consumePeerEvent()`/`applyPeerEvent(id, kind)`(남의 화면에도 보여야 할 연출).
-두 게임이 서로 다른 부분집합을 쓴다 — 커브 피버는 앞 셋, 죽림고수는 뒤 둘(아래 참조).
+게임마다 서로 다른 부분집합을 쓴다 — 커브 피버는 게이지·발사·피격, 죽림고수는 연출 둘,
+숫자 야구는 게이지와 `typeKey`(아래 참조).
 
 → 게임 선택 화면 목록에 자동으로 나타난다. `core`·서버는 수정하지 않는다.
 
@@ -238,6 +243,20 @@ npx wrangler secret put ADMIN_KEY --cwd packages/edge
 `core`가 아니라 앱이 정한다(`packages/app/src/touchSchemes.ts`) — 커브 피버는 판 좌/우 절반,
 죽림고수는 판 밖의 조이스틱 위젯(손가락이 화살을 가리면 안 되므로), 무너지는 바닥은 방향키
 버튼 넷(격자는 한 번에 한 칸이라 미는 위젯이 맞지 않는다).
+
+**넷째 게임(숫자 야구)에서 처음으로 입력 계약이 넓어졌다.** 이 게임은 방향이 아니라 **숫자를
+친다.** `InputState`에 숫자를 더하지 않은 이유는 자리 부족이 아니라 종류가 다르기 때문이다 —
+저건 「누르고 있다」의 스냅샷이고 타자는 「누른 순간」의 연속이라, 60Hz로 뽑아 보면 스텝 사이에
+눌렸다 떼인 키가 사라진다. 그래서 폴링(`InputSource`)이 아니라 **푸시** 통로를 따로 열었다:
+`IGame.typeKey?(slug)` + `core`의 `KeyEntry`(keydown → `"0"`~`"9"`·`"back"`·`"enter"`).
+숫자를 안 받는 게임에서는 아예 켜지지 않아 Enter·Backspace의 기본 동작을 삼키지 않는다.
+
+그래서 터치 조작 방식이 넷이 됐다 — 네 번째 `keypad`(화면 숫자판)만 **방향을 만들지 않는다.**
+앞의 셋은 `InputState`를 내놓고 러너가 매 스텝 물어 가지만(폴링), 숫자판은 눌린 순간 슬러그를
+밀어 넣는다(푸시). 같은 파일에 사는 이유는 하나뿐이다 — 조작면이라 **화면 자리를 똑같이 다툰다.**
+
+숫자판은 세로에서 5열×3줄(넓고 낮게), 가로에서 3열×4줄(좁고 높게)로 흐른다. 귀한 축이 반대라서다
+— 세로에서는 세로가, 가로에서는 가로가 모자란다.
 
 ## 결정론 불변식 (절대 규칙)
 

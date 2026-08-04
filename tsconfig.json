@@ -6,6 +6,7 @@
     { "path": "./packages/games/jungnim" },
     { "path": "./packages/games/curve" },
     { "path": "./packages/games/floor" },
+    { "path": "./packages/games/baseball" },
     { "path": "./packages/edge" },
     { "path": "./packages/app" }
   ]

@@ -14,13 +14,12 @@
    ============================================================ */
 
 import type { RankEntry } from "@arcade/shared";
-import { formatTicks } from "@arcade/shared";
 import type { AppEvent } from "./AppFlow";
 import { renderResult, setAliveHud, toast } from "./AppView";
 import { play } from "./audio";
 import { runCountdown } from "./countdown";
 import { byId } from "./dom";
-import type { GameId } from "./GameRegistry";
+import { formatGameScore, type GameId } from "./GameRegistry";
 import type { GameSession } from "./GameSession";
 import { recordBest } from "./personalBest";
 import { resetScreenFx, slideInScreen } from "./screenFx";
@@ -93,6 +92,12 @@ export function createSoloPlay(deps: SoloPlayDeps): SoloPlay {
     ticket = null; // 티켓은 일회용 — 같은 판에서 두 번 내지 않는다.
     const nickname = deps.nickname();
     if (!used || !nickname) return;
+    // 0점은 순위표에 안 올라간다(soloRanking.submitScore). 다만 **그걸 말해 줘야** 한다 —
+    // 아무 말이 없으면 서버가 죽어서 순위가 안 붙은 것과 구분이 안 된다.
+    if (score <= 0) {
+      byId("result-sub").textContent += " · 순위표에는 안 올라갑니다";
+      return;
+    }
 
     const mine = round;
     void (async () => {
@@ -148,11 +153,11 @@ export function createSoloPlay(deps: SoloPlayDeps): SoloPlay {
       ];
       deps.setRanks(ranks);
       // amHost=true로 넘겨 "다시 하기"를 보이게 한다(혼자 할 때는 언제나 내가 방장이다).
-      renderResult(ranks, SOLO_ID, true, true);
+      renderResult(ranks, SOLO_ID, true, true, gameId);
       // 혼자 하면 순위(1위)가 의미 없다 — 그 자리에 개인 최고기록을 보여준다.
       if (gameId) {
         const { best, isNew } = recordBest(gameId, score);
-        byId("result-sub").textContent = `${isNew ? "새 기록! " : ""}최고 ${formatTicks(best)}`;
+        byId("result-sub").textContent = `${isNew ? "새 기록! " : ""}최고 ${formatGameScore(gameId, best)}`;
       }
       submit(score);
       // 여기서 가장 흔한 다음 행동은 "다시 하기"다 — 결과를 보는 동안 다음 티켓을 받아 둔다.

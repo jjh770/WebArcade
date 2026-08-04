@@ -5,11 +5,15 @@
  *  shared 하나뿐이고, "core는 게임을 모른다"의 짝인 "게임도 엔진을 모른다"가 성립한다. */
 export { SeededRNG } from "./SeededRNG";
 
+import type { ScoreUnit } from "./types";
+
 export type { IGame } from "./IGame";
 export type { IRenderer } from "./IRenderer";
 export type {
   InputState,
   ScoreDirection,
+  ScoreUnit,
+  GaugeAlarm,
   RoomState,
   PlayerPublic,
   SpawnContext,
@@ -32,4 +36,10 @@ export const FIXED_STEP_MS = 1000 / TICKS_PER_SECOND;
 /** tick을 사람이 읽는 초 표기로. 기록·생존시간을 화면에 쓰는 곳이 여럿이라 여기 둔다. */
 export function formatTicks(ticks: number): string {
   return `${(ticks / TICKS_PER_SECOND).toFixed(1)}s`;
+}
+
+/** 기록 하나를 그 게임의 단위로 적는다. 순위표·결과표·개인 최고 기록·HUD가 전부
+ *  같은 자리에 같은 숫자를 쓰므로, 단위를 각자 정하면 한 곳만 초로 남는다. */
+export function formatScore(value: number, unit: ScoreUnit): string {
+  return unit === "points" ? `${Math.round(value)}점` : formatTicks(value);
 }

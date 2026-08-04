@@ -8,7 +8,7 @@
    부딪히면 죽는다. 마지막 생존자가 승리.
    ============================================================ */
 
-import type { ScoreDirection } from "@arcade/shared";
+import type { GaugeAlarm, ScoreDirection, ScoreUnit } from "@arcade/shared";
 
 export const curveConfig = {
   id: "curve",
@@ -17,6 +17,12 @@ export const curveConfig = {
 
   /** 순위 방향: 오래 살아남을수록 좋음(생존 tick). 죽림고수와 같다. */
   scoreDirection: "higher" as ScoreDirection,
+  /** 기록의 단위: 생존 tick → 화면에는 초로 찍힌다. */
+  scoreUnit: "ticks" as ScoreUnit,
+  /** HUD 게이지 이름. getGauge를 구현한 게임만 쓴다 — 스침으로 차는 발사 게이지다. */
+  gaugeLabel: "스릴",
+  /** 경고색이 붙는 쪽. 이 게이지는 **차면** 쏠 수 있다 → 가득일 때가 그 순간이다. */
+  gaugeAlarm: "full" as GaugeAlarm,
 
   /** 화면(캔버스) 논리 크기(px). app의 LOGICAL_WIDTH/HEIGHT와 일치시킬 것. */
   screenWidth: 800,

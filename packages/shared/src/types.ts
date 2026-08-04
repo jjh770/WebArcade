@@ -25,6 +25,18 @@ export type SpawnContext = {
  *  DESIGN.md의 "getScore 우열 방향" 미정 항목을 이 타입으로 해소한다. */
 export type ScoreDirection = "higher" | "lower";
 
+/** getScore가 돌려주는 숫자가 **무엇인가**. 정렬은 방향만 알면 되지만 화면은
+ *  단위를 알아야 한다 — 셋째 게임까지는 전부 생존 tick이라 "초"로 찍으면 됐는데,
+ *  숫자 야구는 같은 자리에 점수를 낸다.
+ *  ⚠️ 서버는 이 값을 모른다. 순위표는 여전히 숫자 하나를 방향대로 세울 뿐이고,
+ *     단위는 순전히 표시의 문제다. */
+export type ScoreUnit = "ticks" | "points";
+
+/** HUD 게이지의 경고색이 어느 쪽에 붙는가. 게이지가 뜻하는 바가 게임마다 반대라
+ *  — 커브 피버는 **차면** 쏠 수 있고, 숫자 야구는 **비면** 판이 끝난다 —
+ *  "지금이 중요한 순간"을 게이지 값만 보고는 알 수 없다. */
+export type GaugeAlarm = "full" | "empty";
+
 /** 서버와 앱이 공유하는 방 수명주기. 게임별 상태가 아니라 멀티 방의 공통 상태다. */
 export type RoomState = "waiting" | "countdown" | "playing" | "finished";
 

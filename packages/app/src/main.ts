@@ -1,6 +1,5 @@
 ﻿import { NetClient, StateMachine } from "@arcade/core";
 import type { RankEntry, ServerMessage } from "@arcade/shared";
-import { formatTicks } from "@arcade/shared";
 import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
 import { initAudio, play } from "./audio";
 import { initBgDecor } from "./bgDecor";
@@ -29,7 +28,7 @@ import {
   slideInScreen,
   swapSpectateScreen,
 } from "./screenFx";
-import { GAME_REGISTRY, isGameId, type GameId } from "./GameRegistry";
+import { GAME_REGISTRY, formatGameScore, gameEntry, isGameId, type GameId } from "./GameRegistry";
 import { GameSession } from "./GameSession";
 import { loadNickname, saveNickname } from "./prefs";
 import { createRankingScreen } from "./rankingScreen";
@@ -64,6 +63,7 @@ const session = new GameSession({
   stick: byId("stick"),
   stickKnob: byId("stick-knob"),
   dpad: byId("dpad"),
+  keypad: byId("keypad"),
   logicalWidth: LOGICAL_WIDTH,
   logicalHeight: LOGICAL_HEIGHT,
   onLocalDeath,
@@ -78,20 +78,29 @@ const session = new GameSession({
   },
 });
 
-/** 매 프레임 로컬 플레이어 HUD 갱신 — 캔버스 밖 좌측 상단 헤더(시간 + 스릴 게이지).
- *  gauge가 null이면(getGauge를 구현 안 한 게임) 게이지 줄을 숨긴다. */
+/** 매 프레임 로컬 플레이어 HUD 갱신 — 캔버스 밖 좌측 상단 헤더(기록 + 게이지).
+ *  gauge가 null이면(getGauge를 구현 안 한 게임) 게이지 줄을 숨긴다.
+ *  ⚠️ 기록 표기와 게이지 이름은 **게임마다 다르다.** 앞의 셋은 생존시간과 「스릴」,
+ *  숫자 야구는 점수와 「남은 시간」이다 — 둘 다 레지스트리에서 온다. */
 function updateHud(score: number, gauge: number | null): void {
-  byId("hud-time").textContent = formatTicks(score);
+  byId("hud-time").textContent = formatGameScore(selectedGameId, score);
   const gaugeEl = byId("hud-gauge");
   if (gauge === null) {
     gaugeEl.hidden = true;
     return;
   }
   gaugeEl.hidden = false;
+  const entry = selectedGameId ? gameEntry(selectedGameId) : null;
+  // 매 프레임 부르는 자리라 값이 그대로면 DOM을 안 건드린다.
+  const label = entry?.gaugeLabel ?? "게이지";
+  const labelEl = byId("hud-gauge-label");
+  if (labelEl.textContent !== label) labelEl.textContent = label;
   const clamped = Math.max(0, Math.min(1, gauge));
   const fill = byId("hud-gauge-fill");
   fill.style.width = `${clamped * 100}%`;
-  fill.classList.toggle("near", clamped >= 0.85);
+  // 게이지가 뜻하는 바가 게임마다 반대다 — 커브는 **차면** 발사고, 숫자 야구는
+  // **비면** 끝이다. 경고색은 "지금 중요한 순간"에 붙어야 하므로 방향도 게임이 정한다.
+  fill.classList.toggle("near", entry?.gaugeAlarm === "empty" ? clamped <= 0.15 : clamped >= 0.85);
 }
 /** 표시 크기를 먼저 정하고(레이아웃), 그 크기에 맞춰 캔버스 해상도를 잡는다(렌더러). 순서 중요. */
 function relayout(): void {
@@ -213,7 +222,7 @@ function handleServer(message: ServerMessage): void {
         if (appState.state === "lobby") transition("room_joined");
         else if (appState.state === "result") transition("return_ready");
       } else if (appState.state === "result" && finalRanks.length > 0) {
-        renderResult(finalRanks, myId, amHost, soloMode);
+        renderResult(finalRanks, myId, amHost, soloMode, selectedGameId);
       }
       break;
     case "game_start":
@@ -242,7 +251,7 @@ function handleServer(message: ServerMessage): void {
       break;
     case "host_changed":
       amHost = message.newHostId === myId;
-      if (appState.state === "result" && finalRanks.length > 0) renderResult(finalRanks, myId, amHost, soloMode);
+      if (appState.state === "result" && finalRanks.length > 0) renderResult(finalRanks, myId, amHost, soloMode, selectedGameId);
       break;
     case "error":
       toast(message.reason);
@@ -393,9 +402,16 @@ window.setInterval(() => {
   // 게임이 낸 시각 이벤트(예: 정화 파동)를 위치에 얹어 보낸다 — 서버는 의미를 모르고
   // 다음 스냅샷에 한 번 실어 중계한다. 없으면 필드 자체를 안 붙인다.
   const ev = session.takePeerEvent();
-  net.send(ev === null
-    ? { type: "player_state", px: position.x, py: position.y }
-    : { type: "player_state", px: position.x, py: position.y, ev });
+  // 지금까지의 기록도 함께 보낸다. 판이 끝나면 player_died가 최종값을 내지만, **끊기면
+  // 그게 안 온다** — 그때 서버가 쓸 값이 이것이다(Room.disconnectMember 주석 참조).
+  const sc = session.getScore();
+  net.send({
+    type: "player_state",
+    px: position.x,
+    py: position.y,
+    ...(ev === null ? {} : { ev }),
+    ...(sc === null ? {} : { sc: Math.max(0, Math.floor(sc)) }),
+  });
 }, POSITION_SEND_MS);
 
 function showResult(ranks: readonly RankEntry[]): void {
@@ -405,7 +421,7 @@ function showResult(ranks: readonly RankEntry[]): void {
   // 판이 끝났다는 마침표. 멀티에서만 낸다 — 혼자 할 때는 죽는 순간이 곧 결과라
   // 사망음과 같은 프레임에 겹쳐 둘 다 뭉개진다(soloPlay.finish 참조).
   play("result");
-  renderResult(ranks, myId, amHost, soloMode);
+  renderResult(ranks, myId, amHost, soloMode, selectedGameId);
   setAliveHud("", true);
   session.stopRound();
   transition("game_over");
