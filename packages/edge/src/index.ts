@@ -14,6 +14,7 @@
    제약이 없다.
    ============================================================ */
 
+import { isAdmin } from "./adminAuth";
 import { BoardObject, BOARD_NAME } from "./BoardObject";
 import type { Env } from "./env";
 import { RoomObject } from "./RoomObject";
@@ -33,10 +34,10 @@ export { RoomObject, BoardObject };
  *  못한다(브라우저 밖에서는 CORS가 적용되지 않는다). 남용 방어는 rate limit의 몫. */
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
   // 기록 제출은 JSON 본문이라 content-type이 붙는다 — 이걸 빼면 브라우저가
   // 프리플라이트에서 막아 요청 자체가 나가지 않는다.
-  "access-control-allow-headers": "content-type",
+  "access-control-allow-headers": "content-type, authorization",
   "access-control-max-age": "86400",
 } as const;
 
@@ -113,6 +114,14 @@ export default {
       if (url.pathname === "/solo/board" && request.method === "GET") {
         if (!GAME_ID.test(gameId)) return json({ reason: "유효하지 않은 게임입니다." }, 400);
         return forwardToBoard(env, `/board?gameId=${encodeURIComponent(gameId)}`, request);
+      }
+      // 기록 지우기(운영자). 열쇠가 틀리면 **404** — 401이면 "여기 뭔가 있다"를
+      // 알려주는 셈이라, 열쇠 없는 사람에게는 이 경로가 없는 것과 똑같이 보이게 한다.
+      if (url.pathname === "/solo/entry" && request.method === "DELETE") {
+        if (!isAdmin(env, request)) return new Response("Not Found", { status: 404 });
+        if (!GAME_ID.test(gameId)) return json({ reason: "유효하지 않은 게임입니다." }, 400);
+        const nickname = encodeURIComponent(url.searchParams.get("nickname") ?? "");
+        return forwardToBoard(env, `/remove?gameId=${encodeURIComponent(gameId)}&nickname=${nickname}`, request);
       }
     }
 

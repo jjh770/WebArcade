@@ -174,6 +174,38 @@ vercel --prod
 `vercel --prod`로 다시 빌드해야 반영된다. 페이지가 https이므로 반드시 `wss://` —
 `ws://`는 브라우저가 mixed content로 차단한다.
 
+## 순위표 관리
+
+전역 순위표(혼자 플레이 기록)에서 줄을 지우는 도구다. 관리자 화면은 없다 —
+운영자가 한 명이고, 그 한 명은 이 저장소가 있는 컴퓨터 앞에 있다.
+
+```bash
+npm run board -- ls curve              # 순위표 보기 (열쇠 불필요)
+npm run board -- rm curve 닉네임        # 지우기 (되돌릴 수 없음)
+npm run board -- rm all 닉네임          # 세 게임에서 한꺼번에
+```
+
+게임id는 `jungnim`(죽림고수) · `curve`(커브 피버) · `floor`(무너지는 바닥)다.
+게임을 추가하면 `rm all`이 훑을 목록(`scripts/board.mjs`의 `GAMES`)에도 넣어야 한다 —
+서버에는 "게임 목록"을 묻는 경로가 없다(서버는 gameId를 문자열로만 다룬다).
+
+처음 한 번만 열쇠를 심는다. **ASCII로 짓는다** — 헤더는 Latin-1만 담을 수 있어
+한글 열쇠는 서버에 닿지도 못한다.
+
+```bash
+npx wrangler secret put ADMIN_KEY --cwd packages/edge
+```
+
+지울 때마다 열쇠를 묻는 게 번거로우면 저장소 루트에 `.admin-key` 파일로 넣어 둔다
+(`.gitignore`에 있다). 환경변수 `ADMIN_KEY`가 있으면 그쪽이 먼저다.
+
+⚠️ **서버에 `ADMIN_KEY`가 없으면 삭제 경로가 통째로 404가 된다.** 열쇠가 틀렸을 때도
+404다 — 열쇠 없는 사람에게 "여기 뭔가 있다"를 알려주지 않으려는 것이라, 스크립트가
+404를 받으면 대개 주소가 아니라 열쇠 문제다.
+
+로컬 서버(`npm run dev:server`)로 시험하려면 운영 열쇠 대신 `packages/edge/.dev.vars`에
+`ADMIN_KEY=...`를 넣고 `ARCADE_SERVER=http://localhost:8787`로 스크립트를 돌린다.
+
 ## 새 게임 추가법
 
 이 프레임워크의 핵심: 새 게임은 **인터페이스 하나 구현 + 레지스트리 등록**이면 된다.

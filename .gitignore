@@ -5,6 +5,13 @@ dist/
 .env
 etc/
 
+# 순위표 관리 열쇠(scripts/board.mjs). 서버에는 wrangler secret으로 들어가 있고
+# 이 파일은 그걸 매번 입력하지 않으려는 로컬 사본일 뿐이다.
+.admin-key
+
+# 로컬 서버(wrangler dev)에 심는 비밀값. 운영은 wrangler secret이 따로 들고 있다.
+.dev.vars
+
 .vercel
 # wrangler 로컬 상태(miniflare 캐시·임시 번들). 재생성되므로 커밋하지 않는다.
 .wrangler/

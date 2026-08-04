@@ -136,3 +136,16 @@ export function insertEntry(
   const index = merged.indexOf(kept);
   return { board: merged, rank: index >= 0 ? index + 1 : null, best: kept.ticks, isBest };
 }
+
+/** 한 줄을 지운다(운영자용). 등수는 저장하지 않고 순서에서 나오므로,
+ *  빼기만 하면 아래 줄들이 저절로 한 칸씩 올라온다.
+ *
+ *  ⚠️ 되돌릴 수 없다 — 지운 기록을 어디에도 남기지 않는다. 이력을 남기면 그건
+ *     "지워진 순위표"라는 또 하나의 보관물이 되고, 그걸 관리할 이유가 없다. */
+export function removeEntry(
+  board: readonly BoardEntry[],
+  nickname: string,
+): { board: BoardEntry[]; removed: number } {
+  const kept = board.filter((row) => row.nickname !== nickname);
+  return { board: kept, removed: board.length - kept.length };
+}

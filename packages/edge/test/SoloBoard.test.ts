@@ -140,3 +140,60 @@ describe("보드", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
   });
 });
+
+// 열쇠 자체를 가리는 규칙은 tests/SoloRules.test.ts(isAdmin)가 본다. 여기서는
+// 그 판단이 실제 경로에 붙어 있는지와, 통과했을 때 스토리지에서 정말 빠지는지를 본다.
+describe("기록 지우기(운영자)", () => {
+  const KEY = "test-admin-key"; // vitest.config.ts의 시험용 바인딩과 같아야 한다.
+
+  async function remove(gameId: string, nickname: string, key = KEY) {
+    const query = `gameId=${gameId}&nickname=${encodeURIComponent(nickname)}`;
+    return SELF.fetch(`https://test/solo/entry?${query}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${key}` },
+    });
+  }
+
+  it("열쇠가 맞으면 보드에서 빠진다", async () => {
+    const { ticket } = await takeTicket();
+    await submit(ticket, "지워질사람", 30);
+    expect((await readBoard()).entries.map((row) => row.nickname)).toContain("지워질사람");
+
+    const response = await remove("jungnim", "지워질사람");
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { removed: number }).removed).toBe(1);
+    expect((await readBoard()).entries.map((row) => row.nickname)).not.toContain("지워질사람");
+  });
+
+  it("열쇠가 틀리면 404 — 경로가 있다는 것조차 알려주지 않는다", async () => {
+    const { ticket } = await takeTicket();
+    await submit(ticket, "남을사람", 30);
+
+    expect((await remove("jungnim", "남을사람", "wrong-key")).status).toBe(404);
+    expect((await readBoard()).entries.map((row) => row.nickname)).toContain("남을사람");
+  });
+
+  it("열쇠 없이 DELETE만 던져도 404다", async () => {
+    const response = await SELF.fetch("https://test/solo/entry?gameId=jungnim&nickname=아무개", {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(404);
+  });
+
+  it("없는 이름은 removed: 0으로 조용히 끝난다", async () => {
+    const response = await remove("jungnim", "그런사람없음");
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { removed: number }).removed).toBe(0);
+  });
+
+  it("게임을 건너뛰지 않는다 — 다른 게임 보드는 그대로다", async () => {
+    const jungnim = await takeTicket("jungnim");
+    const floor = await takeTicket("floor");
+    await submit(jungnim.ticket, "양쪽이름", 30);
+    await submit(floor.ticket, "양쪽이름", 30);
+
+    await remove("jungnim", "양쪽이름");
+    expect((await readBoard("jungnim")).entries.map((row) => row.nickname)).not.toContain("양쪽이름");
+    expect((await readBoard("floor")).entries.map((row) => row.nickname)).toContain("양쪽이름");
+  });
+});

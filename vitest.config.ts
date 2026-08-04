@@ -30,8 +30,12 @@ export default defineConfig({
             // 실제 배포와 같은 설정(DO 바인딩·마이그레이션)을 그대로 쓴다.
             wrangler: { configPath: "./packages/edge/wrangler.toml" },
             miniflare: {
-              // 유예 만료를 몇 초 안에 확인하려고 짧게 준다(운영 기본값은 60초).
-              bindings: { ROOM_GRACE_MS: "1000" },
+              bindings: {
+                // 유예 만료를 몇 초 안에 확인하려고 짧게 준다(운영 기본값은 60초).
+                ROOM_GRACE_MS: "1000",
+                // 삭제 경로를 열어 두는 시험용 열쇠. 운영은 wrangler secret으로 심는다.
+                ADMIN_KEY: "test-admin-key",
+              },
             },
           }),
         ],

@@ -21,6 +21,7 @@ import {
   decodePayload,
   encodePayload,
   insertEntry,
+  removeEntry,
   type BoardEntry,
   type TicketPayload,
 } from "./soloRules";
@@ -70,6 +71,11 @@ export class BoardObject {
     if (url.pathname === "/ticket") return this.issueTicket(url.searchParams.get("gameId") ?? "");
     if (url.pathname === "/score") return this.submitScore(request);
     if (url.pathname === "/board") return this.readBoard(url.searchParams.get("gameId") ?? "");
+    // 열쇠 확인은 여기까지 오기 전에 끝났다(index.ts) — 이 오브젝트는 브라우저와
+    // 직접 말하지 않으므로, 스텁을 손에 쥔 쪽은 이미 통과한 요청뿐이다.
+    if (url.pathname === "/remove") {
+      return this.removeRow(url.searchParams.get("gameId") ?? "", url.searchParams.get("nickname") ?? "");
+    }
     return new Response("Not Found", { status: 404 });
   }
 
@@ -123,6 +129,22 @@ export class BoardObject {
       rank: result.rank,
       best: result.best,
       isBest: result.isBest,
+      total: result.board.length,
+      entries: result.board.slice(0, PAGE_SIZE),
+    });
+  }
+
+  /** 순위표에서 그 닉네임의 줄을 지운다. 없으면 removed: 0 — 오류가 아니다.
+   *  (오타로 못 찾은 것과 이미 지운 것을 굳이 구분하지 않는다. 부르는 쪽이 숫자를 보고 판단한다.) */
+  private async removeRow(gameId: string, nickname: string): Promise<Response> {
+    // 저장할 때 trim한 이름으로 넣으므로(submitScore), 지울 때도 같은 모양으로 찾는다.
+    const target = nickname.trim();
+    if (!isNickname(target)) return badRequest("잘못된 요청 형식입니다.");
+
+    const result = removeEntry(await this.load(gameId), target);
+    if (result.removed > 0) await this.ctx.storage.put(BOARD_PREFIX + gameId, result.board);
+    return Response.json({
+      removed: result.removed,
       total: result.board.length,
       entries: result.board.slice(0, PAGE_SIZE),
     });
