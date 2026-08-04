@@ -11,11 +11,21 @@
    ============================================================ */
 
 import type { IRenderer } from "@arcade/shared";
+import { curveConfig as C } from "./config";
 
 export type Obstacle =
   | { kind: "segment"; x1: number; y1: number; x2: number; y2: number }
   | { kind: "circle"; cx: number; cy: number; r: number }
   | { kind: "polygon"; pts: number[] };
+
+/* 아래 판정 함수들에 늘 함께 넘기는 두 반지름. 판을 지을 때(worldGen)와 달릴 때
+   (CurveGame)가 **같은 값**을 봐야 스폰이 안전하다고 판단한 자리에서 즉사하지
+   않는다 — 그래서 양쪽이 아니라 판정 옆에 둔다. */
+
+/** 플레이어 머리 반경 = 선 절반 두께. 충돌·탐침의 pad로 쓴다. */
+export const HEAD_R = C.lineWidth / 2;
+/** 선분 장애물의 반 두께. */
+export const SEG_HALF = C.obstacleWidth / 2;
 
 /** 다각형의 각 변에 콜백을 돌린다(마지막 꼭짓점 → 첫 꼭짓점도 닫는다). */
 function forEachEdge(pts: number[], fn: (x1: number, y1: number, x2: number, y2: number) => void): void {

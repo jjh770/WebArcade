@@ -75,6 +75,10 @@ export function createSoloPlay(deps: SoloPlayDeps): SoloPlay {
   /** 티켓을 받는 동안 시작 버튼이 다시 눌리는 걸 막는다(왕복이 있어 즉시 시작이 아니다). */
   let starting = false;
 
+  function prefetch(gameId: GameId): void {
+    pending = { gameId, promise: takeTicket(gameId) };
+  }
+
   /** 미리 받아 둔 게 있으면 그걸 쓰고, 없으면(다른 게임이거나 이미 썼으면) 지금 받는다. */
   function claim(gameId: GameId): Promise<SoloTicket | null> {
     const promise = pending?.gameId === gameId ? pending.promise : takeTicket(gameId);
@@ -101,9 +105,7 @@ export function createSoloPlay(deps: SoloPlayDeps): SoloPlay {
   }
 
   return {
-    prefetch(gameId) {
-      pending = { gameId, promise: takeTicket(gameId) };
-    },
+    prefetch,
 
     async start(gameId) {
       if (starting) return;
@@ -154,7 +156,7 @@ export function createSoloPlay(deps: SoloPlayDeps): SoloPlay {
       }
       submit(score);
       // 여기서 가장 흔한 다음 행동은 "다시 하기"다 — 결과를 보는 동안 다음 티켓을 받아 둔다.
-      if (gameId) pending = { gameId, promise: takeTicket(gameId) };
+      if (gameId) prefetch(gameId);
       setAliveHud("", true);
       deps.session.stopRound();
     },
