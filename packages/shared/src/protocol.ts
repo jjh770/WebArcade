@@ -19,7 +19,10 @@ export type ClientMessage =
   // ev는 그 순간 남들 화면에도 보여야 할 **게임 정의 시각 이벤트** 슬러그(예: 죽림고수 "purge").
   // 서버는 의미를 모르고 다음 스냅샷에 한 번 실어 보낸 뒤 지운다. 위치에 얹어 보내므로
   // 새 메시지 종류·새 주기가 필요 없다(이벤트는 늘 그 사람 위치에서 일어난다).
-  | { type: "player_state"; px: number; py: number; ev?: string }
+  // sc는 **지금까지의 기록**(getScore). 끊긴 사람의 최종 기록을 서버가 지어내지 않게
+  // 하려고 함께 흘려보낸다 — 서버는 이 숫자가 tick인지 점수인지 모르고, 저장했다가
+  // 연결이 끊기면 그때 마지막 값을 그대로 쓴다. 위치와 같은 주기라 새 메시지가 필요 없다.
+  | { type: "player_state"; px: number; py: number; ev?: string; sc?: number }
   | { type: "player_died"; survivalTicks: number }
   | { type: "fire_effect"; kind: string; durationMs: number; targetId: string } // 스릴 게이지 발사 — 조준한 상대 1명에게만 방해 효과. 서버는 내용 모르고 그 1명에게 중계.
   | { type: "leave_room" };

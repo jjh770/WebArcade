@@ -25,6 +25,61 @@ describe("Room", () => {
     expect(RankingService.aliveCount(room.getRankingMembers())).toBe(0);
   });
 
+  /* 끊긴 사람의 최종 기록.
+     예전에는 서버가 흐른 시간(tick)을 지어내 채웠다. 앞의 세 게임은 생존 tick이 곧
+     기록이라 맞았지만, 숫자 야구는 같은 칸에 **점수**가 온다 — 실제로 80초짜리 판이
+     결과표에 "4826점"으로 찍혔다. 서버는 그 숫자가 무엇인지 모르므로 지어내면 안 된다. */
+  describe("끊긴 사람의 기록", () => {
+    /** 라운드 진행 중인 방 하나. */
+    const playing = (): Room => {
+      const room = new Room("ABCD", "baseball", 4);
+      room.addMember("a", "A");
+      room.addMember("b", "B");
+      room.startCountdown(1, 0);
+      room.ensurePlaying(1);
+      return room;
+    };
+
+    it("서버가 지어내지 않는다 — 마지막으로 알려온 기록을 그대로 쓴다", () => {
+      const room = playing();
+      room.updatePosition("a", 0, 0, undefined, 220);
+      // 80초가 흐른 뒤 끊긴다. 예전이라면 4800(=80초×60)이 들어갔다.
+      room.disconnectMember("a", 80_000);
+      const [entry] = RankingService.computeRanks(room.getRankingMembers()).filter((r) => r.id === "a");
+      expect(entry!.survivalTicks).toBe(220);
+    });
+
+    it("한 번도 안 알려왔으면 0이다 — 모르는 값을 추측하지 않는다", () => {
+      const room = playing();
+      room.disconnectMember("a", 80_000);
+      expect(room.getRankingMembers().find((m) => m.id === "a")!.survivalTicks).toBe(0);
+    });
+
+    it("계속 알려오면 마지막 값이 남는다", () => {
+      const room = playing();
+      for (const score of [50, 120, 300]) room.updatePosition("a", 0, 0, undefined, score);
+      room.disconnectMember("a", 80_000);
+      expect(room.getRankingMembers().find((m) => m.id === "a")!.survivalTicks).toBe(300);
+    });
+
+    it("이미 죽은 사람의 기록은 끊겨도 안 바뀐다 — 본인이 낸 최종값이 우선이다", () => {
+      const room = playing();
+      room.updatePosition("a", 0, 0, undefined, 300);
+      room.markDied("a", 450); // 마지막 문제를 풀고 죽었다 → 300이 아니라 450
+      room.disconnectMember("a", 80_000);
+      expect(room.getRankingMembers().find((m) => m.id === "a")!.survivalTicks).toBe(450);
+    });
+
+    it("새 라운드는 지난 판의 기록을 물려받지 않는다", () => {
+      const room = playing();
+      room.updatePosition("a", 0, 0, undefined, 300);
+      room.startCountdown(2, 0);
+      room.ensurePlaying(1);
+      room.disconnectMember("a", 80_000);
+      expect(room.getRankingMembers().find((m) => m.id === "a")!.survivalTicks).toBe(0);
+    });
+  });
+
   it("위치를 받은 살아있는 연결만 스냅샷에 포함한다", () => {
     const room = new Room("ABCD", "jungnim", 2);
     room.addMember("a", "A");
@@ -156,6 +211,14 @@ describe("프로토콜 런타임 검증", () => {
       .toEqual({ type: "player_state", px: 1, py: 2, ev: "purge" });
     expect(parseClientMessage({ type: "player_state", px: 1, py: 2, ev: "PURGE!" })).toBeNull();
     expect(parseClientMessage({ type: "player_state", px: 1, py: 2, ev: "x".repeat(33) })).toBeNull();
+    // sc(지금까지의 기록)는 0 이상 정수만. 형식이 틀리면 **sc만 빠지고 메시지는 산다** —
+    // 10Hz로 오는 관전 정보라 한 필드 때문에 버리면 남의 화면에서 그 사람이 얼어붙는다.
+    expect(parseClientMessage({ type: "player_state", px: 1, py: 2, sc: 220 }))
+      .toEqual({ type: "player_state", px: 1, py: 2, sc: 220 });
+    for (const bad of [-1, 1.5, Number.NaN, Infinity, "220", null]) {
+      expect(parseClientMessage({ type: "player_state", px: 1, py: 2, sc: bad }))
+        .toEqual({ type: "player_state", px: 1, py: 2 });
+    }
     expect(parseClientMessage({ type: "player_died", survivalTicks: -1 })).toBeNull();
     expect(parseClientMessage({ type: "join_room", code: "AIO1", nickname: "고수" })).toBeNull();
   });
