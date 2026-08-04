@@ -186,6 +186,25 @@ describe("기록 지우기(운영자)", () => {
     expect(((await response.json()) as { removed: number }).removed).toBe(0);
   });
 
+  it("이름 바꾸기도 같은 열쇠로 잠긴다", async () => {
+    const { ticket } = await takeTicket();
+    await submit(ticket, "이름바꿀사람", 30);
+
+    const rename = (key: string) => {
+      const query = `gameId=jungnim&from=${encodeURIComponent("이름바꿀사람")}&to=${encodeURIComponent("바뀐이름")}`;
+      return SELF.fetch(`https://test/solo/entry?${query}`, {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${key}` },
+      });
+    };
+    expect((await rename("wrong-key")).status).toBe(404);
+    expect((await rename(KEY)).status).toBe(200);
+
+    const names = (await readBoard()).entries.map((row) => row.nickname);
+    expect(names).toContain("바뀐이름");
+    expect(names).not.toContain("이름바꿀사람");
+  });
+
   it("게임을 건너뛰지 않는다 — 다른 게임 보드는 그대로다", async () => {
     const jungnim = await takeTicket("jungnim");
     const floor = await takeTicket("floor");

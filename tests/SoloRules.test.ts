@@ -15,6 +15,7 @@ import {
   encodePayload,
   insertEntry,
   removeEntry,
+  renameEntry,
   type BoardEntry,
   type TicketPayload,
 } from "../packages/edge/src/soloRules";
@@ -137,6 +138,43 @@ describe("기록 지우기", () => {
     const result = removeEntry(board, "없는사람");
     expect(result.removed).toBe(0);
     expect(result.board).toEqual(board);
+  });
+});
+
+describe("기록 이름 바꾸기", () => {
+  const board = [entry("가", 300, 1), entry("나", 200, 1), entry("다", 100, 1)];
+
+  it("이름만 바뀌고 기록도 등수도 그대로다", () => {
+    const result = renameEntry(board, "나", "새이름");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.board.map((row) => row.nickname)).toEqual(["가", "새이름", "다"]);
+    expect(result.board[1]).toEqual(entry("새이름", 200, 1)); // 기록·시각 손 안 댐
+  });
+
+  it("이미 있는 이름으로는 안 바꾼다 — 합치면 시키지 않은 삭제가 된다", () => {
+    const result = renameEntry(board, "나", "가");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain("이미");
+  });
+
+  it("없는 이름은 바꿀 게 없다", () => {
+    expect(renameEntry(board, "없는사람", "새이름").ok).toBe(false);
+  });
+
+  it("자기 이름 그대로는 충돌이 아니다", () => {
+    expect(renameEntry(board, "나", "나").ok).toBe(true);
+  });
+
+  it("되돌릴 수 있다 — 이게 지우기와 다른 점이다", () => {
+    const once = renameEntry(board, "나", "임시");
+    expect(once.ok).toBe(true);
+    if (!once.ok) return;
+    const back = renameEntry(once.board, "임시", "나");
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.board).toEqual(board);
   });
 });
 

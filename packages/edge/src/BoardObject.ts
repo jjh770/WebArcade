@@ -22,6 +22,7 @@ import {
   encodePayload,
   insertEntry,
   removeEntry,
+  renameEntry,
   type BoardEntry,
   type TicketPayload,
 } from "./soloRules";
@@ -75,6 +76,13 @@ export class BoardObject {
     // 직접 말하지 않으므로, 스텁을 손에 쥔 쪽은 이미 통과한 요청뿐이다.
     if (url.pathname === "/remove") {
       return this.removeRow(url.searchParams.get("gameId") ?? "", url.searchParams.get("nickname") ?? "");
+    }
+    if (url.pathname === "/rename") {
+      return this.renameRow(
+        url.searchParams.get("gameId") ?? "",
+        url.searchParams.get("from") ?? "",
+        url.searchParams.get("to") ?? "",
+      );
     }
     return new Response("Not Found", { status: 404 });
   }
@@ -148,6 +156,20 @@ export class BoardObject {
       total: result.board.length,
       entries: result.board.slice(0, PAGE_SIZE),
     });
+  }
+
+  /** 한 줄의 이름을 바꾼다. 못 찾거나 이름이 겹치면 409 — 아무것도 건드리지 않는다. */
+  private async renameRow(gameId: string, from: string, to: string): Promise<Response> {
+    const [before, after] = [from.trim(), to.trim()];
+    // 바꾼 뒤 이름도 플레이어가 쓸 수 있는 이름이어야 한다 — 운영자라고 규칙 밖으로 나가면
+    // 순위표에 대기실에서는 만들 수 없는 이름이 생긴다.
+    if (!isNickname(before) || !isNickname(after)) return badRequest("잘못된 요청 형식입니다.");
+
+    const result = renameEntry(await this.load(gameId), before, after);
+    if (!result.ok) return Response.json({ reason: result.reason }, { status: 409 });
+
+    await this.ctx.storage.put(BOARD_PREFIX + gameId, result.board);
+    return Response.json({ total: result.board.length, entries: result.board.slice(0, PAGE_SIZE) });
   }
 
   private async readBoard(gameId: string): Promise<Response> {

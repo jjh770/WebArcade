@@ -34,6 +34,7 @@ const USAGE = `사용법:
   node scripts/board.mjs ls <게임id>              순위표 보기
   node scripts/board.mjs rm <게임id> <닉네임>      기록 지우기 (되돌릴 수 없음)
   node scripts/board.mjs rm all <닉네임>          세 게임에서 한꺼번에 지우기
+  node scripts/board.mjs mv <게임id> <옛이름> <새이름>   이름만 바꾸기 (기록·등수 유지)
 
 게임id: ${GAMES.join(" | ")}
 서버:   ${SERVER}`;
@@ -119,7 +120,28 @@ async function remove(gameId, nickname) {
   printBoard(entries);
 }
 
-const [command, gameId, nickname] = process.argv.slice(2);
+/** 이름만 갈아끼운다. 지우기와 달리 **되돌릴 수 있다** — 잘못 바꿨으면 다시 바꾸면 된다.
+ *  그래서 욕설 닉네임에는 이쪽을 먼저 쓴다(기록도 등수도 남는다). */
+async function rename(gameId, from, to) {
+  const key = await adminKey();
+  if (!key) fail("열쇠가 없습니다. `.admin-key` 파일을 만들거나 ADMIN_KEY를 넣어 주세요.");
+
+  const query = `gameId=${encodeURIComponent(gameId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const response = await fetch(`${SERVER}/solo/entry?${query}`, {
+    method: "PATCH",
+    headers: { authorization: `Bearer ${key}` },
+  });
+  if (response.status === 404) fail("거부됐습니다 — 열쇠가 틀렸거나 서버에 ADMIN_KEY가 없습니다.");
+
+  const body = await response.json();
+  if (!response.ok) fail(`실패(${response.status}): ${body.reason ?? ""}`);
+  console.log(`${from} → ${to}`);
+  console.log(`${gameId} — 총 ${body.total}줄`);
+  printBoard(body.entries);
+}
+
+const [command, gameId, first, second] = process.argv.slice(2);
 if (command === "ls" && gameId) await list(gameId);
-else if (command === "rm" && gameId && nickname) await remove(gameId, nickname);
+else if (command === "rm" && gameId && first) await remove(gameId, first);
+else if (command === "mv" && gameId && first && second) await rename(gameId, first, second);
 else fail(USAGE);

@@ -34,7 +34,7 @@ export { RoomObject, BoardObject };
  *  못한다(브라우저 밖에서는 CORS가 적용되지 않는다). 남용 방어는 rate limit의 몫. */
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+  "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
   // 기록 제출은 JSON 본문이라 content-type이 붙는다 — 이걸 빼면 브라우저가
   // 프리플라이트에서 막아 요청 자체가 나가지 않는다.
   "access-control-allow-headers": "content-type, authorization",
@@ -122,6 +122,14 @@ export default {
         if (!GAME_ID.test(gameId)) return json({ reason: "유효하지 않은 게임입니다." }, 400);
         const nickname = encodeURIComponent(url.searchParams.get("nickname") ?? "");
         return forwardToBoard(env, `/remove?gameId=${encodeURIComponent(gameId)}&nickname=${nickname}`, request);
+      }
+      // 이름만 바꾸기(운영자). 지우기와 달리 되돌릴 수 있어, 욕설 닉네임에는 이쪽이 먼저다.
+      if (url.pathname === "/solo/entry" && request.method === "PATCH") {
+        if (!isAdmin(env, request)) return new Response("Not Found", { status: 404 });
+        if (!GAME_ID.test(gameId)) return json({ reason: "유효하지 않은 게임입니다." }, 400);
+        const from = encodeURIComponent(url.searchParams.get("from") ?? "");
+        const to = encodeURIComponent(url.searchParams.get("to") ?? "");
+        return forwardToBoard(env, `/rename?gameId=${encodeURIComponent(gameId)}&from=${from}&to=${to}`, request);
       }
     }
 

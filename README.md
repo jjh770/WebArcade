@@ -183,7 +183,12 @@ vercel --prod
 npm run board -- ls curve              # 순위표 보기 (열쇠 불필요)
 npm run board -- rm curve 닉네임        # 지우기 (되돌릴 수 없음)
 npm run board -- rm all 닉네임          # 세 게임에서 한꺼번에
+npm run board -- mv curve 옛이름 새이름  # 이름만 바꾸기 (기록·등수 유지)
 ```
+
+**욕설 닉네임에는 `rm`보다 `mv`를 먼저 쓴다.** 기록을 세운 것 자체는 잘못이 아닐 수 있고,
+지우면 순위표에 구멍이 생기지만 이름만 바꾸면 등수가 남는다. 무엇보다 **되돌릴 수 있다** —
+`rm`으로 지운 줄은 어디에도 남지 않아 복구할 방법이 없다.
 
 게임id는 `jungnim`(죽림고수) · `curve`(커브 피버) · `floor`(무너지는 바닥)다.
 게임을 추가하면 `rm all`이 훑을 목록(`scripts/board.mjs`의 `GAMES`)에도 넣어야 한다 —

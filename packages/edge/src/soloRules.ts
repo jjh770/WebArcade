@@ -149,3 +149,30 @@ export function removeEntry(
   const kept = board.filter((row) => row.nickname !== nickname);
   return { board: kept, removed: board.length - kept.length };
 }
+
+export type RenameResult =
+  | { ok: true; board: BoardEntry[] }
+  /** `reason`이 있으면 실패다. 못 찾음과 이름 충돌을 나누지 않고 문장으로 구분한다. */
+  | { ok: false; reason: string };
+
+/** 한 줄의 이름만 바꾼다(운영자용). 기록·시각은 건드리지 않으므로 등수도 그대로다.
+ *
+ *  욕설 닉네임에는 지우기보다 이쪽이 맞다 — 기록을 세운 것 자체는 잘못이 아닐 수
+ *  있고, 지우면 순위표에 구멍이 생기지만 이름만 바꾸면 등수가 남는다. 무엇보다
+ *  **되돌릴 수 있다**(다시 바꾸면 된다).
+ *
+ *  ⚠️ 이미 있는 이름으로는 바꾸지 않는다. 닉네임당 한 줄 규칙(insertEntry)대로
+ *     합치면 조용히 한 줄이 사라지는데, 운영자가 시킨 적 없는 삭제다. */
+export function renameEntry(
+  board: readonly BoardEntry[],
+  from: string,
+  to: string,
+): RenameResult {
+  if (!board.some((row) => row.nickname === from)) {
+    return { ok: false, reason: "그 이름이 순위표에 없습니다." };
+  }
+  if (from !== to && board.some((row) => row.nickname === to)) {
+    return { ok: false, reason: "그 이름은 이미 순위표에 있습니다. 다른 이름을 쓰세요." };
+  }
+  return { ok: true, board: board.map((row) => (row.nickname === from ? { ...row, nickname: to } : row)) };
+}
