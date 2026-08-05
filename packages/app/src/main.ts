@@ -1,13 +1,29 @@
-﻿import { NetClient, StateMachine } from "@arcade/core";
-import type { RankEntry, ServerMessage } from "@arcade/shared";
+﻿/* ============================================================
+   main — 앱의 배선판
+   ------------------------------------------------------------
+   여기 남는 것은 **잇는 일**이다: 화면 상태(FSM)와 세션·네트워크·버튼을 서로에게
+   소개하고, 한 판의 흐름(카운트다운 → 시작 → 사망 → 관전 → 결과)을 순서대로 부른다.
+
+   내용을 가진 것들은 각자 자기 파일에 산다:
+   - hud.ts          기록·게이지 표시(단위와 경고 방향은 게임이 정한다)
+   - peerReport.ts   0.1초마다 내 위치·기록을 남에게 알리는 루프
+   - serverRoutes.ts 서버 메시지 하나 → 앱의 행동
+   - navigation.ts   헤더 내비와 주소(해시)
+   - soloPlay/rankingScreen 은 자기 상태(티켓·판 일련번호·보던 게임)를 들고 따로 산다
+
+   ⚠️ 방과 라운드의 사실(내 신원·방장 여부·고른 게임·결과)은 **여기가 소유한다.**
+      떼어 낸 파일들은 그것을 몰래 읽지 않고, 필요한 통로만 받아 간다 — 그래야
+      "지금 무엇이 참인가"를 한 곳에서 읽을 수 있다.
+   ============================================================ */
+
+import { NetClient, StateMachine } from "@arcade/core";
+import type { RankEntry } from "@arcade/shared";
 import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
 import { initAudio, play } from "./audio";
 import { initBgDecor } from "./bgDecor";
 import {
   renderGameList,
   renderLobby,
-  renderNotices,
-  renderReady,
   renderResult,
   renderState,
   setAliveHud,
@@ -22,14 +38,17 @@ import { initSoundShell } from "./soundShell";
 import {
   bulletFx,
   deathFx,
-  debuffFx,
   fallScreen,
   resetScreenFx,
   slideInScreen,
   swapSpectateScreen,
 } from "./screenFx";
-import { GAME_REGISTRY, formatGameScore, gameEntry, isGameId, type GameId } from "./GameRegistry";
+import { GAME_REGISTRY, isGameId, type GameId } from "./GameRegistry";
 import { GameSession } from "./GameSession";
+import { updateHud } from "./hud";
+import { startPeerReport } from "./peerReport";
+import { bindNav, syncRankingHash } from "./navigation";
+import { createServerRouter } from "./serverRoutes";
 import { loadNickname, saveNickname } from "./prefs";
 import { createRankingScreen } from "./rankingScreen";
 import { createSoloPlay } from "./soloPlay";
@@ -38,7 +57,6 @@ import { createSoloPlay } from "./soloPlay";
  *  Canvas2DRenderer가 논리->픽셀 변환을 맡는다. 게임 로직은 항상 이 좌표만 본다. */
 const LOGICAL_WIDTH = 800;
 const LOGICAL_HEIGHT = 800; // 정사각형 — 원형 경기장에 맞춤(죽림고수 config와 일치).
-const POSITION_SEND_MS = 100;
 
 const mainCanvas = byId<HTMLCanvasElement>("game");
 const sideCanvases = Array.from({ length: 3 }, (_, index) => byId<HTMLCanvasElement>(`side-${index}`));
@@ -48,13 +66,7 @@ const appState = new StateMachine<AppState, AppEvent>("nickname", APP_TRANSITION
   syncRankingHash(to);
 });
 
-/** 순위 화면만 주소에 남긴다 — 링크로 보낼 수 있게. 방 코드 자동 참가(#ABCD)와는
- *  글자가 겹치지 않고, replaceState라 뒤로 가기 기록을 더럽히지 않는다. */
-function syncRankingHash(state: AppState): void {
-  const want = state === "ranking" ? "#ranking" : "";
-  if (location.hash === want) return;
-  history.replaceState(null, "", want || location.pathname + location.search);
-}
+
 const net = new NetClient();
 const session = new GameSession({
   mainCanvas,
@@ -68,7 +80,7 @@ const session = new GameSession({
   logicalHeight: LOGICAL_HEIGHT,
   onLocalDeath,
   onSideSlot: setSideSlot,
-  onHud: updateHud,
+  onHud: showHud,
   // 조작 영역이 생기거나 사라지면 판이 쓸 세로가 달라진다 — 판 크기를 다시 잡는다.
   onControlsChange: () => relayout(),
   // 서버로 조준 발사를 보내고, 내 화면에는 그 관전창으로 탄환이 날아가 명중하는 연출을 건다.
@@ -78,30 +90,12 @@ const session = new GameSession({
   },
 });
 
-/** 매 프레임 로컬 플레이어 HUD 갱신 — 캔버스 밖 좌측 상단 헤더(기록 + 게이지).
- *  gauge가 null이면(getGauge를 구현 안 한 게임) 게이지 줄을 숨긴다.
- *  ⚠️ 기록 표기와 게이지 이름은 **게임마다 다르다.** 앞의 셋은 생존시간과 「스릴」,
- *  숫자 야구는 점수와 「남은 시간」이다 — 둘 다 레지스트리에서 온다. */
-function updateHud(score: number, gauge: number | null): void {
-  byId("hud-time").textContent = formatGameScore(selectedGameId, score);
-  const gaugeEl = byId("hud-gauge");
-  if (gauge === null) {
-    gaugeEl.hidden = true;
-    return;
-  }
-  gaugeEl.hidden = false;
-  const entry = selectedGameId ? gameEntry(selectedGameId) : null;
-  // 매 프레임 부르는 자리라 값이 그대로면 DOM을 안 건드린다.
-  const label = entry?.gaugeLabel ?? "게이지";
-  const labelEl = byId("hud-gauge-label");
-  if (labelEl.textContent !== label) labelEl.textContent = label;
-  const clamped = Math.max(0, Math.min(1, gauge));
-  const fill = byId("hud-gauge-fill");
-  fill.style.width = `${clamped * 100}%`;
-  // 게이지가 뜻하는 바가 게임마다 반대다 — 커브는 **차면** 발사고, 숫자 야구는
-  // **비면** 끝이다. 경고색은 "지금 중요한 순간"에 붙어야 하므로 방향도 게임이 정한다.
-  fill.classList.toggle("near", entry?.gaugeAlarm === "empty" ? clamped <= 0.15 : clamped >= 0.85);
+/** HUD는 지금 고른 게임의 단위로 적힌다(기록이 초인지 점인지, 게이지 이름과 경고 방향).
+ *  hud.ts가 그 규칙을 알고, 여기서는 "어느 게임인지"만 얹어 준다. */
+function showHud(score: number, gauge: number | null): void {
+  updateHud(selectedGameId, score, gauge);
 }
+
 /** 표시 크기를 먼저 정하고(레이아웃), 그 크기에 맞춰 캔버스 해상도를 잡는다(렌더러). 순서 중요. */
 function relayout(): void {
   layoutPlayArea(LOGICAL_WIDTH / LOGICAL_HEIGHT);
@@ -147,7 +141,7 @@ const solo = createSoloPlay({
   setRanks: (ranks) => {
     finalRanks = ranks;
   },
-  resetHud: () => updateHud(0, null),
+  resetHud: () => showHud(0, null),
 });
 
 const ranking = createRankingScreen({
@@ -205,61 +199,35 @@ function autoSpectate(): void {
   }
 }
 
-net.onMessage(handleServer);
-
-function handleServer(message: ServerMessage): void {
-  switch (message.type) {
-    case "welcome":
-      myId = message.id;
-      break;
-    case "room_state":
-      amHost = message.hostId === myId;
-      session.setRoster(message.players, myId);
-      if (isGameId(message.gameId)) selectedGameId = message.gameId;
-      renderReady(message.code, message.players, message.hostId, myId);
-      location.hash = message.code;
-      if (message.state === "waiting") {
-        if (appState.state === "lobby") transition("room_joined");
-        else if (appState.state === "result") transition("return_ready");
-      } else if (appState.state === "result" && finalRanks.length > 0) {
-        renderResult(finalRanks, myId, amHost, soloMode, selectedGameId);
-      }
-      break;
-    case "game_start":
-      startCountdown(message.seed, message.startTime, message.gameId);
-      break;
-    case "peer_snapshot":
-      session.applySnapshot(message.peers);
-      break;
-    case "peer_died":
-      session.markPeerDead(message.id);
-      break;
-    case "effect_hit":
-      // 누군가 스릴 게이지를 채워 나를 조준해 방해 디버프를 쐈다. 살아서 플레이 중일 때만
-      // 게임에 적용하고, 같은 조건에서 화면 연출(배너 + 시각 디버프)도 함께 건다.
-      // 소리는 게임 계약을 안 거친다 — 이건 네트워크에서 온 사건이라 앱이 이미 안다.
-      if (session.applyEffect(message.kind, message.durationMs)) {
-        play("hit");
-        debuffFx(message.kind, message.durationMs);
-      }
-      break;
-    case "ranking_update":
-      setAliveHud(`생존 ${message.alive} / ${message.ranks.length}`);
-      break;
-    case "game_over":
-      showResult(message.finalRanks);
-      break;
-    case "host_changed":
-      amHost = message.newHostId === myId;
-      if (appState.state === "result" && finalRanks.length > 0) renderResult(finalRanks, myId, amHost, soloMode, selectedGameId);
-      break;
-    case "error":
-      toast(message.reason);
-      break;
-    case "time_sync_response":
-      break;
-  }
+/** 결과 화면이 떠 있고 보여 줄 결과가 있을 때만 다시 그린다. 방장이 바뀌거나 방 상태가
+ *  다시 왔을 때 부른다 — "다시 하기"를 누를 수 있는 사람이 그 사이 바뀌었을 수 있다. */
+function refreshResult(): void {
+  if (appState.state !== "result" || finalRanks.length === 0) return;
+  renderResult(finalRanks, myId, amHost, soloMode, selectedGameId);
 }
+
+/* 서버에서 오는 것은 전부 라우터를 거친다. 무엇에 기대는지는 여기 넘기는 목록이 전부다
+   — main의 전역 변수를 라우터가 몰래 읽지 않는다(serverRoutes.ts 머리말). */
+net.onMessage(
+  createServerRouter({
+    session,
+    state: () => appState.state,
+    transition,
+    myId: () => myId,
+    setMyId: (id) => {
+      myId = id;
+    },
+    setHost: (isHost) => {
+      amHost = isHost;
+    },
+    setGame: (id) => {
+      selectedGameId = id;
+    },
+    refreshResult,
+    startCountdown,
+    showResult,
+  }),
+);
 
 const RANDOM_NAMES = ["고수", "초심자", "바람", "그림자", "은둔자", "검객", "나그네"];
 // 지난 방문에 쓴 닉네임을 입력칸에 미리 채운다(매번 다시 안 치게).
@@ -281,41 +249,18 @@ byId("menu-start").addEventListener("click", () => {
 byId("menu-options").addEventListener("click", () => toast("옵션은 준비 중입니다."));
 byId("menu-credits").addEventListener("click", () => toast("Arcade — 웹 멀티 아케이드 게임"));
 
-function navTo(target: string | undefined): void {
-  const event = target === "notice" ? "nav_notice"
-    : target === "about" ? "nav_about"
-      : target === "community" ? "nav_community"
-        : target === "ranking" ? "nav_ranking"
-          : myNickname ? "nav_game_main" : "nav_game_nickname";
-  // ⚠️ 방에 있는 동안은 읽을거리로 새지 않는다. FSM만으로는 못 막는다 — 결과 화면에서
-  //    순위표로 가는 길을 열어 뒀는데(혼자 플레이용), 그 길이 멀티에서도 열려 있으면
-  //    남은 사람들의 다음 판 시작 신호를 놓친 채 방을 떠나게 된다.
-  if (inRoom && target !== "game") return toast("방을 나간 뒤 다른 페이지로 이동할 수 있습니다.");
-  if (target === "notice") renderNotices();
-  if (!transition(event)) return toast("방을 나간 뒤 다른 페이지로 이동할 수 있습니다.");
-  // 화면이 실제로 열렸을 때만 불러온다 — 막힌 경우에는 부를 필요가 없다.
-  // 헤더로 열면 마지막에 보던 게임으로 돌아간다(없으면 고른 게임, 그것도 없으면 첫 게임).
-  if (target === "ranking") ranking.show(ranking.lastViewed() ?? selectedGameId ?? FIRST_GAME_ID);
-}
-
-/** 특정 게임의 순위표로 곧장 간다(로비·결과 화면의 곁길). 헤더 내비와 달리
- *  **보던 게임을 지정**한다 — 방금 한 판의 순위가 궁금한 것이지 지난번에 본
- *  게임의 순위가 궁금한 게 아니다. */
-function goRanking(gameId: GameId): void {
-  if (!transition("nav_ranking")) return;
-  ranking.show(gameId);
-}
-
 const FIRST_GAME_ID = Object.keys(GAME_REGISTRY)[0] as GameId;
 
-document.querySelectorAll<HTMLElement>("[data-nav]").forEach((element) => {
-  element.addEventListener("click", (event) => {
-    event.preventDefault();
-    navTo(element.dataset.nav);
-  });
+const nav = bindNav({
+  transition,
+  inRoom: () => inRoom,
+  named: () => myNickname !== "",
+  // 헤더로 열면 마지막에 보던 게임으로 돌아간다(없으면 고른 게임, 그것도 없으면 첫 게임).
+  rankingGame: () => ranking.lastViewed() ?? selectedGameId ?? FIRST_GAME_ID,
+  showRanking: (gameId) => ranking.show(gameId),
 });
-byId("lobby-rank-btn").addEventListener("click", () => goRanking(selectedGameId ?? FIRST_GAME_ID));
-byId("result-rank-btn").addEventListener("click", () => goRanking(selectedGameId ?? FIRST_GAME_ID));
+byId("lobby-rank-btn").addEventListener("click", () => nav.goRanking(selectedGameId ?? FIRST_GAME_ID));
+byId("result-rank-btn").addEventListener("click", () => nav.goRanking(selectedGameId ?? FIRST_GAME_ID));
 byId("footer-legal").addEventListener("click", () => toast("이용약관·개인정보는 준비 중입니다."));
 byId("gamelist-back").addEventListener("click", () => transition("back_main"));
 
@@ -388,31 +333,15 @@ function beginPlay(gameId: string, seed: number, startTime: number): void {
   finalRanks = [];
   resetScreenFx(); // 새 라운드 — 떨어졌던 화면 복구.
   play("go");
-  updateHud(0, null); // 지난 판 숫자가 첫 프레임에 잠깐 비치지 않게.
+  showHud(0, null); // 지난 판 숫자가 첫 프레임에 잠깐 비치지 않게.
   setAliveHud("생존 …");
   if (!session.start(gameId, seed, net.serverTimeToPerformance(startTime))) {
     toast(`게임을 시작할 수 없습니다: ${gameId}`);
   }
 }
 
-window.setInterval(() => {
-  if (soloMode || appState.state !== "playing") return; // 연습: 내 위치를 볼 남이 없다.
-  const position = session.getPosition();
-  if (!position) return;
-  // 게임이 낸 시각 이벤트(예: 정화 파동)를 위치에 얹어 보낸다 — 서버는 의미를 모르고
-  // 다음 스냅샷에 한 번 실어 중계한다. 없으면 필드 자체를 안 붙인다.
-  const ev = session.takePeerEvent();
-  // 지금까지의 기록도 함께 보낸다. 판이 끝나면 player_died가 최종값을 내지만, **끊기면
-  // 그게 안 온다** — 그때 서버가 쓸 값이 이것이다(Room.disconnectMember 주석 참조).
-  const sc = session.getScore();
-  net.send({
-    type: "player_state",
-    px: position.x,
-    py: position.y,
-    ...(ev === null ? {} : { ev }),
-    ...(sc === null ? {} : { sc: Math.max(0, Math.floor(sc)) }),
-  });
-}, POSITION_SEND_MS);
+// 연습에는 내 위치를 볼 남이 없고, 관전 중에 보내면 죽은 사람이 살아 있는 것처럼 보인다.
+startPeerReport(net, session, () => !soloMode && appState.state === "playing");
 
 function showResult(ranks: readonly RankEntry[]): void {
   if (!appState.can("game_over")) return;
@@ -455,4 +384,4 @@ renderState(appState.state);
 
 // #ranking으로 들어오면 순위표부터 연다. 닉네임을 정하기 전에도 볼 수 있다 —
 // 남이 보낸 링크를 받은 사람에게 이름부터 지으라고 할 이유가 없다.
-if (location.hash.slice(1).toLowerCase() === "ranking") navTo("ranking");
+if (location.hash.slice(1).toLowerCase() === "ranking") nav.navTo("ranking");
