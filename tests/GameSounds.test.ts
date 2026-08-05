@@ -169,7 +169,6 @@ class SoundyGame implements IGame {
   getPosition(): { x: number; y: number } {
     return { x: 0, y: 0 };
   }
-  syncPeers(): void {}
   getScore(): number {
     return 0;
   }

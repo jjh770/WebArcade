@@ -20,10 +20,17 @@
    통째로 사라진다 — 회피 게임에서는 1/60초의 누락이 무해하지만 타자에서는 글자가
    빠지는 버그다. 그래서 눌린 사건을 그때그때 밀어 넣는 통로를 따로 열었다.
 
+   같은 게임이 두 가지를 더 드러냈다.
+   - `getPosition`은 "위치"가 아니라 **관전 중계용 숫자 둘**이었다. 앞의 셋이 전부
+     판 위를 움직이는 게임이라 좌표라고 적어 뒀을 뿐이고, 판이 없는 게임이 나오자
+     계약이 실제보다 좁게 적혀 있었음이 드러났다. 이름은 그대로 두고 뜻을 넓혔다.
+   - `syncPeers`를 선택으로 내렸다. 남의 시각 요소를 쌓을 게 없는 게임이 실제로
+     나왔고, 필수인 채로 두면 빈 몸 메서드를 강요한다(바로 아래 규칙의 위반이다).
+
    ⚠️ 선택 메서드는 여기까지다. 다섯 번째 게임이 실제로 요구하기 전에는 넓히지
    않는다 — 상상으로 넓힌 계약은 빈 구현을 강요한다. */
 
-import type { InputState, SpectateTarget, PeerState, SpawnContext } from "./types";
+import type { InputState, SpectateSignal, SpectateTarget, PeerState, SpawnContext } from "./types";
 import type { IRenderer } from "./IRenderer";
 
 export interface IGame {
@@ -47,13 +54,18 @@ export interface IGame {
   /** 로컬 사망 판정. 각 클라이언트가 자기 화면에서 판단한다. */
   isPlayerDead(): boolean;
 
-  /** 관전 전송용 자기 위치(게임 좌표계). */
-  getPosition(): { x: number; y: number };
+  /** 관전 중계에 실을 숫자 둘. **대개 자기 위치(게임 좌표계)지만 뜻은 게임이 정한다** —
+   *  통로가 숫자 두 개일 뿐이고, core도 서버도 그 뜻을 모른 채 나른다(SpectateSignal 참조).
+   *  숫자 야구처럼 판 위의 위치라는 게 없는 게임은 진척도를 싣는다.
+   *  ⚠️ 무엇을 싣든 renderSpectator가 **같은 뜻으로** 읽어야 한다. 둘은 한 쌍이다. */
+  getPosition(): SpectateSignal;
 
-  /** 관전 대상(남)들의 현재 위치를 게임에 알린다. 게임은 이 정보로 각자의
-   *  로컬 전용 시각 요소를 근사해 renderSpectator에서 그린다.
-   *  로컬 전용 요소가 없는 게임은 무시하면 된다. */
-  syncPeers(peers: readonly PeerState[]): void;
+  /** (선택) 관전 대상(남)들의 현재 신호를 게임에 알린다. 게임은 이 정보로 각자의
+   *  로컬 전용 시각 요소를 근사해 renderSpectator에서 그린다(커브 피버의 남의 꼬리).
+   *  ⚠️ 쌓을 게 없는 게임은 **구현하지 않는다.** 필수로 두면 그런 게임이 빈 몸의
+   *  메서드를 하나 갖게 되는데, 빈 구현은 "이 게임엔 없다"가 아니라 "아직 안 썼다"로
+   *  읽혀 다음 사람이 지워도 되는지 알 수 없다. */
+  syncPeers?(peers: readonly PeerState[]): void;
 
   /** 순위 기준값. 죽림고수는 생존시간(tick). scoreDirection과 함께 해석된다. */
   getScore(): number;

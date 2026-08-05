@@ -216,7 +216,9 @@ npx wrangler secret put ADMIN_KEY --cwd packages/edge
 이 프레임워크의 핵심: 새 게임은 **인터페이스 하나 구현 + 레지스트리 등록**이면 된다.
 
 1. `packages/games/<name>/` 생성, `IGame`을 구현하는 클래스 작성
-   (`init`/`update`/`render`/`renderSpectator`/`isPlayerDead`/`getPosition`/`syncPeers`/`getScore`).
+   (`init`/`update`/`render`/`renderSpectator`/`isPlayerDead`/`getPosition`/`getScore`).
+   `getPosition()`은 **관전 중계에 실을 숫자 둘**이다 — 대개 좌표지만 판이 없는 게임은
+   다른 것을 실어도 된다(숫자 야구는 진척도). `renderSpectator`가 같은 뜻으로 읽기만 하면 된다.
 2. 게임 튜닝값은 `config.ts`에 데이터로 분리 (`scoreDirection`·`scoreUnit` 포함).
    `scoreUnit`은 `getScore()`가 **무엇을** 돌려주는지다 — `"ticks"`면 화면에 `5.1s`,
    `"points"`면 `240점`으로 찍힌다. 게이지가 있으면 `gaugeLabel`·`gaugeAlarm`도 함께 둔다.
@@ -224,6 +226,7 @@ npx wrangler secret put ADMIN_KEY --cwd packages/edge
 4. 순위표를 쓰면 `scripts/board.mjs`의 `GAMES`에도 id를 넣는다(`rm all`이 훑을 목록).
 
 **선택 메서드** — 구현하면 그 기능이 켜지고, 안 하면 없는 게임이 된다:
+`syncPeers(peers)`(남의 신호로 로컬 시각 요소를 쌓는 게임만 — 커브 피버의 남의 꼬리) ·
 `getGauge()`(HUD 게이지 줄) · `typeKey(slug)`(숫자·글자 입력) · `consumePendingFire()`(방해 발사) ·
 `applyEffect(kind, ms)`(피격) · `consumeSounds()`(소리) ·
 `consumePeerEvent()`/`applyPeerEvent(id, kind)`(남의 화면에도 보여야 할 연출).

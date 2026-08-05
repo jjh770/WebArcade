@@ -48,7 +48,15 @@ export type PlayerPublic = {
   survivalTicks: number;
 };
 
-/** 관전 대상 — 남의 화면을 그릴 때 필요한 정보(위치는 게임 좌표계).
+/** 게임이 관전 중계에 싣는 숫자 둘. **대개 좌표지만 뜻은 게임이 정한다** —
+ *  판 위의 위치라는 게 없는 게임(숫자 야구)은 진척도(푼 문제 수·점수)를 싣는다.
+ *  서버도 앱도 뜻을 모른 채 중계하고, 낸 게임의 renderSpectator에게 그대로 돌려준다.
+ *
+ *  ⚠️ 이 값은 **보간된다**(10Hz로 오는 것을 60Hz로 부드럽게 잇는다). 정수만 뜻이 있는
+ *     값을 실으면 중간 프레임에 소수가 도착하므로 받는 쪽이 반올림해야 한다. */
+export type SpectateSignal = { x: number; y: number };
+
+/** 관전 대상 — 남의 화면을 그릴 때 필요한 정보(x·y는 그 사람의 SpectateSignal).
  *  id는 원격 플레이어의 시각 요소(syncPeers로 넘긴 아바타)를 찾는 키. */
 export type SpectateTarget = {
   id: string;
@@ -57,7 +65,7 @@ export type SpectateTarget = {
   label: string;
 };
 
-/** 관전 렌더용 남의 상태 — 보간할 위치(게임 좌표계). syncPeers로 게임에 넘긴다.
+/** 관전 렌더용 남의 상태 — 보간할 SpectateSignal. syncPeers로 게임에 넘긴다.
  *  이건 앱→게임 내부 전달용이지 네트워크로 나가는 wire 타입이 아니다(그건 PeerSnapshot). */
 export type PeerState = {
   id: string;

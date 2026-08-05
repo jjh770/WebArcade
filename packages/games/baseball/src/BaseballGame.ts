@@ -16,9 +16,19 @@
    판정은 전부 rules.ts에 있다(순수 함수). 여기 있는 건 화면과 입력뿐이다.
    ============================================================ */
 
-import type { IGame, IRenderer, SpectateTarget } from "@arcade/shared";
+import type { IGame, IRenderer, SpectateSignal, SpectateTarget } from "@arcade/shared";
 import { baseballConfig as C } from "./config";
-import { isOver, parseGuess, startGame, submitGuess, ticksLeft, type Attempt, type BaseballState } from "./rules";
+import {
+  REASONS,
+  allDistinct,
+  isOver,
+  parseGuess,
+  startGame,
+  submitGuess,
+  ticksLeft,
+  type Attempt,
+  type BaseballState,
+} from "./rules";
 
 const BACKDROP = "#15171d";
 const PANEL = "#1e2129"; // 기록판
@@ -84,16 +94,18 @@ export class BaseballGame implements IGame {
     if (this.entry.length >= C.digits) return;
     // 겹치는 숫자는 아예 안 들어간다. 낸 뒤에 물리는 것보다 눌러도 안 찍히는 쪽이
     // 빠르고, 왜 안 되는지는 알림 한 줄로 말해 준다.
-    if (this.entry.includes(digit)) {
-      this.say("숫자가 겹치면 안 됩니다.", false);
+    // ⚠️ 판단도 문구도 rules에서 가져온다 — 여기서 다시 적으면 규칙을 고칠 때 화면만
+    //    옛 규칙으로 남아, 화면이 막는 것과 규칙이 받는 것이 갈린다.
+    if (!allDistinct([...this.entry, digit])) {
+      this.say(REASONS.duplicate, false);
       return;
     }
     this.entry.push(digit);
     this.sounds.add("type");
   }
 
-  /** 지금 친 숫자를 낸다. 검사는 rules.parseGuess 하나로 통일한다 — 화면과 규칙이
-   *  서로 다른 기준을 갖지 않게. */
+  /** 지금 친 숫자를 낸다. 낼 수 있는지는 rules.parseGuess가 정한다 — 화면은 그 판단을
+   *  옮겨 적지 않는다(치는 도중에 미리 막는 것도 rules.allDistinct를 쓴다). */
   private commit(): void {
     const parsed = parseGuess(this.entry.join(""));
     if (!parsed.ok) {
@@ -181,9 +193,11 @@ export class BaseballGame implements IGame {
       const y = top + i * ROW;
       r.text(`${skipped + i + 1}.`, PAD, y, DIM, 22);
       r.text(attempt.guess.join(" "), PAD + 50, y, HUD, 28);
-      if (attempt.strikes > 0) r.text(`${attempt.strikes}S`, PAD + 200, y, STRIKE, 26);
-      if (attempt.balls > 0) r.text(`${attempt.balls}B`, PAD + 250, y, BALL, 26);
-      if (attempt.strikes + attempt.balls === 0) r.text("아웃", PAD + 200, y, DIM, 24);
+      // 판정 글자는 marks 하나에서 온다(알림 줄과 같은 말). 여기서 정하는 건 자리와
+      // 색뿐이다 — 칸을 고정으로 두면 여러 줄이 쌓였을 때 S와 B가 세로로 맞는다.
+      for (const mark of marks(attempt)) {
+        r.text(mark.text, PAD + 200 + mark.column * 50, y, mark.color, mark.size);
+      }
     });
   }
 
@@ -224,16 +238,16 @@ export class BaseballGame implements IGame {
     return isOver(this.state, this.worldTick);
   }
 
-  /** ⚠️ **위치가 아니라 진척도를 싣는다.** 이 게임엔 좌표가 없는데 관전 중계는
-   *  숫자 두 개짜리 통로뿐이라, x=푼 문제 수 / y=점수로 쓴다. 서버는 이 값의 뜻을
-   *  모르고 그대로 중계하므로(판정에 안 쓴다) 계약을 어기는 건 아니지만,
-   *  renderSpectator가 이걸 좌표로 읽으면 화면이 엉킨다 — 둘은 같이 고쳐야 한다. */
-  getPosition(): { x: number; y: number } {
+  /** 관전 중계에 **위치 대신 진척도를 싣는다** — x=푼 문제 수 / y=점수.
+   *  이 게임엔 좌표가 없고 통로는 숫자 둘이라(SpectateSignal), 그 둘에 무엇을 담을지는
+   *  게임이 정한다. ⚠️ renderSpectator가 같은 뜻으로 읽어야 한다 — 둘은 한 쌍이고,
+   *  중간 프레임에는 보간된 소수가 오므로 받는 쪽에서 반올림한다. */
+  getPosition(): SpectateSignal {
     return { x: this.state.solved, y: this.state.score };
   }
 
-  /** 관전에 필요한 값이 SpectateTarget에 이미 실려 오므로 따로 쌓을 게 없다. */
-  syncPeers(): void {}
+  /* syncPeers는 구현하지 않는다 — 남의 화면에 쌓을 로컬 시각 요소가 없다.
+     관전에 필요한 숫자 둘은 SpectateTarget에 이미 실려 온다(선택 계약). */
 
   getScore(): number {
     return this.state.score;
@@ -245,11 +259,22 @@ export class BaseballGame implements IGame {
   }
 }
 
-/** "1S 2B" / "아웃". 알림과 기록판이 같은 말을 쓰게 한 곳에서 만든다. */
+/** 판정 하나를 사람이 읽는 조각들로. **이 게임에서 판정을 말하는 곳은 여기뿐이다** —
+ *  알림 줄은 이어 붙여 한 줄로 쓰고(label), 기록판은 조각마다 색을 달리 칠한다.
+ *  말은 한 곳에서 만들고 배치만 각자 정한다. */
+type Mark = { text: string; color: string; size: number; column: number };
+
+function marks(attempt: Attempt): Mark[] {
+  if (attempt.strikes + attempt.balls === 0) return [{ text: "아웃", color: DIM, size: 24, column: 0 }];
+  const out: Mark[] = [];
+  if (attempt.strikes > 0) out.push({ text: `${attempt.strikes}S`, color: STRIKE, size: 26, column: 0 });
+  if (attempt.balls > 0) out.push({ text: `${attempt.balls}B`, color: BALL, size: 26, column: 1 });
+  return out;
+}
+
+/** "1S 2B" / "아웃" — 알림 줄이 쓰는 한 줄짜리 표기. */
 function label(attempt: Attempt): string {
-  if (attempt.strikes + attempt.balls === 0) return "아웃";
-  const parts: string[] = [];
-  if (attempt.strikes > 0) parts.push(`${attempt.strikes}S`);
-  if (attempt.balls > 0) parts.push(`${attempt.balls}B`);
-  return parts.join(" ");
+  return marks(attempt)
+    .map((mark) => mark.text)
+    .join(" ");
 }

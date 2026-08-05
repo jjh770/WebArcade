@@ -239,7 +239,8 @@ export class GameSession {
    *  둘은 항상 같이 간다. 하나만 하면 화면과 내용이 어긋난다. */
   private refresh(): void {
     if (!this.runner || !this.roundActive) return;
-    this.game?.syncPeers(this.views.alivePeers());
+    // 남의 시각 요소를 쌓지 않는 게임은 이 메서드를 아예 갖지 않는다(선택 계약).
+    this.game?.syncPeers?.(this.views.alivePeers());
     this.runner.setViews(this.views.buildViews(this.mainRenderer, this.sideRenderers));
   }
 

@@ -189,11 +189,11 @@ export interface IGame {
   render(r: IRenderer, alpha: number): void;       // 자기 렌더
   renderSpectator(r: IRenderer, target: SpectateTarget): void;
   isPlayerDead(): boolean;                         // 로컬 사망 판정
-  getPosition(): { x: number; y: number };         // 관전 위치 전송
-  syncPeers(peers: readonly PeerState[]): void;    // 관전 위치 반영
+  getPosition(): SpectateSignal;                   // 관전 중계에 실을 숫자 둘(대개 위치)
   getScore(): number;                              // 순위 기준
 
   // ---- 선택 메서드 (구현 안 하면 그 기능이 그냥 없는 게임이 된다) ----
+  syncPeers?(peers: readonly PeerState[]): void;        // 남의 신호 반영(쌓을 게 있는 게임만)
   getGauge?(): number;                                  // 0~1. DOM HUD 게이지 줄
   consumePendingFire?(): readonly Debuff[] | null;      // 이번 스텝의 방해 발사(디버프 풀)
   applyEffect?(kind: string, durationMs: number): void; // 남의 발사에 맞았을 때
@@ -415,9 +415,12 @@ export interface IGame {
      게이지도 뜻이 반대다(커브는 차면 발사, 여긴 비면 끝). 둘 다 표시의 문제이지 판정이 아니라서
      **서버는 한 줄도 안 바뀌었다** — 순위표는 여전히 숫자 하나를 방향대로 세울 뿐이다.
 
-   > ⚠️ 대신 **관전에서 계약을 구부렸다.** 이 게임엔 좌표가 없는데 중계 통로는 숫자 둘(px·py)뿐이라,
-   > `getPosition()`이 `{x: 푼 문제 수, y: 점수}`를 싣는다. 서버는 뜻을 모른 채 중계만 하므로
-   > 위반은 아니지만 `renderSpectator`와 **반드시 같이** 고쳐야 하는 짝이 생겼다.
+   > ⚠️ 대신 **관전 계약이 실제보다 좁게 적혀 있었음이 드러났다.** 이 게임엔 좌표가 없는데 중계
+   > 통로는 숫자 둘(px·py)뿐이라 `getPosition()`이 `{x: 푼 문제 수, y: 점수}`를 싣는다. 한동안
+   > "구부렸다"고 적어 뒀지만 굽은 건 코드가 아니라 문장이었다 — 앞의 셋이 전부 판 위를 움직이는
+   > 게임이라 "위치"라고 쓴 것뿐이고, 서버도 core도 그 뜻을 모른 채 나르고 있었다. 그래서
+   > 계약을 `SpectateSignal`("관전 중계에 실을 숫자 둘, 뜻은 게임이 정한다")로 다시 적었다.
+   > 남는 것은 짝 하나다: 무엇을 싣든 `renderSpectator`가 **같은 뜻으로** 읽어야 한다.
    >
 9. ⬅️ **[현재]** 숫자 야구의 폰 조작 = **화면 숫자판**(네 번째 터치 방식 `keypad`). 앞의 셋과 달리
    **방향을 만들지 않는다** — `InputState`가 아니라 글자 슬러그를 밀어 넣는다. 그래도 `touchControls`
@@ -657,3 +660,9 @@ Worker가 소켓을 받아 DO로 중계하면 클라를 안 바꿀 수는 있었
 "점 하나"로 가정하는 것, `InputState`가 4방향 고정인 것, `PeerState {x, y}`로는 격자·보드류의
 관전을 그릴 수 없는 것. **의심은 기록하되 고치지 않는다** — 두 번째 게임이 어느 쪽을 실제로
 요구하는지 보고 정한다.
+
+> **결말(네 게임 뒤).** 셋 중 하나만 실제로 걸렸다. `InputState` 4방향은 숫자 야구가
+> 넓히는 대신 **다른 통로**(`typeKey`)로 비켜 갔고, `PeerState {x, y}`는 격자 게임(무너지는
+> 바닥)이 붙었는데도 충분했다. 걸린 것은 `getPosition()`이었지만 **고친 것은 코드가 아니라
+> 문장이다** — "점 하나의 위치"라는 서술이 실제보다 좁았을 뿐, 통로는 처음부터 뜻을 모르는
+> 숫자 둘이었다(`SpectateSignal`). 조기에 넓혔다면 셋 다 잘못 넓혔을 것이다.

@@ -17,6 +17,7 @@ export type {
   RoomState,
   PlayerPublic,
   SpawnContext,
+  SpectateSignal,
   SpectateTarget,
   PeerState,
   PeerSnapshot,
