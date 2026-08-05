@@ -28,7 +28,7 @@ import {
 import type { InputState } from "@arcade/shared";
 import { Joystick } from "./joystick";
 import { TouchHint, hasCoarsePointer, shouldShowHint } from "./touchHint";
-import { TOUCH_SCHEMES, type TouchScheme } from "./touchSchemes";
+import { SURFACE_CLASS, TOUCH_SCHEMES, type SpaceSurface, type TouchScheme } from "./touchSchemes";
 
 /** 방향키 버튼의 방향은 **마크업이 정본**이다(`data-dir`). 여기서 이름을 다시 적으면
  *  버튼을 하나 옮길 때 두 곳을 맞춰야 한다. 모르는 값은 조용히 버린다. */
@@ -66,6 +66,9 @@ export class TouchControls implements InputSource {
   private readonly all: CompositeInput;
   private readonly joystick: Joystick;
   private readonly hint: TouchHint;
+  /** 조작면을 띄우고 내리는 법. SURFACE_CLASS와 키가 같아야 하고, 빠지면 컴파일이 걸린다
+   *  — 표에만 올리고 띄우는 법을 안 적으면 클래스만 붙고 아무것도 안 뜨는 조작면이 된다. */
+  private readonly show: Record<SpaceSurface, (on: boolean) => void>;
 
   /** 이번 게임이 쓰는 방식. 마우스만 있는 기기면 null(조작면을 아예 안 띄운다). */
   private scheme: TouchScheme | null = null;
@@ -79,6 +82,16 @@ export class TouchControls implements InputSource {
     this.all = new CompositeInput(this.onBoard, this.onStick, this.onButtons);
     this.joystick = new Joystick(options.stick, options.stickKnob);
     this.hint = new TouchHint(options.hint, options.board);
+    this.show = {
+      // 조이스틱만 위젯이 스스로 내려간다 — 숨길 때 잡고 있던 손가락과 노브까지 놓아야 한다.
+      stick: (on) => this.joystick.setVisible(on),
+      buttons: (on) => {
+        options.dpad.hidden = !on;
+      },
+      keypad: (on) => {
+        options.keypad.hidden = !on;
+      },
+    };
     // ⚠️ 리스너를 뿌리에 하나만 단다(위임). 버튼마다 달면 열두 개를 붙였다 떼야 하고,
     //    숫자판은 뜨고 지는 일이 잦아 그 수명 관리가 곧 버그가 된다.
     // ⚠️ click이 아니라 pointerdown이다 — 톡 치는 즉시 숫자가 찍혀야 한다. click은
@@ -147,20 +160,17 @@ export class TouchControls implements InputSource {
    *  ⚠️ 클래스가 바뀌었으면 반드시 다시 재야 한다(onSpaceChange). 안 그러면 다음 창
    *     크기 변경까지 예전 크기의 판이 남는다. */
   private apply(): void {
-    const active = this.usable ? this.scheme : null;
-    const stick = active === "joystick";
-    const buttons = active === "buttons";
-    const keypad = active === "keypad";
-    this.joystick.setVisible(stick);
-    this.options.dpad.hidden = !buttons;
-    this.options.keypad.hidden = !keypad;
-    const changed =
-      document.body.classList.contains("controls-stick") !== stick ||
-      document.body.classList.contains("controls-buttons") !== buttons ||
-      document.body.classList.contains("controls-keypad") !== keypad;
-    document.body.classList.toggle("controls-stick", stick);
-    document.body.classList.toggle("controls-buttons", buttons);
-    document.body.classList.toggle("controls-keypad", keypad);
+    const scheme = this.usable ? this.scheme : null;
+    // 방식이 아니라 **조작면**으로 본다 — 판을 반으로 나눠 누르는 방식(canvas)은 표에 없어
+    // 저절로 "아무것도 안 띄움"이 된다. 방식이 늘어도 이 메서드는 그대로다.
+    const active = scheme ? TOUCH_SCHEMES[scheme].surface : null;
+    let changed = false;
+    for (const [surface, cls] of Object.entries(SURFACE_CLASS) as [SpaceSurface, string][]) {
+      const on = surface === active;
+      this.show[surface](on);
+      if (document.body.classList.contains(cls) !== on) changed = true;
+      document.body.classList.toggle(cls, on);
+    }
     if (changed) this.options.onSpaceChange();
   }
 }

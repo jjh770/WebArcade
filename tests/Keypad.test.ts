@@ -12,6 +12,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { keyToSlug } from "../packages/core/src/input/KeyEntry";
+import { SURFACE_CLASS } from "../packages/app/src/touchSchemes";
 import { BaseballGame } from "../packages/games/baseball/src/BaseballGame";
 import { baseballConfig as C } from "../packages/games/baseball/src/config";
 import type { IRenderer } from "@arcade/shared";
@@ -114,5 +115,12 @@ describe("조작면의 세로 예산", () => {
 
   it("숫자판도 그중 하나다", () => {
     expect(declared).toContain("controls-keypad");
+  });
+
+  /* 조작면과 CSS의 접점은 SURFACE_CLASS 하나다(touchSchemes). 양방향으로 못 박는다:
+     표에만 있으면 자리를 선언 안 한 조작면이 판을 덮고, CSS에만 있으면 아무도 안 붙이는
+     클래스가 남아 다음 사람이 그게 죽은 규칙인지 알 수 없다. */
+  it("코드가 붙이는 클래스와 CSS가 선언한 클래스가 같다", () => {
+    expect(new Set(declared)).toEqual(new Set(Object.values(SURFACE_CLASS)));
   });
 });

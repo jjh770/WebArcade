@@ -25,6 +25,27 @@ type SchemeSpec =
   | { surface: "buttons" }
   | { surface: "keypad" };
 
+/** 조작면의 종류. 방식(TouchScheme)이 "이 게임은 어떻게 조작하나"라면 이건 "그게 화면의
+ *  어디냐"다 — 방식이 늘어도 조작면은 그대로일 수 있다. */
+export type SchemeSurface = SchemeSpec["surface"];
+
+/** **판 밖에서 자리를 차지하는** 조작면 → body에 붙일 클래스. `canvas`가 여기 없는 이유는
+ *  하나뿐이다: 판 위에 겹치므로 자리를 따로 먹지 않는다(그래서 CSS도 예산을 선언하지 않는다).
+ *
+ *  ⚠️ 이 표가 CSS와의 **유일한 접점**이다. index.html이 이 클래스에 `--control-h`(세로)와
+ *     `--control-w`(가로)를 달고, 레이아웃이 그 값을 읽어 판을 줄인다. 짝이 어긋나면 판이
+ *     조작 위에 얹히는데 실기기에서만 드러나므로 Keypad 테스트가 양방향으로 못 박는다.
+ *  ⭐ 조작면을 하나 더 만들면 여기 한 줄 + touchControls의 show 한 줄이다 — 전에는
+ *     apply() 안에 이름이 네 번씩 박혀 있어 조작면 수만큼 그 메서드가 자랐다. */
+export const SURFACE_CLASS = {
+  stick: "controls-stick",
+  buttons: "controls-buttons",
+  keypad: "controls-keypad",
+} as const satisfies Partial<Record<SchemeSurface, string>>;
+
+/** 자리를 차지하는 조작면들(위 표의 키). */
+export type SpaceSurface = keyof typeof SURFACE_CLASS;
+
 export const TOUCH_SCHEMES: Record<TouchScheme, SchemeSpec> = {
   // 커브 피버: 좌우로만 꺾으므로 판을 반으로 나눠 누르고 있는다.
   halves: { map: splitLeftRight, surface: "canvas" },
