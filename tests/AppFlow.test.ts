@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { StateMachine } from "../packages/core/src/StateMachine";
 import { APP_TRANSITIONS, type AppEvent, type AppState } from "../packages/app/src/AppFlow";
+import { hashFor } from "../packages/app/src/navigation";
 
 function createFlow(): StateMachine<AppState, AppEvent> {
   return new StateMachine<AppState, AppEvent>("nickname", APP_TRANSITIONS);
@@ -120,5 +121,31 @@ describe("연습(싱글) 모드 흐름", () => {
     advance(flow, [...toLobby, "start_solo", "countdown_done"]);
     expect(flow.state).toBe("playing");
     expect(flow.can("nav_ranking")).toBe(false);
+  });
+});
+
+/* 주소에 남는 해시. 주인이 둘(순위 화면·방 코드)이라 한 함수가 정한다.
+   ⚠️ 예전에는 순위 화면만 알고 나머지 상태에서는 무조건 비웠다. 그래서 방에 들어가며
+      붙은 방 코드가 바로 뒤의 화면 전이에 지워져, 주소를 복사해 친구에게 보내는 길이
+      막혀 있었다(코드를 말로 부르는 길만 남았다). 그 사고를 여기서 못 박는다. */
+describe("주소에 남는 해시", () => {
+  it("순위 화면은 링크로 보낼 수 있다", () => {
+    expect(hashFor("ranking", null)).toBe("#ranking");
+  });
+
+  it("방에 있는 동안은 방 코드가 남는다 — 주소만 보내면 친구가 그대로 들어온다", () => {
+    for (const state of ["ready", "countdown", "playing", "spectating", "result"] as const) {
+      expect(hashFor(state, "ABCD")).toBe("#ABCD");
+    }
+  });
+
+  it("방을 나가면 비운다", () => {
+    expect(hashFor("main", null)).toBe("");
+    expect(hashFor("lobby", null)).toBe("");
+  });
+
+  it("둘 다면 순위 화면이 이긴다", () => {
+    // 실제로는 겹치지 않는다(방에 있는 동안 순위표는 막혀 있다) — 순서를 정해 둘 뿐이다.
+    expect(hashFor("ranking", "ABCD")).toBe("#ranking");
   });
 });

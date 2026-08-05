@@ -28,10 +28,22 @@ export type NavDeps = {
   showRanking: (gameId: GameId) => void;
 };
 
-/** 순위 화면만 주소에 남긴다. 방 코드 자동 참가(#ABCD)와는 글자가 겹치지 않고,
- *  replaceState라 뒤로 가기 기록을 더럽히지 않는다. */
-export function syncRankingHash(state: AppState): void {
-  const want = state === "ranking" ? "#ranking" : "";
+/** 지금 주소에 남아 있어야 할 해시. **주인이 둘이라 한 곳에서 정한다.**
+ *  - 순위 화면(`#ranking`) — 링크로 보낼 수 있어야 한다.
+ *  - 방에 있는 동안(`#ABCD`) — 주소를 그대로 보내면 받는 쪽이 자동 참가한다.
+ *
+ *  ⚠️ 예전에는 순위 화면만 알고 나머지는 **무조건 비웠다.** 그래서 방에 들어가며 붙은
+ *     방 코드가 바로 뒤의 화면 전이에 지워졌다 — 코드를 말로 전하는 길만 남고 주소를
+ *     복사해 보내는 길이 막혀 있었다. 둘 다 아는 함수 하나로 만들어 없앤 사고다.
+ *  ⚠️ 둘이 겹치지는 않는다(방에 있는 동안은 순위표로 못 간다). 그래도 순서는 정해 둔다. */
+export function hashFor(state: AppState, roomCode: string | null): string {
+  if (state === "ranking") return "#ranking";
+  return roomCode ? `#${roomCode}` : "";
+}
+
+/** 주소를 지금 상태에 맞춘다. replaceState라 뒤로 가기 기록을 더럽히지 않는다. */
+export function syncHash(state: AppState, roomCode: string | null): void {
+  const want = hashFor(state, roomCode);
   if (location.hash === want) return;
   history.replaceState(null, "", want || location.pathname + location.search);
 }

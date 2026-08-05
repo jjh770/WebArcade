@@ -47,7 +47,7 @@ import { GAME_REGISTRY, isGameId, type GameId } from "./GameRegistry";
 import { GameSession } from "./GameSession";
 import { updateHud } from "./hud";
 import { startPeerReport } from "./peerReport";
-import { bindNav, syncRankingHash } from "./navigation";
+import { bindNav, syncHash } from "./navigation";
 import { createServerRouter } from "./serverRoutes";
 import { loadNickname, saveNickname } from "./prefs";
 import { createRankingScreen } from "./rankingScreen";
@@ -63,7 +63,7 @@ const sideCanvases = Array.from({ length: 3 }, (_, index) => byId<HTMLCanvasElem
 
 const appState = new StateMachine<AppState, AppEvent>("nickname", APP_TRANSITIONS, ({ to }) => {
   renderState(to);
-  syncRankingHash(to);
+  syncHash(to, roomCode);
 });
 
 
@@ -111,6 +111,9 @@ window.addEventListener("orientationchange", () => setTimeout(relayout, 0));
 /** 방에 연결된 상태인가. 서버 연결은 방에 들어갈 때 맺고 나올 때 끊는다
  *  — 앱 시작 시점에는 연결하지 않는다(혼자 플레이는 서버가 없어도 돌아간다). */
 let inRoom = false;
+/** 지금 들어가 있는 방의 코드. 주소에 남겨 두는 값이라 방을 나가면 비운다
+ *  — 이게 붙어 있어야 주소를 그대로 보내 친구가 바로 들어올 수 있다. */
+let roomCode: string | null = null;
 let selectedGameId: GameId | null = null;
 let myId: string | null = null;
 let myNickname = "";
@@ -223,6 +226,10 @@ net.onMessage(
     setGame: (id) => {
       selectedGameId = id;
     },
+    setRoomCode: (code) => {
+      roomCode = code;
+      syncHash(appState.state, roomCode); // 방 상태가 전이 없이 다시 올 수도 있다.
+    },
     refreshResult,
     startCountdown,
     showResult,
@@ -314,7 +321,8 @@ function leaveRoom(): void {
   resetScreenFx(); // 로비로 나가니 다음 판을 위해 복구.
   session.leaveRoom();
   finalRanks = [];
-  location.hash = "";
+  roomCode = null; // 주소에서 방 코드를 뗀다(아래 전이도 같은 값으로 다시 맞춘다).
+  syncHash(appState.state, roomCode);
   transition("leave_room");
 }
 

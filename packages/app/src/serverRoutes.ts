@@ -33,6 +33,8 @@ export type ServerRouteDeps = {
   setHost: (isHost: boolean) => void;
   /** 방이 알려 준 게임으로 맞춘다(남이 만든 방에 코드로 들어왔을 때). */
   setGame: (id: GameId) => void;
+  /** 지금 들어와 있는 방의 코드. 주소에 남는 값이라 화면이 아니라 앱이 소유한다. */
+  setRoomCode: (code: string) => void;
   /** 결과 화면이 떠 있으면 지금 상태로 다시 그린다(아니면 아무 일도 안 한다).
    *  방장이 바뀌거나 방 상태가 다시 와도 "다시 하기"의 주인이 맞게 남는다. */
   refreshResult: () => void;
@@ -52,7 +54,7 @@ export function createServerRouter(deps: ServerRouteDeps): (message: ServerMessa
         deps.session.setRoster(message.players, myId);
         if (isGameId(message.gameId)) deps.setGame(message.gameId);
         renderReady(message.code, message.players, message.hostId, myId);
-        location.hash = message.code;
+        deps.setRoomCode(message.code);
         if (message.state === "waiting") {
           if (deps.state() === "lobby") deps.transition("room_joined");
           else if (deps.state() === "result") deps.transition("return_ready");

@@ -34,8 +34,9 @@ export function initSoundShell(): void {
      확인음을 따로 만들 필요가 없다. */
   document.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement | null)?.closest("button");
-    // ⚠️ 방향키 버튼은 뺀다. UI 버튼이 아니라 조작이라 누를 때마다 클릭음이 나면
-    //    한 판 내내 딸깍거린다 — 게임 소리(부서짐)가 그 밑에 묻힌다.
-    if (button && !button.closest("#dpad")) play("click");
+    // ⚠️ 조작면의 버튼은 뺀다(방향키·숫자판). UI 버튼이 아니라 조작이라 누를 때마다
+    //    클릭음이 나면 한 판 내내 딸깍거린다 — 게임 소리가 그 밑에 묻힌다.
+    //    숫자 야구에서는 특히 나빴다: 한 번 칠 때마다 타자음과 클릭음이 겹쳤다.
+    if (button && !button.closest("#dpad, #keypad")) play("click");
   });
 }
