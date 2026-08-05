@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { SeededRNG } from "@arcade/shared";
 import {
+  allDistinct,
   isOver,
   judge,
   makeSecret,
@@ -157,6 +158,16 @@ describe("추측 검사", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toContain("겹치면");
+  });
+
+  /* 겹침 판단은 두 곳이 쓴다 — 낼 때(parseGuess)와 치는 도중 미리 막을 때(BaseballGame).
+     두 곳이 같은 함수를 보는지는 Baseball.test.ts가 화면으로 확인한다. */
+  it("겹침 판단은 자리 수와 무관하다 — 치는 도중의 앞부분에도 그대로 쓴다", () => {
+    expect(allDistinct([])).toBe(true);
+    expect(allDistinct([7])).toBe(true);
+    expect(allDistinct([1, 2])).toBe(true);
+    expect(allDistinct([1, 1])).toBe(false);
+    expect(allDistinct([0, 5, 0])).toBe(false);
   });
 
   it("왜 안 되는지를 알려 준다 — 이유가 다르면 문구도 다르다", () => {

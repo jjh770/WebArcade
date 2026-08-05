@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import type { IRenderer } from "@arcade/shared";
 import { BaseballGame } from "../packages/games/baseball/src/BaseballGame";
 import { baseballConfig as C } from "../packages/games/baseball/src/config";
-import { secretFor } from "../packages/games/baseball/src/rules";
+import { parseGuess, secretFor } from "../packages/games/baseball/src/rules";
 
 const SEED = 42;
 
@@ -91,6 +91,29 @@ describe("숫자 치기", () => {
     // 한 자리만 찼으므로 Enter를 눌러도 낼 수 없다(기회가 안 줄어든다).
     game.typeKey("enter");
     expect(draw(game).has("1.")).toBe(false); // 기록판이 비어 있다
+  });
+
+  /* 아래 둘은 **같은 말을 두 곳에서 적지 않는지**를 본다. 화면이 규칙의 판단이나 문구를
+     옮겨 적으면 규칙을 고칠 때 한쪽만 바뀌고, 사람 눈에는 규칙이 흔들리는 것으로 보인다
+     — 화면은 막는데 규칙은 받아 주거나, 같은 상황에 다른 말을 하거나. */
+  it("화면이 미리 막는 말과 규칙이 거부하는 말이 같다", () => {
+    const game = fresh();
+    type(game, "11");
+    const rejected = parseGuess("112");
+    expect(rejected.ok).toBe(false);
+    if (rejected.ok) return;
+    expect(draw(game).texts).toContain(rejected.reason);
+  });
+
+  it("기록판과 알림이 같은 판정 글자를 쓴다", () => {
+    const game = fresh();
+    const secret = secretFor(SEED, 0);
+    const spare = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter((d) => !secret.includes(d));
+    // 첫 자리만 맞고 나머지 둘은 답에 없는 숫자 → 1S 0B.
+    type(game, `${secret[0]}${spare[0]}${spare[1]}`);
+    game.typeKey("enter");
+    // 한 번은 기록판 줄에서, 한 번은 알림 줄에서. 두 곳이 다른 말을 쓰면 하나만 남는다.
+    expect(draw(game).texts.filter((t) => t === "1S")).toHaveLength(2);
   });
 
   it("back으로 한 글자씩 지운다", () => {

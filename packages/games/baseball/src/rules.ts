@@ -96,6 +96,20 @@ export function judge(secret: readonly number[], guess: readonly number[]): { st
   return { strikes, balls };
 }
 
+/** 서로 다른 숫자인가. 이 판단이 두 번 필요하다 — 낼 때(parseGuess) 한 번, 그리고 화면이
+ *  치는 도중에 미리 막을 때 한 번. **같은 함수를 봐야 한다**: 한쪽만 고치면 화면이 막은
+ *  것을 규칙은 받아 주거나(혹은 반대로) 하는, 사람이 보기엔 규칙이 흔들리는 상태가 된다. */
+export function allDistinct(digits: readonly number[]): boolean {
+  return new Set(digits).size === digits.length;
+}
+
+/** 규칙이 사람에게 하는 말. 화면이 같은 문구를 따로 적어 두면 규칙을 고칠 때 한쪽만 바뀐다. */
+export const REASONS = {
+  digitsOnly: "숫자만 넣을 수 있습니다.",
+  duplicate: "숫자가 겹치면 안 됩니다.",
+  length: (digits: number): string => `${digits}자리를 채워 주세요.`,
+} as const;
+
 /** 입력한 글자가 낼 수 있는 추측인지 본다. 낼 수 없으면 **왜 안 되는지**를 준다
  *  — 화면이 "안 됨"만 알면 플레이어는 뭘 고쳐야 할지 모른다.
  *
@@ -103,10 +117,10 @@ export function judge(secret: readonly number[], guess: readonly number[]): { st
  *     플레이어의 일이고, 규칙이 조용히 되돌리면 기회가 줄었는지 아닌지가 헷갈린다. */
 export function parseGuess(text: string, digits: number = C.digits): ParseResult {
   const trimmed = text.trim();
-  if (!/^[0-9]*$/.test(trimmed)) return { ok: false, reason: "숫자만 넣을 수 있습니다." };
-  if (trimmed.length !== digits) return { ok: false, reason: `${digits}자리를 채워 주세요.` };
+  if (!/^[0-9]*$/.test(trimmed)) return { ok: false, reason: REASONS.digitsOnly };
+  if (trimmed.length !== digits) return { ok: false, reason: REASONS.length(digits) };
   const guess = [...trimmed].map(Number);
-  if (new Set(guess).size !== guess.length) return { ok: false, reason: "숫자가 겹치면 안 됩니다." };
+  if (!allDistinct(guess)) return { ok: false, reason: REASONS.duplicate };
   return { ok: true, guess };
 }
 
