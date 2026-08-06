@@ -39,7 +39,7 @@ jobs:
         run: npm ci
 
       - name: Run unit and Workers tests
-        run: npm test
+        run: npm test -- --reporter=verbose --reporter=github-actions --includeTaskLocation
 
       - name: Run production build
         run: npm run build
