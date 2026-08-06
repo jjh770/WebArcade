@@ -18,6 +18,10 @@ import { baseballConfig as C } from "../packages/games/baseball/src/config";
 import type { IRenderer } from "@arcade/shared";
 
 const HTML = readFileSync(new URL("../packages/app/index.html", import.meta.url), "utf8");
+/* 조작면의 세로 예산은 판에 붙는 규칙이라 play.css가 갖는다(index.html은 마크업만).
+   여기서 굳이 파일을 갈라 읽는 이유: 이 테스트가 지키는 건 **CSS와 코드의 접점**이지
+   그것이 어느 파일에 있느냐가 아니다. 스타일을 또 나누면 이 줄만 따라오면 된다. */
+const PLAY_CSS = readFileSync(new URL("../packages/app/src/styles/play.css", import.meta.url), "utf8");
 
 /** #keypad 안의 data-key 값들(마크업 순서 그대로). */
 function keypadSlugs(): string[] {
@@ -103,12 +107,12 @@ describe("숫자판 슬러그를 게임이 알아듣는다", () => {
 
 describe("조작면의 세로 예산", () => {
   /** `body.controls-X { --control-h: ... }`를 선언한 조작면들. */
-  const declared = [...HTML.matchAll(/body\.(controls-[a-z]+)[^{]*\{[^}]*--control-h/g)]
+  const declared = [...PLAY_CSS.matchAll(/body\.(controls-[a-z]+)[^{]*\{[^}]*--control-h/g)]
     .flatMap((m) => [...m[0].matchAll(/controls-[a-z]+/g)].map((x) => x[0]));
 
   it("세로를 먹는다고 선언한 조작면은 판의 아래 패딩 규칙에도 있다", () => {
     // 이게 어긋나면 판은 뷰포트 전체 기준 가운데 정렬이라 조작 위에 얹힌다.
-    const rule = /@media \(orientation: portrait\)\s*\{\s*([^{]*)\{\s*padding-bottom/.exec(HTML);
+    const rule = /@media \(orientation: portrait\)\s*\{\s*([^{]*)\{\s*padding-bottom/.exec(PLAY_CSS);
     expect(rule, "세로 화면의 #play 패딩 규칙을 찾지 못했다").not.toBeNull();
     for (const cls of new Set(declared)) expect(rule![1]).toContain(cls);
   });

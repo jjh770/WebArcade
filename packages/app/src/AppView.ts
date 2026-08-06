@@ -15,7 +15,7 @@ import { newcomers, staggerIndex } from "./stagger";
 
 const SCREEN_NAMES = [
   "nickname", "main", "gamelist", "lobby", "ready", "countdown", "result",
-  "notice", "about", "community", "ranking",
+  "notice", "about", "community", "ranking", "options",
 ] as const;
 type ScreenName = (typeof SCREEN_NAMES)[number];
 

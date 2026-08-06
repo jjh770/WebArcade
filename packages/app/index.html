@@ -7,650 +7,9 @@
          touch-action:none으로 빠져 있고, 공지·소개 글까지 못 키우면 안 된다. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Arcade - 웹 멀티 아케이드 게임</title>
-    <style>
-      /* ---- 디자인 토큰 — 사이트 UI 색의 정본 ----------------------------------
-         packages/app/UI_DESIGN.md가 이 값을 서술한다. 문서가 아니라 이 블록이 정본이다.
-         알파가 섞인 파생색은 color-mix로 여기서 계산해 출처를 하나로 유지한다.
-         ⚠️ 게임 캔버스 안의 색은 여기 없다 — 그건 각 게임 config.ts 소관이다.
-         (경로에 별표를 쓰지 말 것 — CSS 주석이 조기에 닫힌다.) */
-      :root {
-        --bg-deep: #080a0f;
-        --bg: #0d1017;
-        --surface: #141923;
-        --surface-elevated: #1a2130;
-        --field: #222b3b;
-        --border: #2d394d;
-        --text-primary: #f4f7fb;
-        --text-secondary: #c8d0dc;
-        --text-muted: #8e9aac;
-        /* 강조색은 청록 하나뿐이다. 빨강은 오류·사망, 금색은 1위·최고기록,
-           초록은 성공 상태에만 — 한 화면에서 둘 이상을 같은 비중으로 쓰지 않는다. */
-        --primary: #5eebff;
-        --primary-strong: #29cbe3;
-        --danger: #ff4d67;
-        --warning: #ffb84d;
-        --rank: #ffd166;
-        --success: #5ce1a5;
-        /* 이징만 토큰이다. 지속시간은 전환마다 성격이 달라(0.12s 버튼 ~ 0.8s 낙하)
-           몇 개로 뭉치면 값이 바뀌므로 각 규칙에 그대로 둔다. */
-        /* 게임판 둘레 여백. 폰에서는 아래 미디어 쿼리가 줄인다 — 정사각 게임판이
-           가로폭에 갇히므로 여백 8px 차이가 판 크기를 그만큼 키운다. */
-        --play-pad: 16px;
-        /* 방향키 버튼 한 변. 십자 전체 높이는 3칸 + 틈 2개 = 이 값의 3배 + 12px. */
-        --dpad-btn: 56px;
-        /* 숫자판 버튼 한 변. 세로에서는 5열×3줄이라 전체 높이가 이 값의 3배 + 12px다.
-           ⚠️ 세로가 귀한 화면에서 폰 자판처럼 3열×4줄로 두면 한 줄을 더 먹는다.
-              그래서 세로에서는 **넓고 낮게**, 가로에서는 반대로 좁고 높게 흐른다. */
-        --pad-btn: 56px;
-        /* 판 밖 조작 영역이 뷰포트 아래에서 차지하는 세로(위젯 + 아래 여백).
-           ⚠️ 여기 숫자와 #stick/#dpad의 크기·bottom은 한 몸이다. 한쪽만 고치면
-              판이 조작 위에 얹히거나(작으면) 판이 괜히 작아진다(크면).
-           조이스틱 132 + 라벨 20 + 아래 20 = 172 / 버튼 180 + 아래 20 = 200
-           숫자판 3줄 180 + 아래 20 = 200 (방향키 버튼과 같은 몫) */
-        --control-h: 0px;
-        /* 가로 화면에서 조작 영역이 **왼쪽에서** 차지하는 가로. 세로에서의 --control-h와
-           같은 일을 축만 바꿔 한다 — 가로에서는 조작이 판 아래가 아니라 옆에 앉으므로.
-           ⚠️ 조작면 셋의 오른쪽 끝 중 가장 먼 것 + 여유다:
-              조이스틱 20+132=152 / 방향키 12+132=144 / 숫자판 12+144=156 → 156+16 */
-        --control-w: 0px;
-        --ease-out: cubic-bezier(.2, .7, .2, 1);      /* 감속 — 진입·전환의 기본 */
-        --ease-in-sharp: cubic-bezier(.5, 0, .75, 0); /* 가속 — 사망 낙하의 무게감 */
-      }
-      * { box-sizing: border-box; }
-      /* 키보드 포커스는 hover와 같은 정보를 전달해야 한다. 장식이 아니라 접근 경로다. */
-      :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
-      /* text-size-adjust: 가로로 눕히면 iOS가 글자를 제멋대로 키운다. 레이아웃이
-         세로/가로에서 달라 보이면 안 되므로 끈다. */
-      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text-primary);
-        font-family: system-ui, "Segoe UI", sans-serif;
-        -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-      /* 두 번 톡톡 쳐서 확대되는 동작과 그에 딸린 300ms 탭 지연을 없앤다.
-         조작 요소에만 건다 — 본문 글은 손가락으로 키울 수 있어야 한다. */
-      button, input, a, .game-card { touch-action: manipulation; }
-      body { display: flex; align-items: center; justify-content: center; }
-
-      /* 플레이 영역: 뷰포트를 꽉 채운다. 메인 화면 + 우측 생존자 사이드(최대 3명).
-         padding·gap은 JS가 여기서 읽어 간다(layoutPlayArea) — 상수를 양쪽에 두지 않는다.
-         작은 화면에서 여백을 줄이거나 노치를 피해도 캔버스 계산이 저절로 따라온다.
-         메인 캔버스의 표시 크기는 JS가 게임 비율(현재 정사각형)을 유지해 계산 후 인라인으로 넣고,
-         내부 해상도(백킹스토어)는 Canvas2DRenderer가 DPR에 맞춰 잡는다.
-         게임 좌표계(800x800)는 화면 크기와 무관하게 불변이다. */
-      #play { position: fixed; inset: 0; display: flex; gap: 14px;
-        padding:
-          calc(var(--play-pad) + env(safe-area-inset-top))
-          calc(var(--play-pad) + env(safe-area-inset-right))
-          calc(var(--play-pad) + env(safe-area-inset-bottom))
-          calc(var(--play-pad) + env(safe-area-inset-left));
-        align-items: center; justify-content: center;
-        opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility .3s; }
-      #play.on { opacity: 1; visibility: visible; }
-
-      /* 조작 영역이 자기 몫의 세로를 갖는다. 이게 없으면 판은 뷰포트 **전체** 기준
-         가운데 정렬이라, 화면이 짧을수록 판 아래쪽이 조작 위젯에 먹힌다
-         (390x620에서 29px, 360x540에서 54px 겹쳤다).
-         패딩만 늘리면 끝인 이유: layoutPlayArea가 #play의 계산된 패딩을 읽어
-         판 크기를 정한다 — 상수를 CSS와 JS 양쪽에 두지 않았기 때문이다.
-         ⚠️ 세로 화면에서만. 가로에서는 조작이 판 옆 여백에 앉으므로 세로를 안 먹는다. */
-      body.controls-stick { --control-h: 172px; }
-      body.controls-buttons, body.controls-keypad { --control-h: 200px; }
-      @media (orientation: portrait) {
-        body.controls-stick #play, body.controls-buttons #play, body.controls-keypad #play {
-          padding-bottom: calc(var(--play-pad) + env(safe-area-inset-bottom) + var(--control-h)); }
-      }
-      /* 가로에서는 같은 문제가 축만 바꿔 나타난다. 조작은 판 **옆**에 앉는데, 판은
-         남는 가로 전체 기준 가운데 정렬이라 화면이 좁을수록 조작 위로 올라탄다
-         (667x375에서 9px 겹쳤다 — 세로에서 겪은 것과 똑같은 종류다).
-         고치는 방법도 같다: 조작이 자기 몫의 가로를 갖고, layoutPlayArea가 그 패딩을
-         읽어 판을 그만큼 안쪽에 잡는다. */
-      @media (orientation: landscape) {
-        body.controls-stick, body.controls-buttons, body.controls-keypad { --control-w: 172px; }
-        body.controls-stick #play, body.controls-buttons #play, body.controls-keypad #play {
-          padding-left: calc(var(--play-pad) + env(safe-area-inset-left) + var(--control-w)); }
-      }
-
-      /* 터치 조작 안내. 자리·크기는 JS가 캔버스에 맞춰 인라인으로 넣는다.
-         ⚠️ pointer-events: none — 이걸 빼면 안내가 터치를 먹어 조작이 막힌다.
-         ⚠️ z-index를 주지 말 것. 양수를 주는 순간 카운트다운 화면(#ui, z-index 없음)
-            위로 올라와 숫자를 덮는다. 지금은 DOM 순서(#play가 #ui보다 앞)로
-            캔버스 위 · 카운트다운 아래에 정확히 놓인다. */
-      #touch-zones { position: absolute; display: flex; border-radius: 6px; overflow: hidden;
-        pointer-events: none; opacity: 0;
-        transition: opacity .3s var(--ease-out); }
-      #touch-zones.on { opacity: 1; }
-      /* 조작 방식에 따라 둘 중 하나만 보인다. 좌우로 조작하는 게임에 "끌어라"가
-         뜨면 안 되므로 매핑과 안내는 GameRegistry에서 한 필드로 묶여 있다. */
-      .tz-halves { display: none; flex: 1; }
-      #touch-zones.mode-halves .tz-halves { display: flex; }
-      /* 게임판(#f1faee)이 밝아서 막이 얇으면 글자가 안 읽힌다. 68%에서 작은 라벨도
-         본문 기준 대비를 넘긴다(측정 4.7:1). 카운트다운 3초 동안만 떠 있다. */
-      .tz-half { flex: 1; display: flex; flex-direction: column; align-items: center;
-        justify-content: center; gap: 6px; color: var(--text-primary);
-        background: color-mix(in srgb, var(--bg-deep) 68%, transparent); }
-      .tz-half + .tz-half { border-left: 1px solid color-mix(in srgb, var(--primary) 55%, transparent); }
-      .tz-arrow { font-size: 44px; line-height: 1; }
-      /* ---- 조이스틱 ---------------------------------------------------------
-         뷰포트 왼쪽 아래 고정. 세로 폰에서는 정사각 게임판 아래 남는 띠에, 가로
-         폰에서는 판 옆 여백에 그대로 들어간다 — 방향마다 규칙을 나눌 필요가 없다.
-         ⚠️ z-index는 카운트다운(#ui, z-index 없음)보다 위여야 한다. 조이스틱은 장식이
-            아니라 조작 도구라 카운트다운 막에 같이 어두워지면 안 된다. HUD(40)보다는
-            위, 사망 연출(46~50)보다는 아래. */
-      /* 기본은 가운데. 세로 화면에서는 판 아래 빈 띠에 놓이므로 양손 어느 쪽으로도
-         닿고 판을 안 가린다. (margin auto로 가운데를 잡는다 — transform을 쓰면
-         쌓임 맥락·containing block이 딸려 와 위 z-index 규칙과 얽힌다.) */
-      #stick { position: fixed; z-index: 42; width: 132px; height: 132px;
-        left: 0; right: 0; margin-inline: auto;
-        bottom: calc(20px + env(safe-area-inset-bottom));
-        border-radius: 50%; touch-action: none; user-select: none;
-        -webkit-tap-highlight-color: transparent;
-        /* ⚠️ #ui는 pointer-events:none이라 그대로 두면 손가락이 조이스틱을 통과한다.
-           화면 오버레이 사이에 얹힌 유일한 "조작" 요소라 여기서 되살린다. */
-        pointer-events: auto;
-        display: none; align-items: center; justify-content: center;
-        background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
-        border: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
-        transition: border-color .15s ease, background .15s ease; }
-      /* 두 조건이 다 맞아야 뜬다: 플레이 중(카운트다운 포함)이고, 이 게임이 쓰는 조작이다.
-         hidden은 JS가 게임별로 붙인다(Joystick.setVisible). */
-      body.playing #stick:not([hidden]) { display: flex; }
-      #stick.held { background: color-mix(in srgb, var(--bg-deep) 74%, transparent);
-        border-color: var(--primary); }
-      /* 노브 자리는 JS가 transform으로만 옮긴다 — 매 프레임 레이아웃을 건드리지 않는다. */
-      #stick-knob { width: 54px; height: 54px; border-radius: 50%;
-        background: color-mix(in srgb, var(--primary) 85%, transparent);
-        box-shadow: 0 2px 10px rgba(0, 0, 0, .45); }
-      .stick-label { position: absolute; bottom: -20px; left: 0; right: 0; text-align: center;
-        font-size: 12px; color: var(--text-secondary); text-shadow: 0 1px 5px var(--bg-deep); }
-
-      /* ---- 방향키 버튼(무너지는 바닥) ---------------------------------------
-         십자 배치. 미는 위젯과 달리 **버튼 하나가 방향 하나**라 경계가 눈에 보인다.
-         자리·z-index·pointer-events 규칙은 #stick과 같다(위 주석 참조).
-         가운데 빈 칸은 안내가 앉는 자리다 — 아래에 따로 줄을 두면 세로를 더 먹는다. */
-      #dpad { position: fixed; z-index: 42; display: none;
-        grid-template-columns: repeat(3, var(--dpad-btn));
-        grid-template-rows: repeat(3, var(--dpad-btn));
-        gap: 6px; width: max-content;
-        left: 0; right: 0; margin-inline: auto;
-        bottom: calc(20px + env(safe-area-inset-bottom));
-        touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent;
-        pointer-events: auto; }
-      body.playing #dpad:not([hidden]) { display: grid; }
-      .dpad-btn { display: flex; align-items: center; justify-content: center;
-        font-size: 20px; line-height: 1; padding: 0; border-radius: 14px;
-        color: var(--primary); touch-action: none;
-        background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
-        border: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
-        transition: background .1s ease, border-color .1s ease, transform .1s ease; }
-      /* :active는 마우스에서만 확실하다. 손가락 눌림은 ButtonInput이 아니라 CSS로
-         두면 캡처 때문에 안 풀리는 경우가 있어, 눌림 표시는 :active로만 둔다. */
-      .dpad-btn:active { background: color-mix(in srgb, var(--primary) 30%, transparent);
-        border-color: var(--primary); transform: scale(.94); }
-      #dpad .dpad-btn[data-dir="up"] { grid-area: 1 / 2; }
-      #dpad .dpad-btn[data-dir="left"] { grid-area: 2 / 1; }
-      #dpad .dpad-btn[data-dir="right"] { grid-area: 2 / 3; }
-      #dpad .dpad-btn[data-dir="down"] { grid-area: 3 / 2; }
-      #dpad .stick-label { grid-area: 2 / 2; position: static; align-self: center;
-        font-size: 11px; line-height: 1.25; }
-
-      /* ---- 숫자판(숫자 야구) -------------------------------------------------
-         앞의 둘과 겉모습은 같은 계열이지만 내는 것이 다르다 — 방향이 아니라 글자다.
-         세로에서는 **5열 × 3줄**로 넓고 낮게 깐다. 폰 자판처럼 3열로 두면 4줄이 되어
-         가뜩이나 귀한 세로를 한 줄 더 먹는다(판이 그만큼 작아진다).
-         자리·z-index·pointer-events 규칙은 #stick과 같다(위 주석 참조). */
-      #keypad { position: fixed; z-index: 42; display: none;
-        grid-template-columns: repeat(5, var(--pad-btn));
-        grid-auto-rows: var(--pad-btn);
-        gap: 6px; width: max-content;
-        left: 0; right: 0; margin-inline: auto;
-        bottom: calc(20px + env(safe-area-inset-bottom));
-        user-select: none; -webkit-tap-highlight-color: transparent;
-        pointer-events: auto; }
-      body.playing #keypad:not([hidden]) { display: grid; }
-      /* 방향키 버튼과 달리 touch-action은 manipulation이다 — 이건 끄는 조작이 아니라
-         톡톡 치는 조작이라 none으로 막을 제스처가 없고, 두 번 눌러 확대만 꺼주면 된다. */
-      .pad-btn { display: flex; align-items: center; justify-content: center;
-        font-size: 22px; line-height: 1; padding: 0; border-radius: 14px;
-        color: var(--text-primary); touch-action: manipulation;
-        background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
-        border: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
-        transition: background .1s ease, border-color .1s ease, transform .1s ease; }
-      .pad-btn:active { background: color-mix(in srgb, var(--primary) 30%, transparent);
-        border-color: var(--primary); transform: scale(.94); }
-      /* 지우기·확인은 숫자가 아니라 **행동**이라 넓게 깔아 손가락이 헷갈리지 않게 한다.
-         셋째 줄 5칸을 2:3으로 나눈다 — 확인이 훨씬 자주 눌린다. */
-      #keypad .wide { font-size: 17px; }
-      #keypad [data-key="back"] { grid-column: span 2; }
-      #keypad [data-key="enter"] { grid-column: span 3; }
-      #keypad .go { color: var(--bg-deep); font-weight: 700;
-        background: color-mix(in srgb, var(--primary) 80%, transparent);
-        border-color: var(--primary); }
-      #keypad .go:active { background: var(--primary); }
-      /* 가로 화면에는 판 아래 띠가 없다 — 가운데에 두면 판 한복판을 덮는다.
-         대신 판 옆에 남는 여백으로 비켜 앉는다. */
-      @media (orientation: landscape) {
-        #stick, #dpad, #keypad { right: auto; margin-inline: 0; left: calc(20px + env(safe-area-inset-left)); }
-        /* 가로에서는 세로가 판 크기를 정하고 조작은 판 옆 여백에 앉는다. 그 여백이
-           좁으므로 버튼을 44px(손가락 표적 하한)까지 줄이고 더 왼쪽에 붙인다 —
-           700x380에서 48px면 판 왼쪽 가장자리를 8px 덮었다. */
-        #dpad { --dpad-btn: 44px; left: calc(12px + env(safe-area-inset-left)); }
-        /* 숫자판은 세로와 **정반대로** 흐른다. 가로에서는 남는 것이 세로고 귀한 것이
-           가로라, 5열(244px)로 두면 판 왼쪽을 덮는다(700x380 기준 옆 여백 ~180px).
-           3열이면 144px라 여백 안에 들어간다. 아래가 아니라 세로 가운데에 앉힌다. */
-        #keypad { --pad-btn: 44px; left: calc(12px + env(safe-area-inset-left));
-          grid-template-columns: repeat(3, var(--pad-btn));
-          bottom: auto; top: 50%; transform: translateY(-50%); }
-        /* 3열에서는 나눌 칸이 없다 — 지우기·확인도 숫자와 같은 한 칸이다. */
-        #keypad [data-key="back"], #keypad [data-key="enter"] { grid-column: auto; }
-        #keypad .wide { font-size: 14px; }
-      }
-      .tz-label { font-size: 13px; color: var(--text-secondary); }
-      /* 조작의 핵심은 "탭"이 아니라 "누르고 있기"라 문장으로 못 박는다. */
-      .tz-caption { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center;
-        font-size: 13px; color: var(--text-primary);
-        text-shadow: 0 1px 6px var(--bg-deep); }
-      /* touch-action:none이 없으면 브라우저가 손가락 드래그를 스크롤로 가로채
-         pointercancel을 쏘고, 꺾는 도중에 조작이 끊긴다. 탭 하이라이트도 끈다. */
-      #game { display: block; background: #f1faee; border-radius: 6px;
-        touch-action: none; -webkit-tap-highlight-color: transparent; user-select: none; }
-      /* 사망 연출: 내 화면이 살짝 튕겨 올랐다가 중력처럼 가속하며 아래로 떨어진다.
-         ease-in(가속) 커브가 "툭 떨어지는" 무게감을 준다. forwards로 떨어진 채 머문다. */
-      @keyframes screenFall {
-        0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
-        12%  { transform: translateY(-18px) rotate(-1.5deg); opacity: 1; }
-        100% { transform: translateY(115vh) rotate(7deg); opacity: 0; }
-      }
-      #game.fallen { animation: screenFall .8s var(--ease-in-sharp) forwards; }
-      /* 관전 전환: 낙하가 끝나면 살아있는 남의 화면이 위에서 미끄러져 들어온다(감속 커브). */
-      @keyframes screenSlideIn {
-        0%   { transform: translateY(-115vh); opacity: 0; }
-        100% { transform: translateY(0); opacity: 1; }
-      }
-      #game.slide-in { animation: screenSlideIn .55s var(--ease-out); }
-      /* 관전 대상 넘기기: 다음/이전 생존자가 좌우에서 살짝 밀려 들어온다(카드 넘기기 느낌). */
-      @keyframes swapFromRight { from { transform: translateX(64px); opacity: .35; } to { transform: none; opacity: 1; } }
-      @keyframes swapFromLeft  { from { transform: translateX(-64px); opacity: .35; } to { transform: none; opacity: 1; } }
-      #game.swap-r { animation: swapFromRight .26s var(--ease-out); }
-      #game.swap-l { animation: swapFromLeft .26s var(--ease-out); }
-      /* 사망 임팩트: 화면이 짧게 흔들리고 붉은 섬광이 번쩍인다.
-         순수 시각 연출이라 게임 로직·결정론과 무관하고, 두 게임 공통으로 앱이 건다.
-         흔들림은 낙하가 걸리는 #game이 아니라 컨테이너(#play)에 얹어 서로 안 부딪히게 한다. */
-      @keyframes deathShake {
-        0%, 100% { transform: translate(0, 0); }
-        20% { transform: translate(-5px, 3px); }
-        40% { transform: translate(4px, -4px); }
-        60% { transform: translate(-3px, -2px); }
-        80% { transform: translate(3px, 3px); }
-      }
-      #play.shake { animation: deathShake .28s ease-in-out; }
-      #death-flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 50;
-        background: radial-gradient(circle at center, rgba(255,77,103,0) 45%, rgba(255,77,103,.5) 100%); }
-      #death-flash.flash { animation: deathFlash .4s ease-out; }
-      @keyframes deathFlash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
-      /* ---- 피격 디버프 연출(victim 화면) --------------------------------------
-         남의 발사에 맞았을 때. 전부 순수 시각/CSS라 게임 로직·결정론과 무관하다. */
-      /* 무엇에 맞았는지 화면 중앙에 크게 announce(1.3s, 지속시간과 무관). */
-      #debuff-banner { position: fixed; top: 20%; left: 50%; z-index: 55; pointer-events: none;
-        opacity: 0; font: 800 46px system-ui; color: #fff; letter-spacing: .02em; white-space: nowrap;
-        text-shadow: 0 3px 16px rgba(0,0,0,.75), 0 0 34px rgba(199,125,255,.75); }
-      #debuff-banner.on { animation: debuffBanner 1.3s var(--ease-out) forwards; }
-      @keyframes debuffBanner {
-        0% { opacity: 0; transform: translateX(-50%) scale(1.5); }
-        14% { opacity: 1; transform: translateX(-50%) scale(1); }
-        72% { opacity: 1; }
-        100% { opacity: 0; transform: translateX(-50%) scale(1.02); }
-      }
-      /* 시야 흐림 — 메인 캔버스에 blur 필터를 건다(조작은 그대로, 보기만 힘들다). */
-      #game.debuff-blur { filter: blur(6px) brightness(.9); }
-      /* 화면 흔들림 — 플레이 영역이 디버프 내내 계속 덜덜 떨린다(사망 임팩트의 1회 흔들림과 별개). */
-      @keyframes debuffShake {
-        0%, 100% { transform: translate(0, 0); }
-        25% { transform: translate(-4px, 2px); }
-        50% { transform: translate(3px, -3px); }
-        75% { transform: translate(-2px, -2px); }
-      }
-      #play.debuff-shake { animation: debuffShake .16s linear infinite; }
-      /* 구름 가림 — 반투명 구름 덩어리가 왼→오로 화면을 가로지르며 시야를 막는다. */
-      #debuff-cloud { position: fixed; top: 0; bottom: 0; left: 0; width: 64vw; z-index: 46;
-        pointer-events: none; opacity: 0; filter: blur(5px);
-        background: radial-gradient(ellipse 62% 55% at 50% 45%,
-          rgba(232,237,246,.97) 30%, rgba(208,218,234,.78) 56%, rgba(208,218,234,0) 73%); }
-      #debuff-cloud.on { animation: debuffCloud var(--dur, 3000ms) linear forwards; }
-      @keyframes debuffCloud {
-        0% { opacity: 0; transform: translateX(-72vw); }
-        16% { opacity: 1; }
-        84% { opacity: 1; }
-        100% { opacity: 0; transform: translateX(118vw); }
-      }
-      /* ---- 발사 연출(shooter 화면) --------------------------------------------
-         내 화면 중앙에서 조준한 관전창까지 탄환이 날아가 명중한다. 좌표가 매 발사마다
-         달라 이동은 JS(Web Animations)가 넣고 여기선 생김새만 정한다. */
-      .fire-bullet { position: fixed; z-index: 54; pointer-events: none; font-size: 30px;
-        line-height: 1; will-change: transform;
-        filter: drop-shadow(0 0 10px rgba(255,209,102,.95)) drop-shadow(0 0 22px rgba(255,159,28,.7)); }
-      /* 명중 — 맞은 관전창이 번쩍인다(슬롯 안쪽만, overflow:hidden). */
-      .side-slot.hit::after { content: ""; position: absolute; inset: 0; border-radius: 5px;
-        pointer-events: none; animation: slotHit .5s ease-out forwards; }
-      @keyframes slotHit {
-        0% { background: rgba(255,209,102,.85); box-shadow: inset 0 0 0 3px rgba(255,209,102,1); }
-        100% { background: rgba(255,209,102,0); box-shadow: inset 0 0 0 3px rgba(255,209,102,0); }
-      }
-      /* 게임 HUD — 캔버스(맵) 밖 좌측 상단. 플레이 중엔 헤더가 숨으므로 그 자리를 쓴다. */
-      #game-hud { position: fixed; top: 16px; left: 20px; z-index: 40;
-        display: flex; flex-direction: column; gap: 8px; color: var(--text-primary); pointer-events: none; }
-      #game-hud[hidden] { display: none; }
-      #hud-time { font: 700 26px system-ui; font-variant-numeric: tabular-nums;
-        text-shadow: 0 1px 4px rgba(0,0,0,.6); }
-      #hud-gauge { display: flex; flex-direction: column; gap: 3px; }
-      #hud-gauge[hidden] { display: none; }
-      #hud-gauge-label { font-size: 12px; letter-spacing: .05em; opacity: .8; }
-      #hud-gauge-track { width: 190px; height: 14px; background: var(--bg-deep);
-        border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-      #hud-gauge-fill { height: 100%; width: 0%; background: var(--primary);
-        transition: width .08s linear, background-color .12s; }
-      #hud-gauge-fill.near { background: var(--warning); } /* 거의 참 — 곧 발사 경고색 */
-      @media (prefers-reduced-motion: reduce) {
-        #game.fallen { animation: none; opacity: 0; } /* 모션 민감 사용자는 조용히 사라지게 */
-        #game.slide-in, #game.swap-r, #game.swap-l { animation: none; } /* 전환 없이 즉시 표시 */
-        #play.shake, #death-flash.flash { animation: none; } /* 임팩트 연출도 끈다 */
-        #play.debuff-shake, #debuff-banner.on { animation: none; } /* 흔들림·배너 모션 끔 */
-        #debuff-banner.on { opacity: 1; } /* 배너는 움직임 없이도 잠깐 보이게 */
-        #debuff-cloud.on { animation: none; opacity: .85; } /* 구름은 흐르지 않고 가리기만 */
-        /* 배경 장식은 지우지 않고 멈춘다 — 정보가 아니라 밀도라 정지해도 잃는 게 없다. */
-        .bg-grid, .bg-glow { animation: none; }
-        /* 순위·플레이어 행은 지연 없이 즉시 제자리에 — 정보는 그대로 남는다. */
-        ul.players li.enter, table.ranks tr.enter { animation: none; }
-        /* 터치 안내는 없애지 않는다 — 조작법이라 정보다. 페이드만 뺀다. */
-        #touch-zones { transition: none; }
-        /* 탄환은 아예 안 날린다(bulletFx가 명중 번쩍임만 낸다). */
-      }
-
-      /* 관전 조작 힌트: 관전 중에만 하단에 뜬다. */
-      #spectate-hint { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-        z-index: 30; background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--text-primary); padding: 7px 14px;
-        border-radius: 999px; font: 600 13px system-ui; pointer-events: none; }
-      #spectate-hint[hidden] { display: none; }
-      /* 사이드 슬롯: 켜지고 꺼질 때 높이/투명도로 부드럽게 접히고 펼쳐진다(1+3→1+1).
-         --side-w/--side-h는 AppView.layoutPlayArea가 뷰포트에 비례해 넣는다(아래는 폴백값).
-         좁은 화면(.narrow)에선 칼럼째 사라져 메인이 공간을 전부 가져간다. */
-      /* align-self로 메인(세로 중앙)과 따로 논다 — 관전창은 위에서부터 아래로 채운다. */
-      #side-views { display: flex; flex-direction: column; align-self: flex-start;
-        --side-w: 200px; --side-h: 150px; }
-      #play.narrow #side-views { display: none; }
-      .side-slot { position: relative; height: 0; opacity: 0; margin-bottom: 0; overflow: hidden;
-        transition: height .32s var(--ease-out), opacity .25s ease, margin-bottom .32s ease; }
-      .side-slot.on { height: var(--side-h); opacity: 1; margin-bottom: 10px; }
-      .side-canvas { display: block; width: var(--side-w); height: var(--side-h);
-        background: #f1faee; border-radius: 5px; }
-      .side-label { position: absolute; top: 4px; left: 6px; font: 600 11px system-ui;
-        color: #1d3557; background: rgba(241,250,238,.75); padding: 1px 6px; border-radius: 4px; }
-
-      /* ---- 비플레이 배경 장식 -------------------------------------------------
-         메뉴·로비 뒤에서만 아주 느리게 흐른다. 순수 CSS 레이어라 게임 루프와 무관하고,
-         pointer-events: none이라 클릭을 가로채지 않는다. transform/opacity만 움직인다.
-         ⚠️ 플레이가 시작되면 display:none으로 완전히 걷는다 — 숨기는 게 아니라 없애야
-            애니메이션이 실제로 멈춘다(visibility:hidden은 계속 돈다). */
-      #bg-decor { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
-      body.playing #bg-decor { display: none; }
-      /* 격자: 뷰포트보다 크게 깔고 정확히 한 칸(60px)만 밀어 이음매 없이 반복시킨다. */
-      .bg-grid { position: absolute; inset: -80px; opacity: .05;
-        background-image:
-          repeating-linear-gradient(0deg, var(--primary) 0 1px, transparent 1px 60px),
-          repeating-linear-gradient(90deg, var(--primary) 0 1px, transparent 1px 60px);
-        animation: gridDrift 36s linear infinite; }
-      @keyframes gridDrift { to { transform: translate(60px, 60px); } }
-      /* 은은한 청록 광원. 카드는 불투명(--surface)이라 본문 대비에는 영향이 없고
-         빈 배경의 밀도만 바뀐다. 오른쪽 아래 하나는 계속 느리게 숨 쉬고… */
-      .bg-glow { position: absolute; inset: -10%;
-        background: radial-gradient(40% 36% at 76% 74%,
-          color-mix(in srgb, var(--primary-strong) 10%, transparent) 0%, transparent 60%);
-        animation: glowDrift 22s ease-in-out infinite alternate; }
-      @keyframes glowDrift { to { transform: translate3d(2.5%, -2%, 0) scale(1.08); } }
-      /* …다른 하나는 포인터를 늦게 따라간다(bgDecor.ts가 좌표만 넣어준다).
-         그라데이션 중심을 옮기면 매 프레임 다시 칠해야 하므로, 원판을 하나 만들어
-         translate로 민다 — 합성만 하면 되는 형태다.
-         ⚠️ JS가 안 붙어도(터치·reduced-motion) 기본 좌표로 가만히 떠 있는다. */
-      .bg-spot { position: absolute; left: 0; top: 0; width: 46vmax; height: 46vmax;
-        margin: -23vmax 0 0 -23vmax; will-change: transform;
-        background: radial-gradient(closest-side,
-          color-mix(in srgb, var(--primary) 14%, transparent) 0%, transparent 70%);
-        transform: translate3d(var(--spot-x, 30vw), var(--spot-y, 28vh), 0); }
-
-      /* 메뉴/카운트다운/결과 오버레이: 전체 화면 위에 (플레이 영역을 가린다). */
-      #ui { position: fixed; inset: 0; pointer-events: none; }
-      /* 화면 전환: 크로스페이드(투명도) + 카드 떠오르기. 비활성 화면은 클릭 통과. */
-      /* 배경은 body(--bg)와 그 위의 #bg-decor가 담당하므로 화면 자체는 투명하다.
-         ⚠️ 플레이 중에 뜨는 화면(카운트다운·결과)만 .play-overlay로 게임을 덮는다 —
-            새 화면을 추가할 때 플레이 중에도 보인다면 그 클래스를 꼭 같이 붙일 것. */
-      .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-        opacity: 0; visibility: hidden; pointer-events: none;
-        transition: opacity .28s ease, visibility .28s; }
-      .screen.active { opacity: 1; visibility: visible; pointer-events: auto; }
-      .screen.play-overlay { background: color-mix(in srgb, var(--bg) 62%, transparent); }
-      /* 판을 덮는 안내(좌/우 절반)가 깔렸을 때만 카운트다운이 막을 걷는다. 두 겹이면
-         안내가 묻히고, 숫자 대비는 안내가 깐 막이 대신 책임진다.
-         ⚠️ 조이스틱 방식에는 이 클래스가 안 붙는다 — 판을 덮는 게 없어서 막을 걷으면
-            숫자가 밝은 게임판 위에 1.3:1로 남아 안 보인다(touchHint의 CAPTIONS). */
-      body.hint-dims #screen-countdown.play-overlay { background: transparent; }
-      @keyframes cardIn { from { opacity: 0; transform: translateY(12px) scale(.97); }
-        to { opacity: 1; transform: none; } }
-      .screen.active .card { animation: cardIn .34s var(--ease-out) both; }
-
-      /* 화면보다 커질 수 없게 상한을 건다(min-width 340px가 좁은 폰에서 넘치는 걸 막는
-         건 아래 미디어 쿼리 몫이다 — min이 max보다 크면 CSS는 min을 택한다).
-         세로로 넘치면 카드 안에서 스크롤한다 — 가로로 누운 폰에서 대기실 카드가
-         화면보다 쉽게 길어진다. */
-      .card { background: var(--surface); padding: 32px 36px; border-radius: 14px;
-        min-width: 340px; max-width: 100%; max-height: 100%; overflow-y: auto;
-        box-shadow: 0 12px 40px rgba(0,0,0,.5); }
-      /* 스크롤바도 UI다. 기본 막대는 어두운 카드 위에서 혼자 밝고 두껍게 뜬다.
-         쉴 때는 테두리색으로 조용히, 손이 올라가면 밝아진다.
-         두 벌을 쓰는 이유: 최신 크롬·파이어폭스는 표준 속성(scrollbar-*)만 보고,
-         사파리와 구형 크롬은 ::-webkit-scrollbar만 본다. 둘이 같은 그림을 그린다. */
-      .card, ul.players { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-      .card:hover, ul.players:hover { scrollbar-color: var(--text-muted) transparent; }
-      .card::-webkit-scrollbar, ul.players::-webkit-scrollbar { width: 10px; }
-      .card::-webkit-scrollbar-track, ul.players::-webkit-scrollbar-track { background: transparent; }
-      /* 투명 테두리 + background-clip으로 막대를 얇게 보이게 하면서 잡는 폭은 유지한다. */
-      .card::-webkit-scrollbar-thumb, ul.players::-webkit-scrollbar-thumb {
-        background: var(--border); border-radius: 999px;
-        border: 3px solid transparent; background-clip: padding-box; }
-      .card::-webkit-scrollbar-thumb:hover, ul.players::-webkit-scrollbar-thumb:hover {
-        background: var(--text-muted); background-clip: padding-box; }
-
-      .card h1 { margin: 0 0 4px; font-size: 22px; }
-      .card h2 { margin: 0 0 18px; font-size: 15px; font-weight: 500; color: var(--text-muted); }
-      .card .hint { color: var(--text-muted); font-size: 13px; margin: 6px 0 0; }
-
-      input { width: 100%; padding: 11px 13px; margin: 6px 0 14px; border: 1px solid transparent;
-        border-radius: 8px; background: var(--field); color: var(--text-primary); font-size: 15px;
-        transition: border-color .15s ease; }
-      input:focus { outline: none; border-color: var(--primary); }
-      /* Primary 버튼 = 입장·방 만들기·시작·다시 하기. 밝은 청록 위에는 어두운 글자여야
-         읽힌다 — 흰 글자를 얹으면 대비가 2점대로 떨어진다. */
-      button { padding: 11px 16px; border: none; border-radius: 8px; cursor: pointer;
-        font-size: 15px; font-weight: 600; background: var(--primary); color: var(--bg-deep);
-        transition: transform .12s ease, filter .15s ease, box-shadow .15s ease,
-          border-color .15s ease, background .15s ease; }
-      button:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px);
-        box-shadow: 0 6px 18px color-mix(in srgb, var(--primary) 28%, transparent); }
-      button:active:not(:disabled) { transform: translateY(1px) scale(.985); filter: brightness(.95); }
-      button.secondary { background: transparent; color: var(--text-muted);
-        border: 1px solid var(--border); box-shadow: none; }
-      button.secondary:hover:not(:disabled) { filter: none; color: var(--text-primary);
-        border-color: var(--text-muted); background: var(--surface-elevated); box-shadow: none; }
-      button:disabled { opacity: .4; cursor: not-allowed; }
-      .row { display: flex; gap: 10px; }
-      .row > * { flex: 1; }
-      .stack { display: flex; flex-direction: column; gap: 10px; }
-      .divider { text-align: center; color: var(--text-muted); font-size: 12px; margin: 14px 0; }
-
-      /* 방 코드: 값이 자주 바뀌지 않지만 옮겨 적는 대상이라 고정폭 숫자로 읽기 쉽게. */
-      #ready-code { font: 700 30px ui-monospace, SFMono-Regular, Consolas, monospace;
-        letter-spacing: 6px; text-align: center; color: var(--primary); margin: 4px 0 14px; }
-      /* 목록 stagger — 행이 한 줄씩 따라 들어온다. 순서값(--i)만 JS가 주고 간격은 여기서 정한다.
-         both가 필요하다: 없으면 지연 동안 행이 먼저 보였다가 사라졌다 다시 뜬다. */
-      @keyframes rowIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-      ul.players li.enter, table.ranks tr.enter {
-        animation: rowIn .3s var(--ease-out) both;
-        animation-delay: calc(var(--i, 0) * 55ms); }
-      /* 결과는 카드가 떠오른 뒤에 행이 들어온다 — 패널 → 순위 행 순서를 지키려는 것. */
-      table.ranks tr.enter { animation-delay: calc(140ms + var(--i, 0) * 55ms); }
-
-      ul.players { list-style: none; padding: 0; margin: 0 0 16px; max-height: 220px; overflow-y: auto; }
-      ul.players li { padding: 9px 12px; background: var(--field); border-radius: 8px;
-        margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
-      /* 방장 배지만 채워 넣는다 — 시작 버튼을 쥔 사람이라 화면의 주체다.
-         「나」는 같은 줄에 함께 뜰 수 있으므로 강조색을 겹치지 않게 테두리로만 구분한다. */
-      .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px;
-        background: var(--primary-strong); color: var(--bg-deep); font-weight: 700; }
-      .badge.you { background: transparent; color: var(--text-secondary);
-        border: 1px solid var(--border); font-weight: 600; }
-
-      #countdown-num { font-size: 120px; font-weight: 800; color: var(--primary);
-        text-shadow: 0 6px 30px color-mix(in srgb, var(--primary) 40%, transparent); }
-
-      table.ranks { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-      table.ranks td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
-      table.ranks tr.self { background: color-mix(in srgb, var(--primary) 12%, transparent); }
-      table.ranks td.rank { width: 40px; color: var(--text-muted); font-weight: 700; }
-      /* 1위만 금색. 색 하나로 끝내지 않고 굵기도 올려 색각 이상에서도 구분된다. */
-      table.ranks tr.top td.rank { color: var(--rank); font-size: 15px; }
-      table.ranks td.time { text-align: right; color: var(--text-muted);
-        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-        font-variant-numeric: tabular-nums; }
-
-      /* 카드 안의 곁길. 버튼 모양이면 주 행동(플레이·방 만들기)과 눈에서 경쟁하므로
-         밑줄 링크로 낮춰 둔다 — 있는 줄은 알되 먼저 보이지는 않게. */
-      .textlink { background: none; border: none; box-shadow: none; color: var(--text-muted);
-        font: inherit; font-size: 13px; font-weight: 600; text-decoration: underline;
-        padding: 10px 6px; cursor: pointer; }
-      .textlink:hover:not(:disabled) { color: var(--text-primary); background: none;
-        transform: none; box-shadow: none; filter: none; }
-
-      /* 순위표의 게임 고르기. 내비와 같은 방식으로 현재 항목을 표시한다
-         — 색만이 아니라 배경 블록으로도(색각 이상 대비). */
-      .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
-      .tabs button { background: var(--surface-elevated); color: var(--text-muted); font-size: 13px;
-        font-weight: 600; padding: 7px 14px; border-radius: 999px; box-shadow: none; }
-      .tabs button:hover:not(:disabled) { color: var(--text-primary); transform: none; box-shadow: none; }
-      .tabs button.on { color: var(--primary);
-        background: color-mix(in srgb, var(--primary) 14%, transparent); }
-
-      .game-card { display: block; width: 100%; text-align: left; background: var(--surface-elevated);
-        border: 1px solid transparent; border-radius: 10px; padding: 14px 16px; cursor: pointer;
-        color: var(--text-primary); font: inherit;
-        transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
-      .game-card:hover { border-color: var(--primary); transform: translateY(-2px);
-        box-shadow: 0 8px 22px rgba(0, 0, 0, .35); }
-      .game-card:active { transform: translateY(0) scale(.99); }
-      .game-card .g-title { font-size: 16px; font-weight: 700; }
-      .game-card .g-desc { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
-
-      #alive-hud { position: absolute; top: 14px; right: 16px;
-        background: color-mix(in srgb, var(--surface) 85%, transparent);
-        color: var(--text-primary); padding: 6px 12px; border-radius: 8px; font: 600 14px system-ui;
-        font-variant-numeric: tabular-nums; }
-      #alive-hud[hidden] { display: none; }
-
-      /* 에러 토스트는 무엇에도 가리면 안 된다 — 사용자가 왜 실패했는지 알 유일한 통로다.
-         푸터(z-index 20)보다 위로 올리고, 푸터가 보일 때는 그 위쪽으로 비켜 앉는다. */
-      #error-toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-        z-index: 50; background: var(--danger); color: var(--bg-deep); font-weight: 600;
-        padding: 10px 16px; border-radius: 8px;
-        font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s, bottom .2s;
-        max-width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
-      /* 플레이 중엔 푸터가 숨으므로(body.playing) 토스트는 화면 아래에 그대로 붙는다. */
-      body:not(.playing) #error-toast { bottom: 68px; }
-      #error-toast.show { opacity: 1; }
-
-      /* 사이트 프레임: 상단 헤더 + 하단 푸터. 플레이 중엔 숨겨 몰입감. */
-      #site-header, #site-footer { position: fixed; left: 0; right: 0; z-index: 20;
-        display: flex; align-items: center;
-        background: color-mix(in srgb, var(--bg) 92%, transparent);
-        backdrop-filter: blur(6px); }
-      /* 오른쪽 여백이 18px가 아닌 이유: 소리 토글(#sound-toggle)이 헤더 밖 고정
-         요소라 헤더가 자리를 비워 주지 않으면 내비 위에 겹쳐 앉는다. */
-      #site-header { top: 0; height: 52px; padding: 0 62px 0 18px; gap: 18px; border-bottom: 1px solid var(--border); }
-      #site-footer { bottom: 0; min-height: 40px; padding: 8px 18px; gap: 16px; justify-content: center;
-        flex-wrap: wrap; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
-      body.playing #site-header, body.playing #site-footer { display: none; }
-      .brand { background: none; border: none; color: var(--text-primary); font-weight: 800; font-size: 18px;
-        cursor: pointer; padding: 6px 4px; box-shadow: none; }
-      .brand:hover:not(:disabled) { filter: brightness(1.12); transform: none; box-shadow: none; }
-      .site-nav { display: flex; gap: 4px; margin-left: auto; }
-      .site-nav button { background: none; border: none; color: var(--text-muted); font-weight: 600;
-        font-size: 14px; padding: 8px 12px; border-radius: 8px; box-shadow: none; }
-      .site-nav button:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-elevated);
-        transform: none; box-shadow: none; }
-      /* 현재 화면은 색만이 아니라 배경 블록으로도 구분된다(색각 이상 대비). */
-      .site-nav button.on { color: var(--primary);
-        background: color-mix(in srgb, var(--primary) 14%, transparent); }
-      #site-footer a, #site-footer button { color: var(--text-muted); background: none; border: none;
-        font: inherit; font-size: 12px; cursor: pointer; text-decoration: none; padding: 2px 4px;
-        box-shadow: none; }
-      #site-footer a:hover, #site-footer button:hover:not(:disabled) { color: var(--text-primary);
-        transform: none; box-shadow: none; filter: none; background: none; }
-
-      /* 소리 토글 — 헤더 안이 아니라 헤더 밖 고정 요소다. 소리를 가장 끄고 싶은
-         순간이 플레이 중인데, 헤더는 그때 숨는다(body.playing). HUD(좌상단)와
-         좌우로 짝을 이뤄 플레이 화면에서도 자리가 자연스럽다.
-         상태를 아이콘 모양만이 아니라 색·취소선으로도 알린다(색각 이상 대비). */
-      #sound-toggle { position: fixed; top: 9px; right: 16px; z-index: 40;
-        width: 34px; height: 34px; padding: 0; display: flex; align-items: center; justify-content: center;
-        font-size: 15px; line-height: 1; border-radius: 9px;
-        background: color-mix(in srgb, var(--surface) 82%, transparent);
-        border: 1px solid var(--border); color: var(--text-primary); box-shadow: none; }
-      #sound-toggle:hover:not(:disabled) { background: var(--surface-elevated);
-        border-color: var(--primary); transform: none; box-shadow: none; filter: none; }
-      #sound-toggle.off { color: var(--text-muted); }
-      /* 플레이 중에는 아래로 내려간다. 우상단은 관전 칼럼(#side-views)이 쓰는 자리라
-         판이 화면 폭을 꽉 채우는 창 비율에서 첫 관전창의 모서리를 덮는다.
-         아래쪽은 항상 비어 있다 — 관전 칼럼은 위에서부터 채우고, 조이스틱은
-         가운데(가로 화면에선 왼쪽)에 앉는다. */
-      body.playing #sound-toggle { top: auto; bottom: calc(14px + env(safe-area-inset-bottom)); }
-
-      /* 콘텐츠 화면(공지/소개/커뮤니티): 헤더/푸터 사이에 스크롤 카드. */
-      .screen { padding: 62px 16px 50px; }
-      .page { align-items: flex-start !important; }
-      .page .card { max-width: 640px; width: 100%; max-height: 100%; overflow-y: auto; }
-      .notice-item { padding: 12px 2px; border-bottom: 1px solid var(--border); }
-      .notice-item:last-child { border-bottom: none; }
-      .notice-date { color: var(--text-muted); font-size: 12px; }
-      .notice-title { font-weight: 700; margin: 3px 0 5px; }
-      /* 공지 본문은 목록이다. 불릿을 브라우저 기본 점 대신 강조색 원으로 찍어
-         카드 안에서 사이트 팔레트로 읽히게 한다. */
-      ul.notice-body { list-style: none; padding: 0; margin: 0;
-        color: var(--text-secondary); font-size: 14px; line-height: 1.55; }
-      ul.notice-body li { position: relative; padding-left: 14px; margin: 2px 0; }
-      ul.notice-body li::before { content: ""; position: absolute; left: 1px; top: .62em;
-        width: 4px; height: 4px; border-radius: 50%;
-        background: color-mix(in srgb, var(--primary) 65%, transparent); }
-      .about-body { color: var(--text-secondary); font-size: 15px; line-height: 1.7; }
-      .about-body h3 { color: var(--text-primary); margin: 18px 0 6px; font-size: 16px; }
-      .about-body p { margin: 0 0 10px; }
-      /* 한 줄 요약 — 이 줄만 읽어도 무슨 게임인지 알아야 한다. 그래서 본문보다 밝고 굵다. */
-      .about-body .hook { color: var(--text-primary); font-weight: 600; margin-bottom: 4px; }
-      /* 조작법 — 훑을 때 눈에 걸리도록 본문에서 한 단 낮춘다. */
-      .about-body .how { color: var(--text-muted); font-size: 14px; }
-      .placeholder { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 15px; }
-
-      /* ---- 작은 화면(폰) -----------------------------------------------------
-         모바일 전용 UI를 따로 만들지 않는다. 같은 화면이 좁아졌을 때 깨지지 않고,
-         게임판이 쓸데없이 작아지지 않게 하는 것까지가 목표다.
-         (UI_DESIGN.md의 "모바일은 아직 안 다룬다"는 터치 입력이 없던 시절 이야기다.) */
-      /* 여백은 폭만이 아니라 높이로도 줄인다 — 폰을 눕히면 판 크기를 정하는 건
-         세로다. 폭 기준으로만 걸면 가로 화면(667x375)이 그대로 16px를 쓴다. */
-      @media (max-width: 600px), (max-height: 600px) {
-        :root { --play-pad: 8px; }
-      }
-      @media (max-width: 600px) {
-        /* 폰에서는 카드가 화면 폭을 그대로 쓴다. min-width를 풀지 않으면 340px가
-           남은 폭보다 커져 가로 스크롤이 생긴다. */
-        .card { min-width: 0; width: 100%; padding: 24px 20px; }
-        .screen { padding: 56px 12px 44px; }
-        .tz-arrow { font-size: 36px; }
-        #ready-code { font-size: 26px; letter-spacing: 4px; }
-      }
-    </style>
+    <!-- 스타일. 나눈 기준과 순서는 src/styles/main.css 머리말에 있다.
+         ⚠️ JS에서 import하지 않는 이유도 거기 적혀 있다(첫 프레임 번쩍임). -->
+    <link rel="stylesheet" href="/src/styles/main.css" />
   </head>
   <body>
     <!-- 비플레이 배경 장식(격자 + 광원). 순수 장식이라 스크린리더에서 감춘다. -->
@@ -823,11 +182,12 @@
             <div class="about-body">
               <p class="hook">브라우저에서 바로 하는 멀티 아케이드 게임입니다.</p>
               <p>설치도 가입도 없습니다. 링크를 보내면 친구가 그 방으로 바로 들어옵니다.</p>
-              <p>규칙은 셋 다 한 줄입니다. <b>죽으면 끝, 오래 버틴 사람이 이깁니다.</b> 모두가 똑같은 판을 똑같은 순간에 만나니 운으로 갈리지 않습니다.</p>
+              <p>지금 게임은 넷입니다. 셋은 규칙이 한 줄입니다 — <b>죽으면 끝, 오래 버틴 사람이 이깁니다.</b> 숫자 야구만 결이 다릅니다: 버티는 게 아니라 <b>90초 안에 점수를 쌓습니다.</b></p>
+              <p>어느 쪽이든 모두가 똑같은 판을 똑같은 순간에 만나니 운으로 갈리지 않습니다.</p>
 
               <h3>죽림고수</h3>
               <p class="hook">사방에서 화살이 날아옵니다. 안 맞고 버티세요.</p>
-              <p>가끔 아이템이 떨어집니다 — <b>질주 · 쉴드 · 조준 정지 · 정화</b>. 뜨는 자리는 모두에게 같으니, 먼저 집는 사람이 임자입니다.</p>
+              <p>가끔 아이템이 떨어집니다 — <b>질주 · 쉴드 · 조준 정지 · 정화</b>. 뜨는 자리는 모두에게 같습니다.</p>
               <p class="how">조작 — 방향키 / 폰은 화면 아래 조이스틱</p>
 
               <h3>커브 피버</h3>
@@ -840,6 +200,12 @@
               <p>격자 위를 한 칸씩 움직입니다. 금이 가면 곧 뚫리고, 그 위에 서 있으면 떨어집니다. 뚫린 칸도 잠시 뒤 메워지니 <b>버티는 게 아니라 계속 읽고 옮기는</b> 게임입니다. 오래 갈수록 한 번에 무너지는 칸이 늘고, 금이 간 뒤 뚫리기까지의 여유도 짧아집니다.</p>
               <p class="how">조작 — 방향키 / 폰은 화면 아래 방향키 버튼 (꾹 눌러도 한 칸씩)</p>
 
+              <h3>숫자 야구</h3>
+              <p class="hook">서로 다른 숫자 세 자리를 맞힙니다. 적게 물어볼수록 높은 점수.</p>
+              <p>낼 때마다 <b>스트라이크</b>(자리와 숫자가 둘 다 맞음)와 <b>볼</b>(숫자만 맞음)을 알려 줍니다. 맞히면 다음 문제가 나오고 기회를 돌려받습니다. 헤맬수록 점수가 깎이니 마지막 한 번까지 신중하게.</p>
+              <p><b>90초</b> 안에 쌓은 점수가 기록입니다 — 넷 중 유일하게 시간이 아니라 점수로 겨루는 게임입니다.</p>
+              <p class="how">조작 — 숫자키 · Enter · Backspace / 폰은 화면 아래 숫자판</p>
+
               <h3>아슬아슬하게 피하면 반격 <span style="font-weight:400">— 커브 피버</span></h3>
               <p>스칠 듯 말 듯 지나갈 때마다 게이지가 찹니다. 가득 차면 지금 보고 있는 상대 한 명에게 방해 효과가 날아갑니다. 안전하게만 도는 사람은 아무도 건드리지 못합니다.</p>
 
@@ -848,13 +214,60 @@
 
               <h3>혼자 한 판은 순위표에 오릅니다</h3>
               <p>혼자 플레이한 기록은 게임별 순위표에 자동으로 올라갑니다. 위쪽 <b>순위</b>에서 보세요. 여럿이 한 기록은 오르지 않습니다 — 인원수가 곧 난이도라 같은 잣대로 잴 수 없거든요.</p>
+              <p class="how">기록의 단위는 게임을 따라갑니다 — 버티는 셋은 <b>초</b>, 숫자 야구는 <b>점</b>입니다.</p>
 
               <h3>소리</h3>
-              <p>시작과 죽음, 아이템을 줍거나 바닥이 부서지는 순간마다 소리가 납니다. 화면의 <b>🔊 버튼</b>으로 끄고 켤 수 있고, 다음에 와도 그대로 기억합니다.</p>
+              <p>시작과 죽음, 아이템을 줍거나 바닥이 부서지는 순간마다 소리가 납니다. 화면마다, 게임마다 다른 배경음악도 흐릅니다.</p>
+              <p>화면의 <b>🔊 버튼</b>은 전부 조용하게 만듭니다. 메뉴의 <b>옵션</b>에서는 <b>게임 음악 · 로비 음악 · 효과음</b>의 음량을 따로 맞출 수 있습니다 — 판에서는 음악을 낮춰 게임 소리를 듣고, 로비에서는 키워 두는 식으로요. 설정은 다음에 와도 그대로 기억합니다.</p>
+              <p class="how">다른 창을 보고 있는 동안에는 소리가 나지 않습니다.</p>
+
+              <h3>음악</h3>
+              <p>배경음악은 <b>congusbongus</b>가 OpenGameArt.org에 <b>CC0 1.0</b>으로 공개한 다섯 곡입니다.</p>
+              <p class="how"><a href="https://opengameart.org/users/congusbongus" target="_blank" rel="noopener noreferrer">opengameart.org/users/congusbongus</a></p>
 
               <h3>시작하기</h3>
               <p>혼자 플레이하거나, <b>방을 만들어 코드를 공유</b>하거나, 받은 코드로 참여하세요. 한 판이 끝나면 방장이 대기실로 돌아가 새 판을 엽니다.</p>
+              <p>방을 만들면 주소 끝에 방 코드가 붙습니다. <b>그 주소를 그대로 보내면</b> 받은 사람은 이름만 정하고 바로 그 방으로 들어옵니다.</p>
             </div>
+          </div>
+        </section>
+
+        <!-- 옵션. 헤더의 🔊는 "전부 조용히"라는 빠른 동작이고, 여기는 음악만 끄고
+             게임 소리는 듣는 식으로 **따로** 정하는 자리다. -->
+        <section id="screen-options" class="screen page">
+          <div class="card">
+            <h1>옵션</h1>
+            <p class="hint">설정은 이 브라우저에 기억됩니다.</p>
+            <p id="opt-muted-note" class="hint" hidden>지금 🔊 버튼으로 소리를 꺼 둔 상태입니다.</p>
+            <div class="opt-row">
+              <div class="opt-text">
+                <b>게임 음악</b>
+                <span>한 판이 도는 동안 재생되는 곡입니다. 게임 소리에 묻히지 않을 만큼 낮춰 두세요.</span>
+              </div>
+              <input type="range" id="opt-vol-game" min="0" max="100" step="5" value="50"
+                     aria-label="게임 음악 음량">
+              <output id="opt-vol-game-out" class="opt-val">50%</output>
+            </div>
+            <div class="opt-row">
+              <div class="opt-text">
+                <b>로비 음악</b>
+                <span>메뉴·로비·대기실에서 흐르는 곡입니다. 결과 화면에서는 나오지 않습니다.</span>
+              </div>
+              <input type="range" id="opt-vol-lobby" min="0" max="100" step="5" value="50"
+                     aria-label="로비 음악 음량">
+              <output id="opt-vol-lobby-out" class="opt-val">50%</output>
+            </div>
+            <div class="opt-row">
+              <div class="opt-text">
+                <b>효과음</b>
+                <span>시작·사망·아이템처럼 판에서 일어나는 일에 붙는 소리입니다.</span>
+              </div>
+              <input type="range" id="opt-vol-sfx" min="0" max="100" step="5" value="50"
+                     aria-label="효과음 음량">
+              <output id="opt-vol-sfx-out" class="opt-val">50%</output>
+            </div>
+            <p class="hint">다른 창을 보고 있는 동안에는 소리가 나지 않습니다.</p>
+            <button id="options-back" class="secondary">뒤로</button>
           </div>
         </section>
 

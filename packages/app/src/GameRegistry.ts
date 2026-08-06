@@ -14,6 +14,7 @@
 import type { GaugeAlarm, IGame, ScoreDirection, ScoreUnit } from "@arcade/shared";
 import { formatScore } from "@arcade/shared";
 import type { TouchScheme } from "./touchSchemes";
+import type { TrackId } from "./bgm";
 import { JungnimGame, jungnimConfig } from "@arcade/game-jungnim";
 import { CurveGame, curveConfig } from "@arcade/game-curve";
 import { FloorGame, floorConfig } from "@arcade/game-floor";
@@ -36,6 +37,10 @@ export type GameEntry = {
    *  조작은 게임마다 다르므로 core가 아니라 여기서 정한다
    *  (UI_DESIGN.md 경계: 게임별 UI 메타데이터는 GameRegistry에). */
   touch?: TouchScheme;
+  /** 판이 도는 동안 흐르는 곡(bgm.ts). 없으면 로비 곡이 그대로 이어진다.
+   *  ⚠️ 게임 config가 아니라 여기다 — 게임 패키지는 `public/bgm/`도 앱의 화면 구성도
+   *     몰라야 한다. 어느 게임에 어떤 곡이 어울리는가는 판정이 아니라 연출 결정이다. */
+  bgm?: TrackId;
 };
 
 export const GAME_REGISTRY = {
@@ -47,6 +52,8 @@ export const GAME_REGISTRY = {
     scoreUnit: jungnimConfig.scoreUnit,
     factory: () => new JungnimGame(),
     touch: "joystick",
+    // 사방에서 화살이 쏟아진다 — 몰아치는 곡.
+    bgm: "assault",
   },
   curve: {
     id: curveConfig.id,
@@ -58,6 +65,8 @@ export const GAME_REGISTRY = {
     gaugeAlarm: curveConfig.gaugeAlarm,
     factory: () => new CurveGame(),
     touch: "halves",
+    // 멈추지 않고 계속 달리는 게임.
+    bgm: "escape_from_metal_city",
   },
   floor: {
     id: floorConfig.id,
@@ -68,6 +77,8 @@ export const GAME_REGISTRY = {
     factory: () => new FloorGame(),
     // 격자를 한 칸씩 옮기므로 미는 위젯이 아니라 방향키 버튼(touchSchemes 참조).
     touch: "buttons",
+    // 발밑이 계속 바뀌는 게임.
+    bgm: "midnight_drive",
   },
   baseball: {
     id: baseballConfig.id,
@@ -81,6 +92,8 @@ export const GAME_REGISTRY = {
     // 방향이 아니라 숫자를 받으므로 앞의 세 방식이 하나도 맞지 않는다 — 화면 숫자판이
     // 곧 조작이다. 이 게임에서는 조작면이 "있으면 편한 것"이 아니라 없으면 못 논다.
     touch: "keypad",
+    // 넷 중 유일하게 앉아서 생각하는 게임 — 몰아붙이지 않는 곡.
+    bgm: "blue_intermission",
   },
 } satisfies Record<string, GameEntry>;
 

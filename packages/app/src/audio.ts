@@ -20,7 +20,8 @@
    경로는 **조용한 무음**으로 떨어지고 절대 던지지 않는다.
    ============================================================ */
 
-import { loadMuted, saveMuted } from "./prefs";
+import { isPageActive } from "./pageFocus";
+import { DEFAULT_VOLUME, loadSfxMuted, loadVolume, saveSfxMuted, saveVolume } from "./prefs";
 
 /** 지금 낼 수 있는 소리. 늘어나면 SOUNDS에 줄을 추가한다.
  *  뒤쪽 넷은 게임이 내는 슬러그와 이름이 같다 — 게임은 자기 슬러그만 알고 이 표는
@@ -92,7 +93,9 @@ export function isSoundId(slug: string): slug is SoundId {
 export const SOUND_IDS = Object.keys(SOUNDS) as readonly SoundId[];
 
 /** 마스터 음량. 합성음은 같은 수치의 음원 파일보다 크게 들려 낮게 잡았다. */
-const MASTER_GAIN = 0.25;
+/** 슬라이더를 끝까지 올렸을 때의 마스터 게인. 기본값(0.5)이 지금까지 맞춰 온
+ *  0.25가 되도록 그 두 배로 잡았다 — 기본이 한가운데고, 키울 여지도 같은 만큼 있다. */
+const SFX_CEILING = 0.5;
 /** 어택(초). 0에서 최대로 즉시 뛰면 파형이 끊겨 '툭' 하는 잡음이 섞인다. */
 const ATTACK = 0.004;
 /** 지수 램프는 0에 닿을 수 없다 — 사실상 무음인 하한을 대신 쓴다. */
@@ -104,6 +107,8 @@ const MAX_VOICES = 8;
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let muted = false;
+/** 효과음 음량(슬라이더 값 0~1). 실제 게인은 여기에 SFX_CEILING을 곱한 값이다. */
+let volume = DEFAULT_VOLUME;
 let voices = 0;
 /** 화이트 노이즈 한 통. 한 번 만들어 두고 재생할 때마다 돌려 쓴다
  *  — 매번 새로 채우면 부서지는 소리 한 번에 수만 번의 난수를 뽑게 된다. */
@@ -111,25 +116,58 @@ let noiseBuffer: AudioBuffer | null = null;
 
 /** 저장된 소리 설정을 읽어 온다. 앱 시작 때 한 번 부른다. */
 export function initAudio(): void {
-  muted = loadMuted();
+  muted = loadSfxMuted();
+  volume = loadVolume("sfx");
 }
 
-/** 지금 소리가 꺼져 있는가. 토글 버튼의 표시에 쓴다. */
-export function isMuted(): boolean {
+/** 지금 마스터에 걸 값. 음소거는 음량과 **따로** 산다 — 껐다 켜도 맞춰 둔 음량이
+ *  그대로 돌아와야 한다(음량을 0으로 내리는 것과 잠깐 끄는 것은 다른 일이다). */
+function masterGain(): number {
+  return muted ? 0 : volume * SFX_CEILING;
+}
+
+/** 효과음 음량(슬라이더 값 0~1). */
+export function getSfxVolume(): number {
+  return volume;
+}
+
+/** 효과음 음량을 정한다. 이미 만들어진 마스터에도 바로 반영한다 — 슬라이더를 끄는
+ *  동안 소리가 따라 바뀌어야 얼마나 키웠는지 귀로 안다.
+ *  ⚠️ 0보다 크게 올리면 음소거를 푼다. 음량을 만졌다는 건 듣고 싶다는 뜻인데,
+ *     꺼진 채로 두면 "왜 안 들리지"가 된다. */
+export function setSfxVolume(next: number): void {
+  volume = Math.min(1, Math.max(0, next));
+  saveVolume("sfx", volume);
+  if (volume > 0 && muted) setSfxMuted(false);
+  applyMasterGain();
+}
+
+function applyMasterGain(): void {
+  if (master) master.gain.value = masterGain();
+}
+
+/** 지금 **효과음이** 꺼져 있는가. 토글 버튼의 표시에 쓴다.
+ *  ⚠️ 배경음악은 별개의 스위치다(bgm.isMusicMuted) — 각자 자기 것을 갖는다. */
+export function isSfxMuted(): boolean {
   return muted;
 }
 
-/** 소리를 켜고 끈다. 다음 방문에도 유지된다.
- *  ⚠️ 여기서 확인음을 내지 않는다 — 토글도 버튼이라 main.ts의 위임 클릭음이
+/** 효과음을 켜고 끈다. 다음 방문에도 유지된다.
+ *  ⚠️ 여기서 확인음을 내지 않는다 — 토글도 버튼이라 soundShell의 위임 클릭음이
  *  이미 울린다(켤 때만 들리고 끌 때는 안 들린다 = 정확히 맞는 동작). */
-export function setMuted(next: boolean): void {
+export function setSfxMuted(next: boolean): void {
   muted = next;
-  saveMuted(next);
+  saveSfxMuted(next);
+  applyMasterGain();
 }
 
 /** 소리 하나를 낸다. 꺼져 있거나 오디오를 못 쓰면 조용히 아무것도 안 한다. */
 export function play(id: SoundId): void {
   if (muted) return;
+  // ⚠️ 창이 뒤에 있으면 내지 않는다. 다른 탭을 보고 있으면 화면 갱신이 멈춰 소리도
+  //    저절로 잦아들지만, **창만 뒤로 간 경우**(두 화면을 나란히 쓸 때)에는 게임이
+  //    그대로 돌아 소리만 남의 화면 위에서 계속 울린다.
+  if (!isPageActive()) return;
   const audio = ensureContext();
   if (!audio || !master) return;
   const tone = SOUNDS[id];
@@ -148,6 +186,7 @@ export function resetAudioForTest(): void {
   ctx = null;
   master = null;
   muted = false;
+  volume = DEFAULT_VOLUME;
   voices = 0;
   noiseBuffer = null;
 }
@@ -162,7 +201,7 @@ function ensureContext(): AudioContext | null {
   try {
     ctx = new AudioContext();
     master = ctx.createGain();
-    master.gain.value = MASTER_GAIN;
+    master.gain.value = masterGain();
     master.connect(ctx.destination);
   } catch {
     ctx = null;

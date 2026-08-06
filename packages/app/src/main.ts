@@ -20,6 +20,7 @@ import { NetClient, StateMachine } from "@arcade/core";
 import type { RankEntry } from "@arcade/shared";
 import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
 import { initAudio, play } from "./audio";
+import { LOBBY_TRACK, initBgm, playBgm, silenceBgm } from "./bgm";
 import { initBgDecor } from "./bgDecor";
 import {
   renderGameList,
@@ -32,6 +33,8 @@ import {
 } from "./AppView";
 import { cancelCountdown, runCountdown } from "./countdown";
 import { byId } from "./dom";
+import { initOptions, renderOptions } from "./optionsScreen";
+import { initPageFocus } from "./pageFocus";
 import { layoutPlayArea } from "./playLayout";
 import { ROOM_CODE_PATTERN, createRoom, joinRoom } from "./roomConnect";
 import { initSoundShell } from "./soundShell";
@@ -43,7 +46,7 @@ import {
   slideInScreen,
   swapSpectateScreen,
 } from "./screenFx";
-import { GAME_REGISTRY, isGameId, type GameId } from "./GameRegistry";
+import { GAME_REGISTRY, gameEntry, isGameId, type GameId } from "./GameRegistry";
 import { GameSession } from "./GameSession";
 import { updateHud } from "./hud";
 import { startPeerReport } from "./peerReport";
@@ -64,7 +67,24 @@ const sideCanvases = Array.from({ length: 3 }, (_, index) => byId<HTMLCanvasElem
 const appState = new StateMachine<AppState, AppEvent>("nickname", APP_TRANSITIONS, ({ to }) => {
   renderState(to);
   syncHash(to, roomCode);
+  syncBgm(to);
 });
+
+/** 판이 도는 동안 그 게임의 곡이 흐르는 상태들. 카운트다운부터다 — 판이 내려오는
+ *  3초가 이미 그 게임의 시간이고, 시작 순간에 곡이 바뀌면 "시작!"과 겹친다.
+ *  ⚠️ 관전과 deadResult도 여기 있다. 내가 죽어도 **남의 판은 계속 도는 중**이다 —
+ *     끝나지도 않은 판에서 음악만 먼저 로비로 돌아가면 안 된다. */
+const IN_PLAY: readonly AppState[] = ["countdown", "playing", "dying", "deadResult", "spectating"];
+
+/** 지금 화면에 맞는 곡으로.
+ *  ⚠️ **결과 화면은 무음이다.** 등수를 보는 자리라 음악이 깔리면 판이 아직 이어지는
+ *     것처럼 들린다. 마침표(결과음)와 순위표만 남긴다. 곡은 버리지 않고 멈춰 두므로
+ *     대기실로 돌아가면 있던 자리에서 이어진다. */
+function syncBgm(state: AppState): void {
+  if (state === "result") return silenceBgm();
+  const track = IN_PLAY.includes(state) && selectedGameId ? gameEntry(selectedGameId).bgm : undefined;
+  playBgm(track ?? LOBBY_TRACK);
+}
 
 
 const net = new NetClient();
@@ -253,7 +273,11 @@ byId("menu-start").addEventListener("click", () => {
   renderGameList(selectGame);
   transition("open_games");
 });
-byId("menu-options").addEventListener("click", () => toast("옵션은 준비 중입니다."));
+byId("menu-options").addEventListener("click", () => {
+  renderOptions(); // 헤더 🔊로 바뀐 값이 있을 수 있다 — 열 때마다 지금 상태를 그린다.
+  transition("nav_options");
+});
+byId("options-back").addEventListener("click", () => transition("nav_game_main"));
 byId("menu-credits").addEventListener("click", () => toast("Arcade — 웹 멀티 아케이드 게임"));
 
 const FIRST_GAME_ID = Object.keys(GAME_REGISTRY)[0] as GameId;
@@ -383,8 +407,16 @@ function tryAutoJoin(): void {
 }
 
 initBgDecor(document.querySelector<HTMLElement>(".bg-spot")!);
-initAudio(); // 저장된 소리 설정을 읽는다. AudioContext는 첫 클릭 때 만들어진다.
-initSoundShell(); // 소리 토글 버튼 + 클릭음 위임(앱 상태와 무관한 껍데기).
+// 소리보다 먼저 — 이 창이 앞에 있는지가 소리를 낼지 말지의 조건이다.
+initPageFocus();
+initAudio(); // 저장된 효과음 설정을 읽는다. AudioContext는 첫 클릭 때 만들어진다.
+initBgm(); // 음악 설정도 같은 자리에서(스위치는 각자 자기 모듈이 갖는다).
+initOptions(); // 옵션 화면의 스위치에 동작을 건다.
+// 음악도 같은 사정이다 — 지금은 자동재생이 막혀 있을 테니, bgm이 첫 조작을 기다렸다 튼다.
+playBgm(LOBBY_TRACK);
+// 소리 토글 버튼 + 클릭음 위임(앱 상태와 무관한 껍데기).
+// 이 버튼은 옵션 화면 위에서도 눌리므로, 눌리면 저쪽 스위치 표시도 같이 고친다.
+initSoundShell(renderOptions);
 
 // 시작 시점에는 서버에 연결하지 않는다. 연결은 방에 들어갈 때 맺는다
 // — 덕분에 서버가 자고 있어도 혼자 플레이는 그대로 돌아간다.

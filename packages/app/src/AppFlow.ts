@@ -3,20 +3,25 @@ import type { TransitionTable } from "@arcade/core";
 export type AppState =
   | "nickname" | "main" | "gamelist" | "lobby" | "ready" | "countdown"
   | "playing" | "dying" | "deadResult" | "spectating" | "result"
-  | "notice" | "about" | "community" | "ranking";
+  | "notice" | "about" | "community" | "ranking" | "options";
 
 export type AppEvent =
   | "nickname_submit" | "open_games" | "back_main" | "select_game" | "back_games"
   | "room_joined" | "start_solo" | "game_start" | "countdown_done" | "local_death" | "keep_result"
   | "watch" | "game_over" | "return_ready" | "leave_room"
-  | "nav_notice" | "nav_about" | "nav_community" | "nav_ranking"
+  | "nav_notice" | "nav_about" | "nav_community" | "nav_ranking" | "nav_options"
   | "nav_game_main" | "nav_game_nickname";
 
+/** 읽을거리·설정처럼 판 밖에서 오가는 화면들. 어디서든 서로 넘나들 수 있다.
+ *  ⚠️ 옵션도 여기 있다 — 소리 설정은 방에 들어가기 전에도 정할 수 있어야 한다.
+ *     다만 **방에 있는 동안은** navTo가 막는다(FSM이 아니라 거기서 막는 이유는
+ *     navigation.ts 머리말 참조). */
 const CONTENT_TRANSITIONS = {
   nav_notice: "notice",
   nav_about: "about",
   nav_community: "community",
   nav_ranking: "ranking",
+  nav_options: "options",
 } as const;
 
 export const APP_TRANSITIONS = {
@@ -41,6 +46,7 @@ export const APP_TRANSITIONS = {
   about: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
   community: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
   ranking: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
+  options: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
 } satisfies TransitionTable<AppState, AppEvent>;
 
 export const PLAY_STATES: ReadonlySet<AppState> = new Set([

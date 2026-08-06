@@ -4,7 +4,7 @@
    잠든 컨텍스트를 깨우는가, 목소리가 무한정 쌓이는가, 오디오가 없는 환경에서
    던지는가. */
 import { beforeEach, describe, expect, it } from "vitest";
-import { initAudio, isMuted, play, resetAudioForTest, setMuted, SOUND_IDS } from "../packages/app/src/audio";
+import { initAudio, isSfxMuted, play, resetAudioForTest, setSfxMuted, SOUND_IDS } from "../packages/app/src/audio";
 
 type GainCall = [kind: string, value: number, at: number];
 
@@ -307,30 +307,30 @@ describe("소리 — 끄기와 기억", () => {
   });
 
   it("꺼 두면 컨텍스트조차 만들지 않는다", () => {
-    setMuted(true);
+    setSfxMuted(true);
     play("click");
     expect(FakeContext.last).toBeNull();
   });
 
   it("껐다 켜면 다시 난다", () => {
-    setMuted(true);
+    setSfxMuted(true);
     play("click");
-    setMuted(false);
+    setSfxMuted(false);
     play("click");
     expect(ctx().oscillators).toHaveLength(1);
   });
 
   it("끈 설정은 다음 방문에도 남는다", () => {
-    setMuted(true);
+    setSfxMuted(true);
     resetAudioForTest(); // 페이지를 새로 연 셈 (localStorage는 그대로)
-    expect(isMuted()).toBe(false); // initAudio 전에는 기본값
+    expect(isSfxMuted()).toBe(false); // initAudio 전에는 기본값
     initAudio();
-    expect(isMuted()).toBe(true);
+    expect(isSfxMuted()).toBe(true);
   });
 
   it("저장된 설정이 없으면 소리는 켜져 있다", () => {
     initAudio();
-    expect(isMuted()).toBe(false);
+    expect(isSfxMuted()).toBe(false);
   });
 
   it("localStorage가 막혀도 던지지 않는다", () => {
@@ -343,8 +343,8 @@ describe("소리 — 끄기와 기억", () => {
       },
     } as unknown as Storage;
     expect(() => initAudio()).not.toThrow();
-    expect(() => setMuted(true)).not.toThrow();
-    expect(isMuted()).toBe(true); // 저장은 실패해도 이번 세션엔 반영된다
+    expect(() => setSfxMuted(true)).not.toThrow();
+    expect(isSfxMuted()).toBe(true); // 저장은 실패해도 이번 세션엔 반영된다
   });
 });
 

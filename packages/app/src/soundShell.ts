@@ -5,14 +5,21 @@
    흐름 제어에서 떼어 여기 둔다 — main은 화면·방·라운드만 다루면 된다.
    ============================================================ */
 
-import { isMuted, play, setMuted } from "./audio";
+import { isSfxMuted, play, setSfxMuted } from "./audio";
+import { isMusicMuted, setMusicMuted } from "./bgm";
 import { byId } from "./dom";
 
-export function initSoundShell(): void {
+/** @param onChange 소리 설정이 이 버튼으로 바뀌었다. **이 버튼은 모든 화면 위에 떠 있어서**
+ *  옵션 화면이 열린 채로도 눌린다 — 그때 저쪽 스위치의 표시를 같이 고쳐야 한다.
+ *  (여기서 옵션 화면을 직접 알지는 않는다. 바뀌었다고 알릴 뿐이다.) */
+export function initSoundShell(onChange: () => void): void {
   const toggle = byId<HTMLButtonElement>("sound-toggle");
 
   const render = (): void => {
-    const off = isMuted();
+    // ⚠️ 스위치는 둘(효과음·음악)인데 버튼은 하나다. 이 버튼은 **빠른 침묵**이지
+    //    세밀한 설정이 아니다 — 하나라도 켜져 있으면 "켜짐"으로 보이고, 누르면 전부 꺼진다.
+    //    따로 켜고 끄는 건 옵션 화면이 한다.
+    const off = isSfxMuted() && isMusicMuted();
     toggle.textContent = off ? "🔇" : "🔊";
     toggle.classList.toggle("off", off);
     // 라벨은 상태("소리 켜짐")가 아니라 누르면 일어날 일을 말한다.
@@ -22,8 +29,12 @@ export function initSoundShell(): void {
   };
 
   toggle.addEventListener("click", () => {
-    setMuted(!isMuted());
+    // 하나라도 켜져 있으면 → 전부 끈다. 전부 꺼져 있으면 → 전부 켠다.
+    const silenceAll = !(isSfxMuted() && isMusicMuted());
+    setSfxMuted(silenceAll);
+    setMusicMuted(silenceAll);
     render();
+    onChange();
   });
   render();
 

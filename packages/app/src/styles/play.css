@@ -1,0 +1,338 @@
+/* ============================================================
+   play — 판·조작·연출. **게임이 하나 늘면 자라는 파일이다.**
+   ------------------------------------------------------------
+   나눈 이유가 여기 있다. 숫자 야구를 넣을 때 숫자판 50줄이 들어왔고, 다섯 번째
+   게임도 자기 조작면과 연출을 들고 온다. 그게 사이트 카드·순위표 규칙 옆에
+   쌓이면 곧 아무도 전체를 못 읽는다.
+   그러니 새 조작면·새 피격 연출은 여기로. 새 화면·새 카드는 site.css로.
+
+   ⚠️ 여기 있는 숫자 중 일부는 JS와 한 몸이다 — layoutPlayArea가 #play의 계산된
+      패딩을 읽어 판 크기를 정한다. 그래서 여백은 CSS만 고치면 판이 따라온다.
+   ============================================================ */
+
+/* 플레이 영역: 뷰포트를 꽉 채운다. 메인 화면 + 우측 생존자 사이드(최대 3명).
+   padding·gap은 JS가 여기서 읽어 간다(layoutPlayArea) — 상수를 양쪽에 두지 않는다.
+   작은 화면에서 여백을 줄이거나 노치를 피해도 캔버스 계산이 저절로 따라온다.
+   메인 캔버스의 표시 크기는 JS가 게임 비율(현재 정사각형)을 유지해 계산 후 인라인으로 넣고,
+   내부 해상도(백킹스토어)는 Canvas2DRenderer가 DPR에 맞춰 잡는다.
+   게임 좌표계(800x800)는 화면 크기와 무관하게 불변이다. */
+#play { position: fixed; inset: 0; display: flex; gap: 14px;
+  padding:
+    calc(var(--play-pad) + env(safe-area-inset-top))
+    calc(var(--play-pad) + env(safe-area-inset-right))
+    calc(var(--play-pad) + env(safe-area-inset-bottom))
+    calc(var(--play-pad) + env(safe-area-inset-left));
+  align-items: center; justify-content: center;
+  opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility .3s; }
+#play.on { opacity: 1; visibility: visible; }
+
+/* 조작 영역이 자기 몫의 세로를 갖는다. 이게 없으면 판은 뷰포트 **전체** 기준
+   가운데 정렬이라, 화면이 짧을수록 판 아래쪽이 조작 위젯에 먹힌다
+   (390x620에서 29px, 360x540에서 54px 겹쳤다).
+   패딩만 늘리면 끝인 이유: layoutPlayArea가 #play의 계산된 패딩을 읽어
+   판 크기를 정한다 — 상수를 CSS와 JS 양쪽에 두지 않았기 때문이다.
+   ⚠️ 세로 화면에서만. 가로에서는 조작이 판 옆 여백에 앉으므로 세로를 안 먹는다. */
+body.controls-stick { --control-h: 172px; }
+body.controls-buttons, body.controls-keypad { --control-h: 200px; }
+@media (orientation: portrait) {
+  body.controls-stick #play, body.controls-buttons #play, body.controls-keypad #play {
+    padding-bottom: calc(var(--play-pad) + env(safe-area-inset-bottom) + var(--control-h)); }
+}
+/* 가로에서는 같은 문제가 축만 바꿔 나타난다. 조작은 판 **옆**에 앉는데, 판은
+   남는 가로 전체 기준 가운데 정렬이라 화면이 좁을수록 조작 위로 올라탄다
+   (667x375에서 9px 겹쳤다 — 세로에서 겪은 것과 똑같은 종류다).
+   고치는 방법도 같다: 조작이 자기 몫의 가로를 갖고, layoutPlayArea가 그 패딩을
+   읽어 판을 그만큼 안쪽에 잡는다. */
+@media (orientation: landscape) {
+  body.controls-stick, body.controls-buttons, body.controls-keypad { --control-w: 172px; }
+  body.controls-stick #play, body.controls-buttons #play, body.controls-keypad #play {
+    padding-left: calc(var(--play-pad) + env(safe-area-inset-left) + var(--control-w)); }
+}
+
+/* 터치 조작 안내. 자리·크기는 JS가 캔버스에 맞춰 인라인으로 넣는다.
+   ⚠️ pointer-events: none — 이걸 빼면 안내가 터치를 먹어 조작이 막힌다.
+   ⚠️ z-index를 주지 말 것. 양수를 주는 순간 카운트다운 화면(#ui, z-index 없음)
+      위로 올라와 숫자를 덮는다. 지금은 DOM 순서(#play가 #ui보다 앞)로
+      캔버스 위 · 카운트다운 아래에 정확히 놓인다. */
+#touch-zones { position: absolute; display: flex; border-radius: 6px; overflow: hidden;
+  pointer-events: none; opacity: 0;
+  transition: opacity .3s var(--ease-out); }
+#touch-zones.on { opacity: 1; }
+/* 조작 방식에 따라 둘 중 하나만 보인다. 좌우로 조작하는 게임에 "끌어라"가
+   뜨면 안 되므로 매핑과 안내는 GameRegistry에서 한 필드로 묶여 있다. */
+.tz-halves { display: none; flex: 1; }
+#touch-zones.mode-halves .tz-halves { display: flex; }
+/* 게임판(#f1faee)이 밝아서 막이 얇으면 글자가 안 읽힌다. 68%에서 작은 라벨도
+   본문 기준 대비를 넘긴다(측정 4.7:1). 카운트다운 3초 동안만 떠 있다. */
+.tz-half { flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 6px; color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-deep) 68%, transparent); }
+.tz-half + .tz-half { border-left: 1px solid color-mix(in srgb, var(--primary) 55%, transparent); }
+.tz-arrow { font-size: 44px; line-height: 1; }
+/* ---- 조이스틱 ---------------------------------------------------------
+   뷰포트 왼쪽 아래 고정. 세로 폰에서는 정사각 게임판 아래 남는 띠에, 가로
+   폰에서는 판 옆 여백에 그대로 들어간다 — 방향마다 규칙을 나눌 필요가 없다.
+   ⚠️ z-index는 카운트다운(#ui, z-index 없음)보다 위여야 한다. 조이스틱은 장식이
+      아니라 조작 도구라 카운트다운 막에 같이 어두워지면 안 된다. HUD(40)보다는
+      위, 사망 연출(46~50)보다는 아래. */
+/* 기본은 가운데. 세로 화면에서는 판 아래 빈 띠에 놓이므로 양손 어느 쪽으로도
+   닿고 판을 안 가린다. (margin auto로 가운데를 잡는다 — transform을 쓰면
+   쌓임 맥락·containing block이 딸려 와 위 z-index 규칙과 얽힌다.) */
+#stick { position: fixed; z-index: 42; width: 132px; height: 132px;
+  left: 0; right: 0; margin-inline: auto;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  border-radius: 50%; touch-action: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  /* ⚠️ #ui는 pointer-events:none이라 그대로 두면 손가락이 조이스틱을 통과한다.
+     화면 오버레이 사이에 얹힌 유일한 "조작" 요소라 여기서 되살린다. */
+  pointer-events: auto;
+  display: none; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
+  border: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  transition: border-color .15s ease, background .15s ease; }
+/* 두 조건이 다 맞아야 뜬다: 플레이 중(카운트다운 포함)이고, 이 게임이 쓰는 조작이다.
+   hidden은 JS가 게임별로 붙인다(Joystick.setVisible). */
+body.playing #stick:not([hidden]) { display: flex; }
+#stick.held { background: color-mix(in srgb, var(--bg-deep) 74%, transparent);
+  border-color: var(--primary); }
+/* 노브 자리는 JS가 transform으로만 옮긴다 — 매 프레임 레이아웃을 건드리지 않는다. */
+#stick-knob { width: 54px; height: 54px; border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 85%, transparent);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .45); }
+.stick-label { position: absolute; bottom: -20px; left: 0; right: 0; text-align: center;
+  font-size: 12px; color: var(--text-secondary); text-shadow: 0 1px 5px var(--bg-deep); }
+
+/* ---- 방향키 버튼(무너지는 바닥) ---------------------------------------
+   십자 배치. 미는 위젯과 달리 **버튼 하나가 방향 하나**라 경계가 눈에 보인다.
+   자리·z-index·pointer-events 규칙은 #stick과 같다(위 주석 참조).
+   가운데 빈 칸은 안내가 앉는 자리다 — 아래에 따로 줄을 두면 세로를 더 먹는다. */
+#dpad { position: fixed; z-index: 42; display: none;
+  grid-template-columns: repeat(3, var(--dpad-btn));
+  grid-template-rows: repeat(3, var(--dpad-btn));
+  gap: 6px; width: max-content;
+  left: 0; right: 0; margin-inline: auto;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  pointer-events: auto; }
+body.playing #dpad:not([hidden]) { display: grid; }
+.dpad-btn { display: flex; align-items: center; justify-content: center;
+  font-size: 20px; line-height: 1; padding: 0; border-radius: 14px;
+  color: var(--primary); touch-action: none;
+  background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
+  border: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  transition: background .1s ease, border-color .1s ease, transform .1s ease; }
+/* :active는 마우스에서만 확실하다. 손가락 눌림은 ButtonInput이 아니라 CSS로
+   두면 캡처 때문에 안 풀리는 경우가 있어, 눌림 표시는 :active로만 둔다. */
+.dpad-btn:active { background: color-mix(in srgb, var(--primary) 30%, transparent);
+  border-color: var(--primary); transform: scale(.94); }
+#dpad .dpad-btn[data-dir="up"] { grid-area: 1 / 2; }
+#dpad .dpad-btn[data-dir="left"] { grid-area: 2 / 1; }
+#dpad .dpad-btn[data-dir="right"] { grid-area: 2 / 3; }
+#dpad .dpad-btn[data-dir="down"] { grid-area: 3 / 2; }
+#dpad .stick-label { grid-area: 2 / 2; position: static; align-self: center;
+  font-size: 11px; line-height: 1.25; }
+
+/* ---- 숫자판(숫자 야구) -------------------------------------------------
+   앞의 둘과 겉모습은 같은 계열이지만 내는 것이 다르다 — 방향이 아니라 글자다.
+   세로에서는 **5열 × 3줄**로 넓고 낮게 깐다. 폰 자판처럼 3열로 두면 4줄이 되어
+   가뜩이나 귀한 세로를 한 줄 더 먹는다(판이 그만큼 작아진다).
+   자리·z-index·pointer-events 규칙은 #stick과 같다(위 주석 참조). */
+#keypad { position: fixed; z-index: 42; display: none;
+  grid-template-columns: repeat(5, var(--pad-btn));
+  grid-auto-rows: var(--pad-btn);
+  gap: 6px; width: max-content;
+  left: 0; right: 0; margin-inline: auto;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  user-select: none; -webkit-tap-highlight-color: transparent;
+  pointer-events: auto; }
+body.playing #keypad:not([hidden]) { display: grid; }
+/* 방향키 버튼과 달리 touch-action은 manipulation이다 — 이건 끄는 조작이 아니라
+   톡톡 치는 조작이라 none으로 막을 제스처가 없고, 두 번 눌러 확대만 꺼주면 된다. */
+.pad-btn { display: flex; align-items: center; justify-content: center;
+  font-size: 22px; line-height: 1; padding: 0; border-radius: 14px;
+  color: var(--text-primary); touch-action: manipulation;
+  background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
+  border: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  transition: background .1s ease, border-color .1s ease, transform .1s ease; }
+.pad-btn:active { background: color-mix(in srgb, var(--primary) 30%, transparent);
+  border-color: var(--primary); transform: scale(.94); }
+/* 지우기·확인은 숫자가 아니라 **행동**이라 넓게 깔아 손가락이 헷갈리지 않게 한다.
+   셋째 줄 5칸을 2:3으로 나눈다 — 확인이 훨씬 자주 눌린다. */
+#keypad .wide { font-size: 17px; }
+#keypad [data-key="back"] { grid-column: span 2; }
+#keypad [data-key="enter"] { grid-column: span 3; }
+#keypad .go { color: var(--bg-deep); font-weight: 700;
+  background: color-mix(in srgb, var(--primary) 80%, transparent);
+  border-color: var(--primary); }
+#keypad .go:active { background: var(--primary); }
+/* 가로 화면에는 판 아래 띠가 없다 — 가운데에 두면 판 한복판을 덮는다.
+   대신 판 옆에 남는 여백으로 비켜 앉는다. */
+@media (orientation: landscape) {
+  #stick, #dpad, #keypad { right: auto; margin-inline: 0; left: calc(20px + env(safe-area-inset-left)); }
+  /* 가로에서는 세로가 판 크기를 정하고 조작은 판 옆 여백에 앉는다. 그 여백이
+     좁으므로 버튼을 44px(손가락 표적 하한)까지 줄이고 더 왼쪽에 붙인다 —
+     700x380에서 48px면 판 왼쪽 가장자리를 8px 덮었다. */
+  #dpad { --dpad-btn: 44px; left: calc(12px + env(safe-area-inset-left)); }
+  /* 숫자판은 세로와 **정반대로** 흐른다. 가로에서는 남는 것이 세로고 귀한 것이
+     가로라, 5열(244px)로 두면 판 왼쪽을 덮는다(700x380 기준 옆 여백 ~180px).
+     3열이면 144px라 여백 안에 들어간다. 아래가 아니라 세로 가운데에 앉힌다. */
+  #keypad { --pad-btn: 44px; left: calc(12px + env(safe-area-inset-left));
+    grid-template-columns: repeat(3, var(--pad-btn));
+    bottom: auto; top: 50%; transform: translateY(-50%); }
+  /* 3열에서는 나눌 칸이 없다 — 지우기·확인도 숫자와 같은 한 칸이다. */
+  #keypad [data-key="back"], #keypad [data-key="enter"] { grid-column: auto; }
+  #keypad .wide { font-size: 14px; }
+}
+.tz-label { font-size: 13px; color: var(--text-secondary); }
+/* 조작의 핵심은 "탭"이 아니라 "누르고 있기"라 문장으로 못 박는다. */
+.tz-caption { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center;
+  font-size: 13px; color: var(--text-primary);
+  text-shadow: 0 1px 6px var(--bg-deep); }
+/* touch-action:none이 없으면 브라우저가 손가락 드래그를 스크롤로 가로채
+   pointercancel을 쏘고, 꺾는 도중에 조작이 끊긴다. 탭 하이라이트도 끈다. */
+#game { display: block; background: #f1faee; border-radius: 6px;
+  touch-action: none; -webkit-tap-highlight-color: transparent; user-select: none; }
+/* 사망 연출: 내 화면이 살짝 튕겨 올랐다가 중력처럼 가속하며 아래로 떨어진다.
+   ease-in(가속) 커브가 "툭 떨어지는" 무게감을 준다. forwards로 떨어진 채 머문다. */
+@keyframes screenFall {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  12%  { transform: translateY(-18px) rotate(-1.5deg); opacity: 1; }
+  100% { transform: translateY(115vh) rotate(7deg); opacity: 0; }
+}
+#game.fallen { animation: screenFall .8s var(--ease-in-sharp) forwards; }
+/* 관전 전환: 낙하가 끝나면 살아있는 남의 화면이 위에서 미끄러져 들어온다(감속 커브). */
+@keyframes screenSlideIn {
+  0%   { transform: translateY(-115vh); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+#game.slide-in { animation: screenSlideIn .55s var(--ease-out); }
+/* 관전 대상 넘기기: 다음/이전 생존자가 좌우에서 살짝 밀려 들어온다(카드 넘기기 느낌). */
+@keyframes swapFromRight { from { transform: translateX(64px); opacity: .35; } to { transform: none; opacity: 1; } }
+@keyframes swapFromLeft  { from { transform: translateX(-64px); opacity: .35; } to { transform: none; opacity: 1; } }
+#game.swap-r { animation: swapFromRight .26s var(--ease-out); }
+#game.swap-l { animation: swapFromLeft .26s var(--ease-out); }
+/* 사망 임팩트: 화면이 짧게 흔들리고 붉은 섬광이 번쩍인다.
+   순수 시각 연출이라 게임 로직·결정론과 무관하고, 두 게임 공통으로 앱이 건다.
+   흔들림은 낙하가 걸리는 #game이 아니라 컨테이너(#play)에 얹어 서로 안 부딪히게 한다. */
+@keyframes deathShake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-5px, 3px); }
+  40% { transform: translate(4px, -4px); }
+  60% { transform: translate(-3px, -2px); }
+  80% { transform: translate(3px, 3px); }
+}
+#play.shake { animation: deathShake .28s ease-in-out; }
+#death-flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 50;
+  background: radial-gradient(circle at center, rgba(255,77,103,0) 45%, rgba(255,77,103,.5) 100%); }
+#death-flash.flash { animation: deathFlash .4s ease-out; }
+@keyframes deathFlash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+/* ---- 피격 디버프 연출(victim 화면) --------------------------------------
+   남의 발사에 맞았을 때. 전부 순수 시각/CSS라 게임 로직·결정론과 무관하다. */
+/* 무엇에 맞았는지 화면 중앙에 크게 announce(1.3s, 지속시간과 무관). */
+#debuff-banner { position: fixed; top: 20%; left: 50%; z-index: 55; pointer-events: none;
+  opacity: 0; font: 800 46px system-ui; color: #fff; letter-spacing: .02em; white-space: nowrap;
+  text-shadow: 0 3px 16px rgba(0,0,0,.75), 0 0 34px rgba(199,125,255,.75); }
+#debuff-banner.on { animation: debuffBanner 1.3s var(--ease-out) forwards; }
+@keyframes debuffBanner {
+  0% { opacity: 0; transform: translateX(-50%) scale(1.5); }
+  14% { opacity: 1; transform: translateX(-50%) scale(1); }
+  72% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) scale(1.02); }
+}
+/* 시야 흐림 — 메인 캔버스에 blur 필터를 건다(조작은 그대로, 보기만 힘들다). */
+#game.debuff-blur { filter: blur(6px) brightness(.9); }
+/* 화면 흔들림 — 플레이 영역이 디버프 내내 계속 덜덜 떨린다(사망 임팩트의 1회 흔들림과 별개). */
+@keyframes debuffShake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-4px, 2px); }
+  50% { transform: translate(3px, -3px); }
+  75% { transform: translate(-2px, -2px); }
+}
+#play.debuff-shake { animation: debuffShake .16s linear infinite; }
+/* 구름 가림 — 반투명 구름 덩어리가 왼→오로 화면을 가로지르며 시야를 막는다. */
+#debuff-cloud { position: fixed; top: 0; bottom: 0; left: 0; width: 64vw; z-index: 46;
+  pointer-events: none; opacity: 0; filter: blur(5px);
+  background: radial-gradient(ellipse 62% 55% at 50% 45%,
+    rgba(232,237,246,.97) 30%, rgba(208,218,234,.78) 56%, rgba(208,218,234,0) 73%); }
+#debuff-cloud.on { animation: debuffCloud var(--dur, 3000ms) linear forwards; }
+@keyframes debuffCloud {
+  0% { opacity: 0; transform: translateX(-72vw); }
+  16% { opacity: 1; }
+  84% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(118vw); }
+}
+/* ---- 발사 연출(shooter 화면) --------------------------------------------
+   내 화면 중앙에서 조준한 관전창까지 탄환이 날아가 명중한다. 좌표가 매 발사마다
+   달라 이동은 JS(Web Animations)가 넣고 여기선 생김새만 정한다. */
+.fire-bullet { position: fixed; z-index: 54; pointer-events: none; font-size: 30px;
+  line-height: 1; will-change: transform;
+  filter: drop-shadow(0 0 10px rgba(255,209,102,.95)) drop-shadow(0 0 22px rgba(255,159,28,.7)); }
+/* 명중 — 맞은 관전창이 번쩍인다(슬롯 안쪽만, overflow:hidden). */
+.side-slot.hit::after { content: ""; position: absolute; inset: 0; border-radius: 5px;
+  pointer-events: none; animation: slotHit .5s ease-out forwards; }
+@keyframes slotHit {
+  0% { background: rgba(255,209,102,.85); box-shadow: inset 0 0 0 3px rgba(255,209,102,1); }
+  100% { background: rgba(255,209,102,0); box-shadow: inset 0 0 0 3px rgba(255,209,102,0); }
+}
+/* 게임 HUD — 캔버스(맵) 밖 좌측 상단. 플레이 중엔 헤더가 숨으므로 그 자리를 쓴다. */
+#game-hud { position: fixed; top: 16px; left: 20px; z-index: 40;
+  display: flex; flex-direction: column; gap: 8px; color: var(--text-primary); pointer-events: none; }
+#game-hud[hidden] { display: none; }
+#hud-time { font: 700 26px system-ui; font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+#hud-gauge { display: flex; flex-direction: column; gap: 3px; }
+#hud-gauge[hidden] { display: none; }
+#hud-gauge-label { font-size: 12px; letter-spacing: .05em; opacity: .8; }
+#hud-gauge-track { width: 190px; height: 14px; background: var(--bg-deep);
+  border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+#hud-gauge-fill { height: 100%; width: 0%; background: var(--primary);
+  transition: width .08s linear, background-color .12s; }
+#hud-gauge-fill.near { background: var(--warning); } /* 거의 참 — 곧 발사 경고색 */
+/* 관전 조작 힌트: 관전 중에만 하단에 뜬다. */
+#spectate-hint { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 30; background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--text-primary); padding: 7px 14px;
+  border-radius: 999px; font: 600 13px system-ui; pointer-events: none; }
+#spectate-hint[hidden] { display: none; }
+/* 사이드 슬롯: 켜지고 꺼질 때 높이/투명도로 부드럽게 접히고 펼쳐진다(1+3→1+1).
+   --side-w/--side-h는 AppView.layoutPlayArea가 뷰포트에 비례해 넣는다(아래는 폴백값).
+   좁은 화면(.narrow)에선 칼럼째 사라져 메인이 공간을 전부 가져간다. */
+/* align-self로 메인(세로 중앙)과 따로 논다 — 관전창은 위에서부터 아래로 채운다. */
+#side-views { display: flex; flex-direction: column; align-self: flex-start;
+  --side-w: 200px; --side-h: 150px; }
+#play.narrow #side-views { display: none; }
+.side-slot { position: relative; height: 0; opacity: 0; margin-bottom: 0; overflow: hidden;
+  transition: height .32s var(--ease-out), opacity .25s ease, margin-bottom .32s ease; }
+.side-slot.on { height: var(--side-h); opacity: 1; margin-bottom: 10px; }
+.side-canvas { display: block; width: var(--side-w); height: var(--side-h);
+  background: #f1faee; border-radius: 5px; }
+.side-label { position: absolute; top: 4px; left: 6px; font: 600 11px system-ui;
+  color: #1d3557; background: rgba(241,250,238,.75); padding: 1px 6px; border-radius: 4px; }
+
+/* 남은 인원 — 판 오른쪽 위. 위의 #game-hud(시간·게이지)와 반대편에 앉는다. */
+#alive-hud { position: absolute; top: 14px; right: 16px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--text-primary); padding: 6px 12px; border-radius: 8px; font: 600 14px system-ui;
+  font-variant-numeric: tabular-nums; }
+#alive-hud[hidden] { display: none; }
+
+/* ---- 모션을 줄여 달라는 사람 ---------------------------------------------
+   연출은 끄고 정보는 남긴다. 어지러움을 줄이는 게 목적이지 화면을 비우는 게
+   아니다 — 그래서 안내·배너는 움직임만 빼고 그대로 보이게 둔다.
+   ⚠️ 이 블록은 파일 **끝**에 있어야 한다. 미디어 쿼리는 우선순위를 더해 주지
+      않으므로, 위에서 켠 애니메이션을 끄려면 나중에 와야 한다. */
+@media (prefers-reduced-motion: reduce) {
+  #game.fallen { animation: none; opacity: 0; }                /* 모션 민감 사용자는 조용히 사라지게 */
+  #game.slide-in, #game.swap-r, #game.swap-l { animation: none; } /* 전환 없이 즉시 표시 */
+  #play.shake, #death-flash.flash { animation: none; }         /* 임팩트 연출도 끈다 */
+  #play.debuff-shake, #debuff-banner.on { animation: none; }   /* 흔들림·배너 모션 끔 */
+  #debuff-banner.on { opacity: 1; }                            /* 배너는 움직임 없이도 잠깐 보이게 */
+  #debuff-cloud.on { animation: none; opacity: .85; }          /* 구름은 흐르지 않고 가리기만 */
+  #touch-zones { transition: none; }                           /* 안내는 남긴다 — 조작법이라 정보다 */
+  /* 탄환은 아예 안 날린다(bulletFx가 명중 번쩍임만 낸다). */
+}
+
+/* ---- 작은 화면(폰) -------------------------------------------------------
+   판 둘레 여백은 토큰이라 base.css에서 줄인다. 여기 남는 건 조작면 자신의 크기다. */
+@media (max-width: 600px) {
+  .tz-arrow { font-size: 36px; }
+}

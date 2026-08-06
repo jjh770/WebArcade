@@ -316,3 +316,10 @@ tick에서만 나와** 모두가 같은 것을 보지만, **줍는 판정은 로
 
 > 이 이벤트는 **연출 동기화 전용**이라 유실돼도 진행이 갈리지 않는다. 서버는 여기서도 의미를
 > 모른 채 슬러그를 다음 스냅샷에 한 번 실어 중계할 뿐이라, **아이템을 늘려도 서버 재배포가 없다.**
+
+## 라이선스
+
+번들된 외부 에셋(배경음악 다섯 곡)은 프로젝트 코드와 **별도 라이선스**를 따른다.
+출처와 라이선스는 [`ASSET_CREDITS.md`](./ASSET_CREDITS.md)에 있다.
+
+Third-party assets are licensed separately. See [`ASSET_CREDITS.md`](./ASSET_CREDITS.md) for details.

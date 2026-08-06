@@ -12,6 +12,9 @@ etc/
 # 로컬 서버(wrangler dev)에 심는 비밀값. 운영은 wrangler secret이 따로 들고 있다.
 .dev.vars
 
+# Visual Studio가 열 때마다 다시 만드는 로컬 색인·창 상태(.vsidx는 파일 내용 색인이다).
+.vs/
+
 .vercel
 # wrangler 로컬 상태(miniflare 캐시·임시 번들). 재생성되므로 커밋하지 않는다.
 .wrangler/

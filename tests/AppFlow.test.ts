@@ -116,6 +116,25 @@ describe("연습(싱글) 모드 흐름", () => {
     expect(flow.state).toBe("ranking");
   });
 
+  it("옵션은 이름을 정하기 전에도 열리고, 열었다 돌아온다", () => {
+    // 소리 설정은 게임을 고르기 전에 정하는 것이라 어느 화면에서든 닿아야 한다.
+    const flow = createFlow();
+    flow.transition("nav_options");
+    expect(flow.state).toBe("options");
+    flow.transition("nav_game_nickname");
+    expect(flow.state).toBe("nickname");
+    advance(flow, ["nickname_submit", "nav_options"]);
+    expect(flow.state).toBe("options");
+    flow.transition("nav_game_main");
+    expect(flow.state).toBe("main");
+  });
+
+  it("판이 도는 동안에는 옵션을 열 수 없다 — 판이 사라진다", () => {
+    const flow = createFlow();
+    advance(flow, [...toLobby, "start_solo", "countdown_done"]);
+    expect(flow.can("nav_options")).toBe(false);
+  });
+
   it("플레이 중에는 순위를 열 수 없다 — 판이 사라진다", () => {
     const flow = createFlow();
     advance(flow, [...toLobby, "start_solo", "countdown_done"]);
