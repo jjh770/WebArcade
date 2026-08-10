@@ -71,14 +71,14 @@ describe("기록 내기", () => {
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
       ticket: "abc.def",
       nickname: "나그네",
-      ticks: 900,
+      score: 900,
     });
     // content-type이 빠지면 서버가 본문을 JSON으로 읽지 못한다.
     expect(calls[0]!.init.headers).toEqual({ "content-type": "application/json" });
   });
 
   it("순위표는 줄 목록만 꺼내 준다", async () => {
-    const rows = [{ nickname: "가", ticks: 900, at: 1 }];
+    const rows = [{ nickname: "가", score: 900, at: 1 }];
     const calls = stubFetch(() => ok({ total: 1, entries: rows }));
     expect(await fetchBoard("floor")).toEqual(rows);
     expect(calls[0]!.url).toBe("http://server.test:8787/solo/board?gameId=floor");

@@ -57,8 +57,8 @@ describe("기록 신고 검사", () => {
   });
 
   it("여유 폭 안쪽은 봐준다 — 시계 오차로 아슬아슬하게 넘칠 수 있다", () => {
-    const ticks = Math.floor(((60_000 + CLAIM_TOLERANCE_MS - 100) / 1000) * 60);
-    expect(checkClaim(TICKET, ticks, now).ok).toBe(true);
+    const score = Math.floor(((60_000 + CLAIM_TOLERANCE_MS - 100) / 1000) * 60);
+    expect(checkClaim(TICKET, score, now).ok).toBe(true);
   });
 
   it("유효기간이 지난 티켓은 거부", () => {
@@ -76,13 +76,13 @@ describe("기록 신고 검사", () => {
   });
 });
 
-const entry = (nickname: string, ticks: number, at: number): BoardEntry => ({ nickname, ticks, at });
+const entry = (nickname: string, score: number, at: number): BoardEntry => ({ nickname, score, at });
 
 describe("보드 줄 세우기", () => {
   it("오래 버틴 순서로 선다", () => {
     let board: BoardEntry[] = [];
-    for (const [name, ticks] of [["가", 100], ["나", 300], ["다", 200]] as const) {
-      board = insertEntry(board, entry(name, ticks, 1)).board;
+    for (const [name, score] of [["가", 100], ["나", 300], ["다", 200]] as const) {
+      board = insertEntry(board, entry(name, score, 1)).board;
     }
     expect(board.map((row) => row.nickname)).toEqual(["나", "다", "가"]);
   });

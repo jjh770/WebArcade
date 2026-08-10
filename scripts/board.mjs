@@ -25,10 +25,13 @@ import { stdin, stdout } from "node:process";
 const SERVER = process.env.ARCADE_SERVER ?? "https://webarcade.leon770.workers.dev";
 const KEY_FILE = new URL("../.admin-key", import.meta.url);
 
-/** 순위표가 있는 게임 전부. `rm all`이 훑는 대상이다.
+/** 순위표가 있는 게임과 그 기록의 단위. `rm all`은 이 목록을 훑는다.
  *  ⚠️ 게임을 추가하면 여기도 추가한다 — 서버에 "게임 목록"을 묻는 경로가 없어서
- *     (서버는 gameId를 문자열로만 다룬다) 클라가 알 방법이 없다. */
-const GAMES = ["jungnim", "curve", "floor", "baseball"];
+ *     (서버는 gameId를 문자열로만 다룬다) 클라가 알 방법이 없다.
+ *  ⚠️ 단위도 여기 있는 이유는 같다. **서버가 내려주는 건 숫자 하나뿐이고 그게 tick인지
+ *     점수인지 모른다.** 앱은 GameRegistry에서 알지만 이 스크립트는 TS를 못 읽는다. */
+const SCORE_UNIT = { jungnim: "ticks", curve: "ticks", floor: "ticks", baseball: "points" };
+const GAMES = Object.keys(SCORE_UNIT);
 
 const USAGE = `사용법:
   node scripts/board.mjs ls <게임id>              순위표 보기
@@ -61,14 +64,21 @@ async function adminKey() {
   return key;
 }
 
-function printBoard(entries) {
+/** 기록 하나를 그 게임의 단위로 적는다. 모르는 게임이면 숫자만 — 단위를 지어내지 않는다. */
+function formatScore(gameId, score) {
+  if (SCORE_UNIT[gameId] === "ticks") return `${(score / 60).toFixed(1)}s`;
+  if (SCORE_UNIT[gameId] === "points") return `${score}점`;
+  return String(score);
+}
+
+function printBoard(gameId, entries) {
   if (entries.length === 0) {
     console.log("(비어 있음)");
     return;
   }
   entries.forEach((row, i) => {
     const when = new Date(row.at).toLocaleString("ko-KR");
-    console.log(`${String(i + 1).padStart(3)}. ${row.nickname}  ${(row.ticks / 60).toFixed(1)}s  ${when}`);
+    console.log(`${String(i + 1).padStart(3)}. ${row.nickname}  ${formatScore(gameId, row.score)}  ${when}`);
   });
 }
 
@@ -77,7 +87,7 @@ async function list(gameId) {
   const body = await response.json();
   if (!response.ok) fail(`실패(${response.status}): ${body.reason ?? ""}`);
   console.log(`${gameId} — 총 ${body.total}줄`);
-  printBoard(body.entries);
+  printBoard(gameId, body.entries);
 }
 
 /** 한 게임에서 한 줄 지우기. 지운 수를 돌려준다(없으면 0). */
@@ -117,7 +127,7 @@ async function remove(gameId, nickname) {
   const { removed, total, entries } = await removeOne(gameId, nickname, key);
   console.log(removed > 0 ? `지웠습니다: ${nickname}` : `그런 이름이 없습니다: ${nickname}`);
   console.log(`${gameId} — 남은 ${total}줄`);
-  printBoard(entries);
+  printBoard(gameId, entries);
 }
 
 /** 이름만 갈아끼운다. 지우기와 달리 **되돌릴 수 있다** — 잘못 바꿨으면 다시 바꾸면 된다.
@@ -137,7 +147,7 @@ async function rename(gameId, from, to) {
   if (!response.ok) fail(`실패(${response.status}): ${body.reason ?? ""}`);
   console.log(`${from} → ${to}`);
   console.log(`${gameId} — 총 ${body.total}줄`);
-  printBoard(body.entries);
+  printBoard(gameId, body.entries);
 }
 
 const [command, gameId, first, second] = process.argv.slice(2);

@@ -107,7 +107,7 @@ export class BoardObject {
     } catch {
       return badRequest("잘못된 요청 형식입니다.");
     }
-    const { ticket, nickname, ticks } = (body ?? {}) as Record<string, unknown>;
+    const { ticket, nickname, score } = (body ?? {}) as Record<string, unknown>;
     if (typeof ticket !== "string" || !isNickname(nickname)) {
       return badRequest("잘못된 요청 형식입니다.");
     }
@@ -116,7 +116,7 @@ export class BoardObject {
     if (!payload) return badRequest("기록 티켓이 유효하지 않습니다.");
 
     const now = Date.now();
-    const claim = checkClaim(payload, Number(ticks), now);
+    const claim = checkClaim(payload, Number(score), now);
     if (!claim.ok) return badRequest(claim.reason);
 
     // 소진 표시가 먼저다. 같은 티켓으로 동시에 두 번 들어와도 DO는 요청을 하나씩
@@ -127,7 +127,7 @@ export class BoardObject {
     }
     await this.ctx.storage.put(spentKey, payload.t);
 
-    const entry: BoardEntry = { nickname: String(nickname).trim(), ticks: Number(ticks), at: now };
+    const entry: BoardEntry = { nickname: String(nickname).trim(), score: Number(score), at: now };
     const stored = await this.load(payload.g);
     const result = insertEntry(stored, entry, BOARD_LIMIT);
     await this.ctx.storage.put(BOARD_PREFIX + payload.g, result.board);
@@ -177,8 +177,21 @@ export class BoardObject {
     return Response.json({ total: board.length, entries: board.slice(0, PAGE_SIZE) });
   }
 
+  /** 저장된 보드를 읽는다. **옛 모양을 여기서 한 번 갈아 끼운다.**
+   *
+   *  기록 칸의 이름이 `ticks`였다가 `score`가 됐다. 이미 저장된 줄들은 옛 이름을 달고
+   *  있으므로, 그대로 읽으면 기록이 통째로 undefined가 되어 순위표가 무너진다.
+   *  읽는 자리가 여기 하나뿐이라 여기서만 옮겨 주면 된다 — 다음 쓰기에서 새 이름으로
+   *  저장되므로 시간이 지나면 옛 줄은 저절로 없어진다. 따로 마이그레이션을 돌리지
+   *  않는 이유다(읽기만 되는 보드는 계속 이 자리에서 변환된다 — 값은 언제나 맞다). */
   private async load(gameId: string): Promise<BoardEntry[]> {
-    return (await this.ctx.storage.get<BoardEntry[]>(BOARD_PREFIX + gameId)) ?? [];
+    const stored = await this.ctx.storage.get<(BoardEntry & { ticks?: number })[]>(BOARD_PREFIX + gameId);
+    if (!stored) return [];
+    return stored.map((row) =>
+      row.score === undefined
+        ? { nickname: row.nickname, score: row.ticks ?? 0, at: row.at }
+        : row,
+    );
   }
 
   private async sign(encoded: string): Promise<string> {

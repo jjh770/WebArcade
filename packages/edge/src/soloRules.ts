@@ -33,10 +33,12 @@ export type TicketPayload = {
   n: string;
 };
 
-/** 보드 한 줄. 닉네임은 소유권이 없으므로 신원이 아니라 표시용 이름일 뿐이다. */
+/** 보드 한 줄. 닉네임은 소유권이 없으므로 신원이 아니라 표시용 이름일 뿐이다.
+ *  score의 **단위는 여기 없다** — 게임에 따라 생존 tick이거나 점수다(ScoreUnit).
+ *  보드는 크기로 줄만 세우고, 단위를 붙이는 건 화면이다. */
 export type BoardEntry = {
   nickname: string;
-  ticks: number;
+  score: number;
   /** 기록이 등록된 시각(ms). 동점 정렬과 표시에 쓴다. */
   at: number;
 };
@@ -89,17 +91,21 @@ export type ClaimCheck = { ok: true } | { ok: false; reason: string };
 
 /** 이 티켓으로 이 기록을 낼 수 있는가. 서명 검증과 일련번호 소진 확인은
  *  호출자(BoardObject)가 이미 끝냈다고 본다 — 여기서는 시간 산수만 한다. */
-export function checkClaim(payload: TicketPayload, ticks: number, now: number): ClaimCheck {
-  if (!Number.isSafeInteger(ticks) || ticks < 0) {
+export function checkClaim(payload: TicketPayload, score: number, now: number): ClaimCheck {
+  if (!Number.isSafeInteger(score) || score < 0) {
     return { ok: false, reason: "유효하지 않은 기록입니다." };
   }
   const age = now - payload.t;
   if (age < 0 || age > TICKET_TTL_MS) {
     return { ok: false, reason: "기록 티켓이 만료되었습니다. 다시 시작해 주세요." };
   }
-  const claimedMs = (ticks / TICKS_PER_SECOND) * 1000;
+  // ⚠️ 여기서만 서버가 **기록을 tick이라고 가정한다.** 신고값을 초로 바꿔 경과시간과 견주는데,
+  //    기록이 점수인 게임(숫자 야구)에서는 이 비교가 사실상 아무것도 막지 못한다
+  //    (티켓 TTL이 30분이라 산술상 10만점대까지 통과한다). 고치려면 단위를 서버까지 흘려야
+  //    하므로 따로 다룬다 — RoomObject의 SURVIVAL_TOLERANCE_TICKS에 같은 가정이 하나 더 있다.
+  const claimedMs = (score / TICKS_PER_SECOND) * 1000;
   if (claimedMs > age + CLAIM_TOLERANCE_MS) {
-    return { ok: false, reason: "유효하지 않은 생존시간입니다." };
+    return { ok: false, reason: "유효하지 않은 기록입니다." };
   }
   return { ok: true };
 }
@@ -109,7 +115,7 @@ export function checkClaim(payload: TicketPayload, ticks: number, now: number): 
 export type InsertResult = {
   board: BoardEntry[];
   rank: number | null;
-  /** 반영 뒤 이 닉네임의 최고 기록(tick). 이번 판이 더 낮으면 예전 값이 남는다. */
+  /** 반영 뒤 이 닉네임의 최고 기록. 이번 판이 더 낮으면 예전 값이 남는다. */
   best: number;
   /** 이번 판이 그 닉네임의 최고 기록을 갈아치웠는가. */
   isBest: boolean;
@@ -126,15 +132,15 @@ export function insertEntry(
   limit = BOARD_LIMIT,
 ): InsertResult {
   const previous = board.find((row) => row.nickname === entry.nickname);
-  const isBest = !previous || entry.ticks > previous.ticks;
+  const isBest = !previous || entry.score > previous.score;
   const kept = isBest ? entry : (previous as BoardEntry);
 
   const merged = [...board.filter((row) => row.nickname !== entry.nickname), kept]
-    .sort((a, b) => b.ticks - a.ticks || a.at - b.at)
+    .sort((a, b) => b.score - a.score || a.at - b.at)
     .slice(0, limit);
 
   const index = merged.indexOf(kept);
-  return { board: merged, rank: index >= 0 ? index + 1 : null, best: kept.ticks, isBest };
+  return { board: merged, rank: index >= 0 ? index + 1 : null, best: kept.score, isBest };
 }
 
 /** 한 줄을 지운다(운영자용). 등수는 저장하지 않고 순서에서 나오므로,

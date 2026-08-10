@@ -145,7 +145,7 @@ export function renderRanking(view: RankingView, myNickname: string, gameId: Gam
     if (row.nickname === myNickname) line.classList.add("self");
     line.innerHTML = `<td class="rank">${index + 1}</td>`
       + `<td>${escapeHtml(row.nickname)}</td>`
-      + `<td class="time">${formatGameScore(gameId, row.ticks)}</td>`;
+      + `<td class="time">${formatGameScore(gameId, row.score)}</td>`;
     body.appendChild(line);
   }
 }

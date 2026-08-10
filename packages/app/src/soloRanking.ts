@@ -18,12 +18,13 @@ import { HTTP_URL } from "./serverUrl";
 /** 랭킹 도전 한 판의 시작 표. seed로 판을 돌리고, ticket으로 기록을 낸다. */
 export type SoloTicket = { ticket: string; seed: number };
 
-export type BoardRow = { nickname: string; ticks: number; at: number };
+/** 순위표 한 줄. score의 단위는 게임이 정한다(ScoreUnit) — 화면이 formatGameScore로 붙인다. */
+export type BoardRow = { nickname: string; score: number; at: number };
 
 /** 기록 제출 결과. rank가 null이면 보드에 못 든 것(상한 밖). */
 export type SoloRank = {
   rank: number | null;
-  /** 이 닉네임의 서버 기준 최고 기록(tick). 이번 판이 더 낮으면 예전 값. */
+  /** 이 닉네임의 서버 기준 최고 기록. 이번 판이 더 낮으면 예전 값. */
   best: number;
   isBest: boolean;
   total: number;
@@ -83,14 +84,14 @@ export async function fetchBoard(gameId: string): Promise<BoardRow[] | null> {
  *     0점짜리 줄이 남으면 이름만 차지하고, 그 사람이 다시 오기 전까지 순위표 아래쪽이
  *     "아무것도 안 한 판"으로 채워진다. 서버가 아니라 여기서 막는 이유는 이게 게임
  *     지식이 아니라 산수여서다 — 어느 게임에서든 0은 아무 일도 안 일어난 판이다. */
-export function submitScore(ticket: string, nickname: string, ticks: number): Promise<SoloRank | null> {
-  if (ticks <= 0) return Promise.resolve(null);
+export function submitScore(ticket: string, nickname: string, score: number): Promise<SoloRank | null> {
+  if (score <= 0) return Promise.resolve(null);
   return requestJson<SoloRank>(
     "/solo/score",
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ticket, nickname, ticks }),
+      body: JSON.stringify({ ticket, nickname, score }),
     },
     SUBMIT_TIMEOUT_MS,
   );

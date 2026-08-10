@@ -6,8 +6,13 @@
    오브젝트 스토리지에 남는 일련번호, 게임별로 갈린 보드.
    ============================================================ */
 
-import { SELF } from "cloudflare:test";
+import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import type { Env } from "../src/env";
+
+/** `cloudflare:test`의 `env`는 **빈** Cloudflare.Env로 타입이 잡힌다(바인딩 목록을 모른다).
+ *  정본은 src/env.ts 하나이므로 목록을 옮겨 적는 대신 그 모양으로 한 번만 본다. */
+const bindings = env as unknown as Env;
 
 type Ticket = { ticket: string; seed: number };
 type Submitted = {
@@ -15,7 +20,7 @@ type Submitted = {
   best: number;
   isBest: boolean;
   total: number;
-  entries: { nickname: string; ticks: number; at: number }[];
+  entries: { nickname: string; score: number; at: number }[];
   reason?: string;
 };
 
@@ -25,11 +30,11 @@ async function takeTicket(gameId = "jungnim"): Promise<Ticket> {
   return (await response.json()) as Ticket;
 }
 
-async function submit(ticket: string, nickname: string, ticks: number) {
+async function submit(ticket: string, nickname: string, score: number) {
   const response = await SELF.fetch("https://test/solo/score", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ticket, nickname, ticks }),
+    body: JSON.stringify({ ticket, nickname, score }),
   });
   return { status: response.status, body: (await response.json()) as Submitted };
 }
@@ -95,7 +100,7 @@ describe("기록 제출", () => {
     const { ticket } = await takeTicket();
     const result = await submit(ticket, "과장", 60 * 300); // 방금 받은 티켓으로 5분 생존 주장
     expect(result.status).toBe(400);
-    expect(result.body.reason).toContain("생존시간");
+    expect(result.body.reason).toContain("유효하지 않은 기록");
   });
 
   it("닉네임 규칙은 대기실과 같다", async () => {
@@ -214,5 +219,50 @@ describe("기록 지우기(운영자)", () => {
     await remove("jungnim", "양쪽이름");
     expect((await readBoard("jungnim")).entries.map((row) => row.nickname)).not.toContain("양쪽이름");
     expect((await readBoard("floor")).entries.map((row) => row.nickname)).toContain("양쪽이름");
+  });
+});
+
+/* ⚠️ 이 묶음은 **구조가 아니라 약속**을 지킨다: 이름을 바꿔도 이미 세운 기록은 사라지지
+   않는다. 기록 칸의 이름이 `ticks`에서 `score`로 바뀌었고, 운영 중인 보드에는 옛 이름을
+   단 줄들이 그대로 남아 있다. 옮겨 주는 자리가 BoardObject.load 하나뿐이라 여기가 뚫리면
+   순위표가 통째로 0이 된다 — 실제로 옛 모양을 심어 두고 확인한다. */
+describe("옛 기록 살리기 (ticks → score)", () => {
+  /** 보드 오브젝트 스토리지에 옛 모양 줄을 직접 심는다. 서버 경로로는 만들 수 없는 상태다. */
+  async function plantLegacy(gameId: string, rows: { nickname: string; ticks: number; at: number }[]) {
+    const stub = bindings.BOARD.get(bindings.BOARD.idFromName("solo-v1"));
+    await runInDurableObject(stub, async (_instance, state) => {
+      await state.storage.put(`board:${gameId}`, rows);
+    });
+  }
+
+  it("옛 이름으로 저장된 줄도 기록을 그대로 들고 나온다", async () => {
+    await plantLegacy("legacy-read", [{ nickname: "옛사람", ticks: 1234, at: 10 }]);
+    expect((await readBoard("legacy-read")).entries).toEqual([
+      { nickname: "옛사람", score: 1234, at: 10 },
+    ]);
+  });
+
+  it("옛 줄과 새 줄이 한 보드에서 같이 줄 선다", async () => {
+    await plantLegacy("legacy-mix", [{ nickname: "옛사람", ticks: 3000, at: 10 }]);
+    const { ticket } = await takeTicket("legacy-mix");
+    await submit(ticket, "새사람", 60); // 옛사람보다 낮은 기록
+
+    const board = await readBoard("legacy-mix");
+    expect(board.entries.map((row) => [row.nickname, row.score])).toEqual([
+      ["옛사람", 3000],
+      ["새사람", 60],
+    ]);
+  });
+
+  it("한 번 쓰고 나면 옛 이름은 스토리지에서 사라진다", async () => {
+    await plantLegacy("legacy-heal", [{ nickname: "옛사람", ticks: 500, at: 10 }]);
+    const { ticket } = await takeTicket("legacy-heal");
+    await submit(ticket, "새사람", 60); // 쓰기가 한 번 일어나면 새 모양으로 저장된다
+
+    const stub = bindings.BOARD.get(bindings.BOARD.idFromName("solo-v1"));
+    const stored = await runInDurableObject(stub, (_instance, state) =>
+      state.storage.get<Record<string, unknown>[]>("board:legacy-heal"),
+    );
+    expect(stored!.every((row) => "score" in row && !("ticks" in row))).toBe(true);
   });
 });
