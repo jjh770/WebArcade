@@ -25,15 +25,18 @@ export type Member = {
    *  순위는 이 값으로만 매긴다(lastScore는 아직 확정 전의 중간값이다). */
   finalScore: number;
   connected: boolean;
-  px: number;
-  py: number;
-  hasPosition: boolean;
+  /** 이 사람이 마지막으로 알려온 관전 신호(SpectateSignal). 좌표일 수도 진척도일 수도
+   *  있고 서버는 어느 쪽인지 모른다 — 다음 스냅샷에 실어 나르기만 한다. */
+  a: number;
+  b: number;
+  /** 아직 한 번도 안 알려왔으면 false. 0,0을 "판 왼쪽 위"로 오해해 그리지 않게 한다. */
+  hasSignal: boolean;
   /** 이 사람이 마지막으로 알려온 기록(getScore). 살아 있는 동안 계속 덮어쓴다.
    *  ⚠️ 서버는 이 값이 tick인지 점수인지 **모른다.** 아는 것은 하나뿐이다 —
    *     연결이 끊겼을 때 최종 기록으로 쓸 값이 여기 있다는 것. */
   lastScore: number;
   /** 다음 스냅샷에 한 번 실어 보낼 게임 정의 이벤트 슬러그. 보내고 나면 지운다.
-   *  서버는 의미를 모른다 — 위치와 같은 관전용 근사 정보라 저장도 하지 않는다. */
+   *  서버는 의미를 모른다 — 신호와 같은 관전용 근사 정보라 저장도 하지 않는다. */
   pendingEvent?: string;
 };
 
@@ -109,7 +112,7 @@ export class Room {
 
   addMember(id: string, nickname: string): boolean {
     if (this.state !== "waiting" || this.connectedCount >= this.capacity || this.hasConnectedMember(id)) return false;
-    this.members.push({ id, nickname, alive: true, finalScore: 0, connected: true, px: 0, py: 0, hasPosition: false, lastScore: 0 });
+    this.members.push({ id, nickname, alive: true, finalScore: 0, connected: true, a: 0, b: 0, hasSignal: false, lastScore: 0 });
     this.emptySince = null; // 사람이 들어왔다 → 유예 시계를 끈다.
     return true;
   }
@@ -135,9 +138,9 @@ export class Room {
     for (const member of this.members) {
       member.alive = true;
       member.finalScore = 0;
-      member.px = 0;
-      member.py = 0;
-      member.hasPosition = false;
+      member.a = 0;
+      member.b = 0;
+      member.hasSignal = false;
       member.lastScore = 0;
     }
   }
@@ -152,15 +155,15 @@ export class Room {
     return Math.max(0, Math.floor((now - this.startTime) / FIXED_STEP_MS));
   }
 
-  updatePosition(id: string, px: number, py: number, ev?: string, sc?: number): boolean {
+  updateSignal(id: string, a: number, b: number, ev?: string, sc?: number): boolean {
     const member = this.members.find((candidate) => candidate.id === id && candidate.connected && candidate.alive);
     if (!member) return false;
-    member.px = px;
-    member.py = py;
-    member.hasPosition = true;
+    member.a = a;
+    member.b = b;
+    member.hasSignal = true;
     if (sc !== undefined) member.lastScore = sc;
     // ⚠️ 덮어쓰지 않는다 — 아직 못 내보낸 이벤트가 있으면 그게 우선(스냅샷은 10Hz라
-    //    보내기 전에 다음 위치가 먼저 들어올 수 있다).
+    //    보내기 전에 다음 신호가 먼저 들어올 수 있다).
     if (ev !== undefined && member.pendingEvent === undefined) member.pendingEvent = ev;
     return true;
   }
@@ -214,9 +217,9 @@ export class Room {
     for (const member of this.members) {
       member.alive = true;
       member.finalScore = 0;
-      member.px = 0;
-      member.py = 0;
-      member.hasPosition = false;
+      member.a = 0;
+      member.b = 0;
+      member.hasSignal = false;
       member.lastScore = 0;
     }
   }
@@ -241,9 +244,9 @@ export class Room {
   /** ⚠️ 부수효과 있음: 실어 보낸 이벤트는 여기서 지운다(한 번만 전달된다). */
   getPeerSnapshot(): PeerSnapshot[] {
     return this.members
-      .filter((member) => member.connected && member.alive && member.hasPosition)
+      .filter((member) => member.connected && member.alive && member.hasSignal)
       .map((member) => {
-        const snapshot: PeerSnapshot = { id: member.id, px: member.px, py: member.py };
+        const snapshot: PeerSnapshot = { id: member.id, a: member.a, b: member.b };
         if (member.pendingEvent !== undefined) {
           snapshot.ev = member.pendingEvent;
           member.pendingEvent = undefined;

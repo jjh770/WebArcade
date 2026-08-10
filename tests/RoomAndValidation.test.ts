@@ -42,7 +42,7 @@ describe("Room", () => {
 
     it("서버가 지어내지 않는다 — 마지막으로 알려온 기록을 그대로 쓴다", () => {
       const room = playing();
-      room.updatePosition("a", 0, 0, undefined, 220);
+      room.updateSignal("a", 0, 0, undefined, 220);
       // 80초가 흐른 뒤 끊긴다. 예전이라면 4800(=80초×60)이 들어갔다.
       room.disconnectMember("a", 80_000);
       const [entry] = RankingService.computeRanks(room.getRankingMembers()).filter((r) => r.id === "a");
@@ -57,14 +57,14 @@ describe("Room", () => {
 
     it("계속 알려오면 마지막 값이 남는다", () => {
       const room = playing();
-      for (const score of [50, 120, 300]) room.updatePosition("a", 0, 0, undefined, score);
+      for (const score of [50, 120, 300]) room.updateSignal("a", 0, 0, undefined, score);
       room.disconnectMember("a", 80_000);
       expect(room.getRankingMembers().find((m) => m.id === "a")!.finalScore).toBe(300);
     });
 
     it("이미 죽은 사람의 기록은 끊겨도 안 바뀐다 — 본인이 낸 최종값이 우선이다", () => {
       const room = playing();
-      room.updatePosition("a", 0, 0, undefined, 300);
+      room.updateSignal("a", 0, 0, undefined, 300);
       room.markDied("a", 450); // 마지막 문제를 풀고 죽었다 → 300이 아니라 450
       room.disconnectMember("a", 80_000);
       expect(room.getRankingMembers().find((m) => m.id === "a")!.finalScore).toBe(450);
@@ -72,7 +72,7 @@ describe("Room", () => {
 
     it("새 라운드는 지난 판의 기록을 물려받지 않는다", () => {
       const room = playing();
-      room.updatePosition("a", 0, 0, undefined, 300);
+      room.updateSignal("a", 0, 0, undefined, 300);
       room.startCountdown(2, 0);
       room.ensurePlaying(1);
       room.disconnectMember("a", 80_000);
@@ -86,8 +86,8 @@ describe("Room", () => {
     room.addMember("b", "B");
     room.startCountdown(1, 0);
     room.ensurePlaying(1);
-    room.updatePosition("a", 10, 20);
-    expect(room.getPeerSnapshot()).toEqual([{ id: "a", px: 10, py: 20 }]);
+    room.updateSignal("a", 10, 20);
+    expect(room.getPeerSnapshot()).toEqual([{ id: "a", a: 10, b: 20 }]);
   });
 });
 
@@ -158,7 +158,7 @@ describe("방 상태 직렬화 (하이버네이션 복원 경로)", () => {
     room.addMember("b", "초심자");
     room.startCountdown(4242, 9999);
     room.ensurePlaying(10_000);
-    room.updatePosition("a", 12, 34);
+    room.updateSignal("a", 12, 34);
     room.markDied("b", 77);
 
     const restored = Room.restore(room.snapshot(), ROOM_CAPACITY);
@@ -169,7 +169,7 @@ describe("방 상태 직렬화 (하이버네이션 복원 경로)", () => {
     expect(restored.seed).toBe(4242);
     expect(restored.startTime).toBe(9999);
     expect(restored.hostId).toBe("a");
-    expect(restored.getPeerSnapshot()).toEqual([{ id: "a", px: 12, py: 34 }]);
+    expect(restored.getPeerSnapshot()).toEqual([{ id: "a", a: 12, b: 34 }]);
     expect(RankingService.computeRanks(restored.getRankingMembers()).map((r) => r.id)).toEqual(["a", "b"]);
   });
 
@@ -204,20 +204,20 @@ describe("프로토콜 런타임 검증", () => {
   it("정상 메시지만 통과시킨다", () => {
     expect(parseClientMessage({ type: "join_room", code: "ABCD", nickname: "고수" }))
       .toEqual({ type: "join_room", code: "ABCD", nickname: "고수" });
-    expect(parseClientMessage({ type: "player_state", px: Infinity, py: 1 })).toBeNull();
+    expect(parseClientMessage({ type: "player_state", a: Infinity, b: 1 })).toBeNull();
     // ev는 선택 — 없으면 그대로 통과하고, 있으면 짧은 슬러그 형식만 본다(의미는 서버 밖).
-    expect(parseClientMessage({ type: "player_state", px: 1, py: 2 })).toEqual({ type: "player_state", px: 1, py: 2 });
-    expect(parseClientMessage({ type: "player_state", px: 1, py: 2, ev: "purge" }))
-      .toEqual({ type: "player_state", px: 1, py: 2, ev: "purge" });
-    expect(parseClientMessage({ type: "player_state", px: 1, py: 2, ev: "PURGE!" })).toBeNull();
-    expect(parseClientMessage({ type: "player_state", px: 1, py: 2, ev: "x".repeat(33) })).toBeNull();
+    expect(parseClientMessage({ type: "player_state", a: 1, b: 2 })).toEqual({ type: "player_state", a: 1, b: 2 });
+    expect(parseClientMessage({ type: "player_state", a: 1, b: 2, ev: "purge" }))
+      .toEqual({ type: "player_state", a: 1, b: 2, ev: "purge" });
+    expect(parseClientMessage({ type: "player_state", a: 1, b: 2, ev: "PURGE!" })).toBeNull();
+    expect(parseClientMessage({ type: "player_state", a: 1, b: 2, ev: "x".repeat(33) })).toBeNull();
     // sc(지금까지의 기록)는 0 이상 정수만. 형식이 틀리면 **sc만 빠지고 메시지는 산다** —
     // 10Hz로 오는 관전 정보라 한 필드 때문에 버리면 남의 화면에서 그 사람이 얼어붙는다.
-    expect(parseClientMessage({ type: "player_state", px: 1, py: 2, sc: 220 }))
-      .toEqual({ type: "player_state", px: 1, py: 2, sc: 220 });
+    expect(parseClientMessage({ type: "player_state", a: 1, b: 2, sc: 220 }))
+      .toEqual({ type: "player_state", a: 1, b: 2, sc: 220 });
     for (const bad of [-1, 1.5, Number.NaN, Infinity, "220", null]) {
-      expect(parseClientMessage({ type: "player_state", px: 1, py: 2, sc: bad }))
-        .toEqual({ type: "player_state", px: 1, py: 2 });
+      expect(parseClientMessage({ type: "player_state", a: 1, b: 2, sc: bad }))
+        .toEqual({ type: "player_state", a: 1, b: 2 });
     }
     expect(parseClientMessage({ type: "player_died", score: -1 })).toBeNull();
     expect(parseClientMessage({ type: "join_room", code: "AIO1", nickname: "고수" })).toBeNull();

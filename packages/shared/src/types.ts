@@ -80,13 +80,11 @@ export type PeerState = {
 };
 
 /** 서버가 10Hz로 묶어서 전달하는 관전 신호. 판정에는 사용하지 않는다.
- *  ev가 있으면 그 사람이 방금 낸 게임 정의 시각 이벤트(한 번만 실려 온다).
- *  ⚠️ px·py는 SpectateSignal의 a·b와 **같은 숫자 둘**이다. 이름만 아직 좌표를
- *     말하고 있다 — 여기는 wire라 바꾸면 서버·클라 배포를 맞춰야 해서 남겨 뒀다.
- *     앱이 갈아 끼우는 자리는 둘뿐이다(peerReport의 send, peerViews의 applySnapshot). */
+ *  a·b는 SpectateSignal과 **같은 숫자 둘**이고, 서버는 그 뜻을 모른 채 나른다.
+ *  ev가 있으면 그 사람이 방금 낸 게임 정의 시각 이벤트(한 번만 실려 온다). */
 export type PeerSnapshot = {
   id: string;
-  px: number;
-  py: number;
+  a: number;
+  b: number;
   ev?: string;
 };

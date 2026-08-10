@@ -15,14 +15,16 @@ export type ClientMessage =
   | { type: "start_game" } // 호스트만 유효
   | { type: "return_to_ready" } // 종료 후 호스트만 유효
   | { type: "time_sync_request"; requestId: string }
-  // 관전용 위치(주기적). 서버가 최신값을 방 스냅샷으로 묶는다.
+  // 관전 신호(주기적). 서버가 최신값을 방 스냅샷으로 묶는다.
+  // a·b는 게임이 정한 숫자 둘(SpectateSignal) — 좌표일 수도 진척도일 수도 있고,
+  // 서버는 어느 쪽인지 모른 채 나른다. 그래서 이름에 좌표를 넣지 않는다.
   // ev는 그 순간 남들 화면에도 보여야 할 **게임 정의 시각 이벤트** 슬러그(예: 죽림고수 "purge").
   // 서버는 의미를 모르고 다음 스냅샷에 한 번 실어 보낸 뒤 지운다. 위치에 얹어 보내므로
   // 새 메시지 종류·새 주기가 필요 없다(이벤트는 늘 그 사람 위치에서 일어난다).
   // sc는 **지금까지의 기록**(getScore). 끊긴 사람의 최종 기록을 서버가 지어내지 않게
   // 하려고 함께 흘려보낸다 — 서버는 이 숫자가 tick인지 점수인지 모르고, 저장했다가
   // 연결이 끊기면 그때 마지막 값을 그대로 쓴다. 위치와 같은 주기라 새 메시지가 필요 없다.
-  | { type: "player_state"; px: number; py: number; ev?: string; sc?: number }
+  | { type: "player_state"; a: number; b: number; ev?: string; sc?: number }
   // score는 **그 게임의 기록**(getScore). 앞의 세 게임은 생존 tick이고 숫자 야구는 점수다 —
   // 서버는 어느 쪽인지 모르고 방향도 모른 채 그대로 받아 순위에만 쓴다(단위는 앱이 붙인다).
   | { type: "player_died"; score: number }

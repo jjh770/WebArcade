@@ -276,7 +276,7 @@ export interface IGame {
 
 ```
 클라 → 서버:  join_room(code, nickname) · create_room(gameId, nickname) · start_game
-             time_sync_request · player_state(px, py, ev?, sc?) · player_died(score)
+             time_sync_request · player_state(a, b, ev?, sc?) · player_died(score)
              fire_effect(kind, durationMs, targetId) · return_to_ready · leave_room
 서버 → 클라:  welcome(id) · time_sync_response · room_state(state, players, hostId)
              game_start(seed, startTime, gameId) · peer_snapshot(peers) · peer_died(id)
@@ -422,7 +422,7 @@ export interface IGame {
      **서버는 한 줄도 안 바뀌었다** — 순위표는 여전히 숫자 하나를 방향대로 세울 뿐이다.
 
    > ⚠️ 대신 **관전 계약이 실제보다 좁게 적혀 있었음이 드러났다.** 이 게임엔 좌표가 없는데 중계
-   > 통로는 숫자 둘(px·py)뿐이라 `getPosition()`이 `{a: 푼 문제 수, b: 점수}`를 싣는다. 한동안
+   > 통로는 숫자 둘(a·b)뿐이라 `getPosition()`이 `{a: 푼 문제 수, b: 점수}`를 싣는다. 한동안
    > "구부렸다"고 적어 뒀지만 굽은 건 코드가 아니라 문장이었다 — 앞의 셋이 전부 판 위를 움직이는
    > 게임이라 "위치"라고 쓴 것뿐이고, 서버도 core도 그 뜻을 모른 채 나르고 있었다. 그래서
    > 계약을 `SpectateSignal`("관전 중계에 실을 숫자 둘, 뜻은 게임이 정한다")로 다시 적었다.

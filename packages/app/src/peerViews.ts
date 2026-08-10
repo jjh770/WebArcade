@@ -82,25 +82,22 @@ export class PeerViews {
     for (let index = 0; index < this.options.slots; index++) this.options.onSideSlot(index, false, "");
   }
 
-  /** 서버 스냅샷 반영. 남이 낸 시각 이벤트는 onEvent로 흘려보낸다(게임이 재현한다).
-   *  ⚠️ wire(px·py) → 내부(a·b)로 갈아 끼우는 두 자리 중 하나다. 나머지 하나는
-   *     peerReport의 send. 이름이 다른 건 wire만 아직 옛 이름이기 때문이고,
-   *     나르는 숫자는 같다(PeerSnapshot 주석). */
+  /** 서버 스냅샷 반영. 남이 낸 시각 이벤트는 onEvent로 흘려보낸다(게임이 재현한다). */
   applySnapshot(snapshot: readonly PeerSnapshot[], onEvent: (id: string, ev: string) => void): void {
     for (const state of snapshot) {
       if (state.id === this.myId) continue;
       if (state.ev !== undefined) onEvent(state.id, state.ev);
       const existing = this.peers.get(state.id);
       if (existing) {
-        existing.a = state.px;
-        existing.b = state.py;
+        existing.a = state.a;
+        existing.b = state.b;
       } else {
         const player = this.roster.find((candidate) => candidate.id === state.id);
         this.peers.set(state.id, {
           nickname: player?.nickname ?? "플레이어",
           alive: true,
-          a: state.px,
-          b: state.py,
+          a: state.a,
+          b: state.b,
         });
       }
     }

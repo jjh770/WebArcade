@@ -145,17 +145,17 @@ describe("전체 방 흐름", () => {
 
     let snapshot = null;
     for (let attempt = 0; attempt < 40 && !snapshot; attempt++) {
-      host.send({ type: "player_state", px: 10, py: 20 });
-      guest.send({ type: "player_state", px: 30, py: 40 });
+      host.send({ type: "player_state", a: 10, b: 20 });
+      guest.send({ type: "player_state", a: 30, b: 40 });
       await new Promise((resolve) => setTimeout(resolve, 110));
       snapshot = host.inbox.filter((m) => m.type === "peer_snapshot").pop() ?? null;
       if (snapshot && snapshot.peers.length < 2) snapshot = null;
     }
     expect(snapshot?.peers).toHaveLength(2);
 
-    host.send({ type: "player_died", score:1 });
+    host.send({ type: "player_died", score: 1 });
     await guest.wait("peer_died", (m) => m.id === host.id);
-    guest.send({ type: "player_died", score:5 });
+    guest.send({ type: "player_died", score: 5 });
 
     const over = await host.wait("game_over");
     expect(over.finalRanks).toHaveLength(2);
@@ -216,10 +216,10 @@ describe("전체 방 흐름", () => {
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, start.startTime - Date.now()) + 100));
 
     // 호스트가 이벤트를 얹어 보낸다. 서버는 의미를 모르고 그대로 중계한다.
-    host.send({ type: "player_state", px: 10, py: 20, ev: "purge" });
+    host.send({ type: "player_state", a: 10, b: 20, ev: "purge" });
     let carried: { id: string; ev?: string } | undefined;
     for (let attempt = 0; attempt < 40 && !carried; attempt++) {
-      guest.send({ type: "player_state", px: 30, py: 40 }); // 스냅샷을 흐르게 하는 쪽
+      guest.send({ type: "player_state", a: 30, b: 40 }); // 스냅샷을 흐르게 하는 쪽
       await new Promise((resolve) => setTimeout(resolve, 110));
       carried = guest.inbox
         .filter((m) => m.type === "peer_snapshot")
@@ -231,8 +231,8 @@ describe("전체 방 흐름", () => {
     // 한 번 실려 나간 뒤로는 다시 붙지 않는다(계속 켜져 있으면 남의 화면에서 반복 재생된다).
     guest.inbox.length = 0;
     for (let attempt = 0; attempt < 3; attempt++) {
-      host.send({ type: "player_state", px: 11, py: 21 });
-      guest.send({ type: "player_state", px: 31, py: 41 });
+      host.send({ type: "player_state", a: 11, b: 21 });
+      guest.send({ type: "player_state", a: 31, b: 41 });
       await new Promise((resolve) => setTimeout(resolve, 110));
     }
     const repeated = guest.inbox
@@ -298,7 +298,7 @@ describe("입력 검증", () => {
     const start = await host.wait("game_start");
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, start.startTime - Date.now()) + 100));
 
-    host.send({ type: "player_died", score:100_000 });
+    host.send({ type: "player_died", score: 100_000 });
     expect((await host.wait("error")).reason).toBe("유효하지 않은 기록입니다.");
   });
 
