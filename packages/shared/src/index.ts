@@ -8,7 +8,7 @@ export { SeededRNG } from "./SeededRNG";
 import type { ScoreUnit } from "./types";
 
 export type { IGame } from "./IGame";
-export type { IRenderer } from "./IRenderer";
+export type { IRenderer, TextAlign } from "./IRenderer";
 export type {
   InputState,
   ScoreDirection,

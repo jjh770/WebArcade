@@ -311,7 +311,7 @@ export class JungnimGame implements IGame {
     if (this.dead) {
       const cx = jungnimConfig.screenWidth / 2;
       const cy = jungnimConfig.screenHeight / 2;
-      r.text(`사망 — 생존 ${formatTicks(this.survivalTicks)}`, cx - 90, cy, PLAYER_COLOR, 26);
+      r.text(`사망 — 생존 ${formatTicks(this.survivalTicks)}`, cx, cy, PLAYER_COLOR, 26, "center");
     }
   }
 

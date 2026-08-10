@@ -215,7 +215,7 @@ export class FloorGame implements IGame {
     }
     const cx = C.screenWidth / 2;
     const cy = C.screenHeight / 2;
-    r.text(`떨어졌다 — 생존 ${formatTicks(this.survivalTicks)}`, cx - 130, cy, ME, 26);
+    r.text(`떨어졌다 — 생존 ${formatTicks(this.survivalTicks)}`, cx, cy, ME, 26, "center");
   }
 
   /** 내 말. 칸에서 칸으로 곧게 미끄러지되 **꼬리를 끌고** 간다 — 위아래로 뛰지도

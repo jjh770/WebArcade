@@ -262,7 +262,7 @@ export class CurveGame implements IGame {
     if (this.dead) {
       const cx = C.screenWidth / 2;
       const cy = C.screenHeight / 2;
-      r.text(`사망 — 생존 ${formatTicks(this.survivalTicks)}`, cx - 90, cy, MY_COLOR, 26);
+      r.text(`사망 — 생존 ${formatTicks(this.survivalTicks)}`, cx, cy, MY_COLOR, 26, "center");
     }
   }
 

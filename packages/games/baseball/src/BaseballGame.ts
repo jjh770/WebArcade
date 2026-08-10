@@ -151,8 +151,8 @@ export class BaseballGame implements IGame {
     this.drawFrame(r);
     r.text(`관전: ${target.label}`, PAD, PAD - 14, HUD, 20);
     const cx = C.screenWidth / 2;
-    r.text(`${Math.round(target.a)}문제`, cx - 90, C.screenHeight / 2 - 30, HUD, 44);
-    r.text(`${Math.round(target.b)}점`, cx - 60, C.screenHeight / 2 + 40, GOOD, 36);
+    r.text(`${Math.round(target.a)}문제`, cx, C.screenHeight / 2 - 30, HUD, 44, "center");
+    r.text(`${Math.round(target.b)}점`, cx, C.screenHeight / 2 + 40, GOOD, 36, "center");
   }
 
   private drawFrame(r: IRenderer): void {
@@ -172,8 +172,9 @@ export class BaseballGame implements IGame {
     r.rect(left, PAD - 6, width * left0, 10, left0 < 0.25 ? ME : GOOD);
 
     r.text(title, left, PAD + 34, HUD, 24);
-    const scoreText = `${score}점`;
-    r.text(scoreText, C.screenWidth - left - scoreText.length * 15, PAD + 34, GOOD, 24);
+    // 오른쪽 끝에 붙인다. 예전엔 글자 수 × 15로 폭을 어림했는데, 점수가 세 자리가 되면
+    // 그만큼 밀렸다 — 폭을 아는 건 렌더러이니 자리만 알려 준다.
+    r.text(`${score}점`, C.screenWidth - left, PAD + 34, GOOD, 24, "right");
 
     // 기회는 점으로 — 개수가 적어 세는 것보다 보이는 게 빠르다.
     for (let i = 0; i < C.maxChances; i++) {
@@ -221,8 +222,8 @@ export class BaseballGame implements IGame {
   private drawEnd(r: IRenderer): void {
     const cx = C.screenWidth / 2;
     const why = this.state.chances <= 0 ? "기회를 다 썼다" : "시간 끝";
-    r.text(why, cx - 60, C.screenHeight / 2 - 20, ME, 32);
-    r.text(`${this.state.solved}문제 · ${this.state.score}점`, cx - 110, C.screenHeight / 2 + 40, HUD, 30);
+    r.text(why, cx, C.screenHeight / 2 - 20, ME, 32, "center");
+    r.text(`${this.state.solved}문제 · ${this.state.score}점`, cx, C.screenHeight / 2 + 40, HUD, 30, "center");
   }
 
   /* ---- IGame 나머지 ------------------------------------------------------ */

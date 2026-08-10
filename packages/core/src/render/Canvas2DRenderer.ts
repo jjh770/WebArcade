@@ -11,7 +11,7 @@
    - 둘 사이는 ctx 변환행렬이 잇는다. resize()가 그 행렬을 다시 세운다.
    ============================================================ */
 
-import type { IRenderer } from "@arcade/shared";
+import type { IRenderer, TextAlign } from "@arcade/shared";
 
 export class Canvas2DRenderer implements IRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -75,9 +75,13 @@ export class Canvas2DRenderer implements IRenderer {
     this.ctx.stroke();
   }
 
-  text(content: string, x: number, y: number, color: string, size = 16): void {
+  /** align은 x를 글자의 어느 쪽으로 볼지 정한다(기본 left = 지금까지의 동작).
+   *  ⚠️ 매 호출마다 넣는다 — ctx는 상태를 들고 있어서, 한 번 center로 두면 다음 호출까지
+   *     따라간다. 그리는 순서에 따라 조용히 어긋나느니 매번 못 박는 편이 싸다. */
+  text(content: string, x: number, y: number, color: string, size = 16, align: TextAlign = "left"): void {
     this.ctx.fillStyle = color;
     this.ctx.font = `${size}px sans-serif`;
+    this.ctx.textAlign = align;
     this.ctx.fillText(content, x, y);
   }
 
