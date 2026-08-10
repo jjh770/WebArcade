@@ -21,7 +21,8 @@ import { SeededRNG } from "@arcade/shared";
 import { jungnimConfig } from "./config";
 import { ArrowSpawner } from "./ArrowSpawner";
 import { PersonalSpawner } from "./PersonalSpawner";
-import { ArrowPool, type Arrow } from "./ArrowPool";
+import { ArrowPool } from "./ArrowPool";
+import { advanceArrows, clampToArena, clearArrowsNear, findHit } from "./arrowField";
 import { ItemSpawner } from "./ItemSpawner";
 
 const PLAYER_COLOR = "#e63946";
@@ -165,14 +166,14 @@ export class JungnimGame implements IGame {
       if (this.focusTicks > 0) this.focusTicks--;
       else this.me.spawner.update(tick, this.me.pool, this.me.x, this.me.y);
     }
-    this.moveArrows(this.me.pool);
+    advanceArrows(this.me.pool);
     // 파동은 죽어도 끝까지 재생된다(연출이라 사망과 무관).
     if (this.me.purgeFlash > 0) this.me.purgeFlash--;
 
     // ⚠️ 공통 월드는 사망과 무관하게 항상 전진(남들과 안 어긋나게 + 관전 배경).
     // 아이템도 공통 월드다 — 내가 죽어도 계속 뜨고 사라진다(관전 화면에 그대로 보인다).
     this.commonSpawner.update(tick, this.commonPool);
-    this.moveArrows(this.commonPool);
+    advanceArrows(this.commonPool);
     this.items.update(tick);
 
     // 관전 대상(남)들: 네트워크 위치(tx,ty)로 부드럽게 당긴 뒤 개인 화살을 근사.
@@ -182,12 +183,12 @@ export class JungnimGame implements IGame {
       peer.x += (peer.tx - peer.x) * s;
       peer.y += (peer.ty - peer.y) * s;
       peer.spawner.update(tick, peer.pool, peer.x, peer.y);
-      this.moveArrows(peer.pool);
+      advanceArrows(peer.pool);
       if (peer.purgeFlash > 0) peer.purgeFlash--;
     }
 
     if (!this.dead) {
-      const hit = this.findHit();
+      const hit = findHit(this.myPools, this.me.x, this.me.y);
       if (hit) {
         // 쉴드가 남아 있으면 그 화살이 방패에 부딪혀 부서진다.
         // ⚠️ 부수지 않으면 겹친 채로 다음 tick에 또 맞아 3회가 한순간에 날아간다.
@@ -201,6 +202,14 @@ export class JungnimGame implements IGame {
       if (!this.dead) this.takeItem(); // 죽는 프레임에 먹은 것으로 치지 않는다
       this.survivalTicks = tick; // 사망 프레임까지 포함 → 생존시간 = 사망 tick.
     }
+  }
+
+  /** 내 판정에 들어가는 화살 풀 둘. **순서가 결과를 정한다** — 여러 발이 겹쳤을 때
+   *  쉴드가 어느 것을 부수는지가 이 순서에서 나온다(arrowField.findHit 주석).
+   *  ⚠️ 남의 개인 화살(peers)은 여기 없다. 그건 관전 화면에 그리는 근사일 뿐이고
+   *     내 죽음을 정하지 않는다. */
+  private get myPools(): readonly ArrowPool[] {
+    return [this.commonPool, this.me.pool];
   }
 
   /** 아이템에 닿았으면 가져가고 그 자리에서 효과가 걸린다(모아두지 않는다).
@@ -233,7 +242,7 @@ export class JungnimGame implements IGame {
     } else if (kind === "shield") {
       this.shieldCharges += cfg.shield.charges;
     } else if (kind === "purge") {
-      this.purgeArrows(cfg.purge.radius);
+      clearArrowsNear(this.myPools, this.me.x, this.me.y, cfg.purge.radius);
       this.startPurgeRing(this.me);
       // 내 화면에서만 지운 화살이라, 나를 관전 중인 사람 화면에도 같은 파동을 재현하도록 알린다.
       this.pendingPeerEvent = "purge";
@@ -246,20 +255,6 @@ export class JungnimGame implements IGame {
     avatar.purgeFlash = jungnimConfig.item.purge.ringTicks;
     avatar.purgeX = avatar.x;
     avatar.purgeY = avatar.y;
-  }
-
-  /** 내 주변 반경 안의 화살을 지운다. 개인 화살은 원래 내 것이고, 공통 화살은
-   *  내 화면에서만 사라진다(관전자 화면엔 남는다 — config.item.purge 주석 참조). */
-  private purgeArrows(radius: number): void {
-    const radius2 = radius * radius;
-    for (const pool of [this.commonPool, this.me.pool]) {
-      for (const arrow of pool.items) {
-        if (!arrow.active) continue;
-        const dx = this.me.x - arrow.x;
-        const dy = this.me.y - arrow.y;
-        if (dx * dx + dy * dy <= radius2) pool.release(arrow);
-      }
-    }
   }
 
   /** 관전 대상(남)들의 목표 위치를 반영. 새 대상은 아바타 생성, 빠진 대상은 제거. */
@@ -509,42 +504,6 @@ export class JungnimGame implements IGame {
     r.line(a.x - ux, a.y - uy, a.x + ux, a.y + uy, a.personal ? PERSONAL_COLOR : ARROW_COLOR, 3);
   }
 
-  /** 활성 화살을 한 스텝 전진시키고, 경기장 원 밖으로 나간 것은 풀로 반납. */
-  private moveArrows(pool: ArrowPool): void {
-    const { cx, cy, radius } = jungnimConfig.arena;
-    const cull = radius + jungnimConfig.arrowLength; // 둘레를 이만큼 벗어나면 사라진다.
-    const cull2 = cull * cull;
-    for (const a of pool.items) {
-      if (!a.active) continue;
-      a.x += a.vx;
-      a.y += a.vy;
-      const dx = a.x - cx;
-      const dy = a.y - cy;
-      if (dx * dx + dy * dy > cull2) pool.release(a);
-    }
-  }
-
-  /** 내 플레이어와 화살(공통 + 내 개인)의 원-원 충돌. 남의 개인 화살은 판정 대상 아님. */
-  /** 나를 맞힌 화살과 그 풀(없으면 null). 쉴드가 그 한 발만 부수려면 어느 화살인지 알아야 한다. */
-  private findHit(): { arrow: Arrow; pool: ArrowPool } | null {
-    const hitR = jungnimConfig.playerRadius + jungnimConfig.arrowRadius;
-    const hitR2 = hitR * hitR;
-    for (const pool of [this.commonPool, this.me.pool]) {
-      const arrow = this.hitInPool(pool, hitR2);
-      if (arrow) return { arrow, pool };
-    }
-    return null;
-  }
-
-  private hitInPool(pool: ArrowPool, hitR2: number): Arrow | null {
-    for (const a of pool.items) {
-      if (!a.active) continue;
-      const dx = this.me.x - a.x;
-      const dy = this.me.y - a.y;
-      if (dx * dx + dy * dy <= hitR2) return a;
-    }
-    return null;
-  }
 }
 
 /** 아이템 종류의 표시색·이름. 모르는 종류면 기본값(종류가 늘어도 옛 판정이 안 죽는다). */
@@ -554,18 +513,4 @@ function kindColor(kind: string): string {
 
 function kindLabel(kind: string): string {
   return jungnimConfig.item.kinds.find((entry) => entry.kind === kind)?.label ?? "아이템";
-}
-
-/** 아바타를 원형 경기장 안으로 끌어당긴다. 중심에서 (반지름-플레이어반지름)보다 멀면
- *  그 경계 원 위로 되돌린다. 결정론과 무관하지만 부수효과는 아바타 좌표에 국한. */
-function clampToArena(a: { x: number; y: number }): void {
-  const { cx, cy, radius } = jungnimConfig.arena;
-  const maxDist = radius - jungnimConfig.playerRadius;
-  const dx = a.x - cx;
-  const dy = a.y - cy;
-  const dist = Math.hypot(dx, dy);
-  if (dist > maxDist && dist > 0) {
-    a.x = cx + (dx / dist) * maxDist;
-    a.y = cy + (dy / dist) * maxDist;
-  }
 }
