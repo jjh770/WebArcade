@@ -266,3 +266,33 @@ describe("옛 기록 살리기 (ticks → score)", () => {
     expect(stored!.every((row) => "score" in row && !("ticks" in row))).toBe(true);
   });
 });
+
+/* 자기신고 상한은 신고값이 **시간일 때만** 뜻이 있다. 어느 쪽인지는 발급 시점에 서버가
+   정해 티켓 서명 안에 봉인한다(timedGames.ts) — 제출할 때 받으면 "점수형입니다"라고
+   우기는 것만으로 검사를 끌 수 있기 때문이다. 그 봉인이 실제로 도는지 확인한다. */
+describe("기록의 단위는 티켓에 봉인된다", () => {
+  it("점수가 기록인 게임은 큰 숫자도 받는다 — 시간 상한을 안 건다", async () => {
+    const { ticket } = await takeTicket("baseball");
+    const { status, body } = await submit(ticket, "야구선수", 100_000);
+    expect(status).toBe(200);
+    expect(body.best).toBe(100_000);
+  });
+
+  it("시간이 기록인 게임은 같은 숫자를 거부한다 — 차이를 만드는 건 티켓뿐이다", async () => {
+    const { ticket } = await takeTicket("jungnim");
+    expect((await submit(ticket, "허풍쟁이", 100_000)).status).toBe(400);
+  });
+
+  it("시간형 티켓에 점수형이라고 우겨 넣으면 서명에서 걸린다", async () => {
+    const { ticket } = await takeTicket("jungnim");
+    const [encoded, signature] = ticket.split(".");
+    const payload = JSON.parse(atob(encoded!.replace(/-/g, "+").replace(/_/g, "/")));
+    delete payload.u; // "이건 점수형이야" — 검사를 끄려는 시도
+    const forged = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const result = await submit(`${forged}.${signature}`, "위조꾼", 100_000);
+    expect(result.status).toBe(400);
+    // ⚠️ 거부 **이유**까지 본다. 서명을 안 보고 통과시켰다면 u가 빠진 덕에 시간 검사도
+    //    건너뛰어 200이 났을 것이다 — 즉 이 테스트가 400만 보면 헛돈다.
+    expect(result.body.reason).toContain("유효하지 않습니다");
+  });
+});

@@ -26,6 +26,7 @@ import {
   type BoardEntry,
   type TicketPayload,
 } from "./soloRules";
+import { isTimedGame } from "./timedGames";
 import { isNickname } from "./validation";
 
 /** 보드는 하나뿐이다. 이름을 바꾸면 기록이 통째로 새 오브젝트로 옮겨간다(=초기화). */
@@ -95,6 +96,9 @@ export class BoardObject {
       s: crypto.getRandomValues(new Uint32Array(1))[0]!,
       t: Date.now(),
       n: crypto.randomUUID(),
+      // 기록을 시간으로 견줄 수 있는 게임인지를 **여기서 정해 서명에 봉인한다.**
+      // 제출할 때 받으면 클라가 "점수형입니다"라고 우겨 검사를 끌 수 있다.
+      ...(isTimedGame(gameId) ? { u: "ticks" as const } : {}),
     };
     const encoded = encodePayload(payload);
     return Response.json({ ticket: `${encoded}.${await this.sign(encoded)}`, seed: payload.s });

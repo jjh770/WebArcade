@@ -24,6 +24,7 @@ import type { ServerMessage } from "@arcade/shared";
 import { roomGraceMs, type Env } from "./env";
 import { RankingService } from "./RankingService";
 import { Room, ROOM_CAPACITY, type RoomSnapshot } from "./Room";
+import { isTimedGame } from "./timedGames";
 import { parseClientMessage } from "./validation";
 
 const ROOM_KEY = "room";
@@ -38,10 +39,8 @@ const SNAPSHOT_MS = 100;
 /** 자기신고 기록의 허용 오차(tick). 이보다 더 오래 버텼다는 주장은 거부한다.
  *  ⚠️ 상한만 막을 뿐 "일찍 죽고 늦게 신고"는 못 막는다 — 서버가 게임을 모르기 때문.
  *     리플레이 검증을 하지 않기로 한 이유는 DESIGN 10절 참조.
- *  ⚠️ **이 검사는 기록이 tick일 때만 뜻이 있다.** 흐른 tick과 신고값을 직접 비교하므로,
- *     기록이 점수인 게임(숫자 야구)에서는 사실상 아무것도 막지 못한다. 서버가 단위를
- *     모르는 채 tick이라고 가정하는 유일한 자리다(soloRules.checkClaim에 같은 가정이
- *     하나 더 있다). 고치려면 단위를 서버까지 흘려야 하므로 따로 다룬다. */
+ *  ⚠️ 흐른 tick과 신고값을 직접 견주므로 **기록이 시간인 게임에만** 건다(timedGames.ts).
+ *     점수형 게임에 걸면 막지도 못하면서 점수 규모에 없던 상한만 씌운다. */
 const SURVIVAL_TOLERANCE_TICKS = 120;
 
 /** 소켓에 붙여 두는 신원. 하이버네이션을 건너 살아남는다. */
@@ -220,7 +219,11 @@ export class RoomObject {
       case "player_died": {
         const now = Date.now();
         if (!this.room.ensurePlaying(now)) return;
-        if (msg.score > this.room.elapsedTicks(now) + SURVIVAL_TOLERANCE_TICKS) {
+        // 시간이 기록인 게임에서만 견줄 수 있다 — 방의 gameId로 판단한다(클라 말이 아니라).
+        if (
+          isTimedGame(this.room.gameId) &&
+          msg.score > this.room.elapsedTicks(now) + SURVIVAL_TOLERANCE_TICKS
+        ) {
           return this.send(ws, { type: "error", reason: "유효하지 않은 기록입니다." });
         }
         if (!this.room.markDied(id, msg.score)) return;

@@ -22,7 +22,10 @@ import {
 import { isAdmin, sameSecret } from "../packages/edge/src/adminAuth";
 import type { Env } from "../packages/edge/src/env";
 
-const TICKET: TicketPayload = { g: "jungnim", s: 12345, t: 1_000_000, n: "nonce-1" };
+/** 기록이 생존 tick인 게임의 티켓. `u`는 발급할 때 서버가 봉인한다(timedGames.ts). */
+const TICKET: TicketPayload = { g: "jungnim", s: 12345, t: 1_000_000, n: "nonce-1", u: "ticks" };
+/** 기록이 점수인 게임의 티켓. `u`가 없다 = 흐른 시간과 견줄 수 없다. */
+const SCORED: TicketPayload = { g: "baseball", s: 12345, t: 1_000_000, n: "nonce-2" };
 
 describe("티켓 인코딩", () => {
   it("담은 내용이 그대로 돌아온다", () => {
@@ -73,6 +76,23 @@ describe("기록 신고 검사", () => {
     expect(checkClaim(TICKET, -1, now).ok).toBe(false);
     expect(checkClaim(TICKET, 1.5, now).ok).toBe(false);
     expect(checkClaim(TICKET, Number.NaN, now).ok).toBe(false);
+  });
+
+  /* 시간 상한은 신고값이 **시간일 때만** 뜻이 있다. 점수형 게임에 걸면 막지도 못하면서
+     (점수는 흐른 시간과 무관하다) 게임의 점수 규모에 없던 벽만 세운다 — 실제로
+     baseball/config.ts가 "점수를 열 배로 키우면 서버 검사에 걸린다"고 적어 두고 있었다. */
+  describe("점수가 기록인 게임", () => {
+    it("시간 상한을 걸지 않는다 — 1분 만에 만 점도 받는다", () => {
+      expect(checkClaim(SCORED, 10_000, now)).toEqual({ ok: true });
+      // 같은 숫자를 시간형 티켓으로 내면 거부된다. 차이를 만드는 건 티켓뿐이다.
+      expect(checkClaim(TICKET, 10_000, now).ok).toBe(false);
+    });
+
+    it("그래도 티켓 유효기간과 숫자 형식은 본다 — 서버가 말할 수 있는 건 여기까지다", () => {
+      expect(checkClaim(SCORED, 100, TICKET.t + TICKET_TTL_MS + 1).ok).toBe(false);
+      expect(checkClaim(SCORED, -1, now).ok).toBe(false);
+      expect(checkClaim(SCORED, 1.5, now).ok).toBe(false);
+    });
   });
 });
 

@@ -289,17 +289,32 @@ describe("입력 검증", () => {
     expect((await client.wait("error")).reason).toBe("유효하지 않은 메시지입니다.");
   });
 
-  it("경과 시간보다 오래 버텼다는 주장은 거부한다", async () => {
-    // 상한만 막는다 — "일찍 죽고 늦게 신고"는 못 막는다(서버가 게임을 모른다).
-    // 리플레이 검증을 하지 않기로 한 이유는 DESIGN 10절 참조.
-    const code = await createRoom();
+  /** 방을 하나 만들어 라운드가 도는 상태까지 데려간다. */
+  async function playing(gameId: string) {
+    const code = await createRoom(gameId);
     const host = await join(code, "Host");
     host.send({ type: "start_game" });
     const start = await host.wait("game_start");
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, start.startTime - Date.now()) + 100));
+    return host;
+  }
 
+  it("경과 시간보다 오래 버텼다는 주장은 거부한다", async () => {
+    // 상한만 막는다 — "일찍 죽고 늦게 신고"는 못 막는다(서버가 게임을 모른다).
+    // 리플레이 검증을 하지 않기로 한 이유는 DESIGN 10절 참조.
+    const host = await playing("jungnim");
     host.send({ type: "player_died", score: 100_000 });
     expect((await host.wait("error")).reason).toBe("유효하지 않은 기록입니다.");
+  });
+
+  it("점수가 기록인 게임에는 그 상한을 걸지 않는다", async () => {
+    // 같은 숫자, 다른 게임. 흐른 시간과 견주는 건 기록이 시간일 때만 뜻이 있고,
+    // 점수형에 걸면 막지도 못하면서 게임의 점수 규모에 없던 벽만 세운다(timedGames.ts).
+    const host = await playing("baseball");
+    host.send({ type: "player_died", score: 100_000 });
+    // 거부 대신 라운드가 정상 종료된다(혼자였으니 곧 game_over).
+    const over = await host.wait("game_over");
+    expect(over.finalRanks[0]!.score).toBe(100_000);
   });
 
   it("클럭 동기화 요청에 같은 requestId로 답한다", async () => {

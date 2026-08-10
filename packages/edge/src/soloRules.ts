@@ -31,6 +31,15 @@ export type TicketPayload = {
   t: number;
   /** 일회용 일련번호. 같은 티켓의 두 번째 제출을 막는다. */
   n: string;
+  /** 이 게임의 기록이 **흐른 시간**인가(`"ticks"`면 그렇다, 없으면 아니다).
+   *
+   *  ⚠️ 발급 시점에 서버가 정해 **서명 안에 봉인한다.** 클라가 보내는 값이었다면
+   *     "점수형입니다"라고 우기는 것만으로 시간 검사를 통째로 건너뛸 수 있다 —
+   *     그러면 검사가 있으나 마나다. 티켓에 있어야 하는 이유가 이것이다.
+   *  ⚠️ 없으면 **검사를 건너뛴다**(모르면 안 막는다). 이름이 바뀌기 전에 발급된
+   *     티켓도 그대로 통과한다 — 유효기간(30분) 동안 방어가 잠깐 느슨할 뿐,
+   *     정당한 기록이 거부되는 일은 없다. 둘 중 이쪽이 덜 나쁘다. */
+  u?: "ticks";
 };
 
 /** 보드 한 줄. 닉네임은 소유권이 없으므로 신원이 아니라 표시용 이름일 뿐이다.
@@ -84,13 +93,18 @@ export function decodePayload(encoded: string): TicketPayload | null {
   if (typeof g !== "string" || g.length === 0) return null;
   if (!Number.isFinite(s) || !Number.isFinite(t)) return null;
   if (typeof n !== "string" || n.length === 0) return null;
-  return { g, s: Number(s), t: Number(t), n };
+  // u는 못 알아보면 **없는 것으로 친다.** 티켓을 거부하지 않는 이유: 이 값은 방어를
+  // 켜는 스위치일 뿐이라, 모르는 값 때문에 정당한 기록을 버리는 게 더 손해다.
+  const { u } = parsed as Record<string, unknown>;
+  return { g, s: Number(s), t: Number(t), n, ...(u === "ticks" ? { u } : {}) };
 }
 
 export type ClaimCheck = { ok: true } | { ok: false; reason: string };
 
 /** 이 티켓으로 이 기록을 낼 수 있는가. 서명 검증과 일련번호 소진 확인은
- *  호출자(BoardObject)가 이미 끝냈다고 본다 — 여기서는 시간 산수만 한다. */
+ *  호출자(BoardObject)가 이미 끝냈다고 본다 — 여기서는 시간 산수만 한다.
+ *  ⚠️ 기록이 시간이 아닌 게임(payload.u가 없음)에서는 **티켓 유효기간만** 본다.
+ *     서버가 그 숫자에 대해 말할 수 있는 게 그것뿐이기 때문이다. */
 export function checkClaim(payload: TicketPayload, score: number, now: number): ClaimCheck {
   if (!Number.isSafeInteger(score) || score < 0) {
     return { ok: false, reason: "유효하지 않은 기록입니다." };
@@ -99,13 +113,15 @@ export function checkClaim(payload: TicketPayload, score: number, now: number): 
   if (age < 0 || age > TICKET_TTL_MS) {
     return { ok: false, reason: "기록 티켓이 만료되었습니다. 다시 시작해 주세요." };
   }
-  // ⚠️ 여기서만 서버가 **기록을 tick이라고 가정한다.** 신고값을 초로 바꿔 경과시간과 견주는데,
-  //    기록이 점수인 게임(숫자 야구)에서는 이 비교가 사실상 아무것도 막지 못한다
-  //    (티켓 TTL이 30분이라 산술상 10만점대까지 통과한다). 고치려면 단위를 서버까지 흘려야
-  //    하므로 따로 다룬다 — RoomObject의 SURVIVAL_TOLERANCE_TICKS에 같은 가정이 하나 더 있다.
-  const claimedMs = (score / TICKS_PER_SECOND) * 1000;
-  if (claimedMs > age + CLAIM_TOLERANCE_MS) {
-    return { ok: false, reason: "유효하지 않은 기록입니다." };
+  // 여기서부터는 **기록이 시간일 때만** 뜻이 있는 산수다. 신고값을 초로 바꿔 경과시간과
+  // 견준다 — "1초 만에 10분을 버텼다"가 여기서 걸린다.
+  // ⚠️ 점수형 게임에는 걸지 않는다. 걸어 봐야 막지는 못하면서(점수는 시간과 무관하다)
+  //    게임 설계에 없던 상한만 씌운다(timedGames.ts 머리말).
+  if (payload.u === "ticks") {
+    const claimedMs = (score / TICKS_PER_SECOND) * 1000;
+    if (claimedMs > age + CLAIM_TOLERANCE_MS) {
+      return { ok: false, reason: "유효하지 않은 기록입니다." };
+    }
   }
   return { ok: true };
 }
