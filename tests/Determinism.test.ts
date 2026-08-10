@@ -70,7 +70,7 @@ function step(game: JungnimGame, ticks: number, from = 0, input: InputState = ID
   for (let tick = from; tick < from + ticks; tick++) game.update(tick, input);
 }
 
-type Item = { x: number; y: number; bornTick: number; expireTick: number };
+type Item = { kind: string; x: number; y: number; bornTick: number; expireTick: number };
 
 /** 지금 떠 있는 아이템(없으면 null). 화면 밖 상태라 내부를 직접 들여다본다. */
 function itemOf(game: JungnimGame): Item | null {

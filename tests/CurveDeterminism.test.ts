@@ -280,7 +280,7 @@ describe("관전용 남 꼬리 재구성 (C-1 — 판정엔 안 쓰는 시각 �
     game.init(2); // 재시작
 
     const cap = new LineCapture(PEER0);
-    game.renderSpectator(cap, { id: "p1", x: 0, y: 0, label: "고수" });
+    game.renderSpectator(cap, { id: "p1", a: 0, b: 0, label: "고수" });
     expect(cap.segments).toHaveLength(0);
   });
 });

@@ -30,7 +30,7 @@ class FloorCapture implements IRenderer {
   circle(): void {}
   text(): void {}
   line(): void {}
-  rect(x: number, y: number, w: number, h: number, color: string): void {
+  rect(x: number, y: number, w: number, _h: number, color: string): void {
     if (w >= C.screenWidth) return; // 배경
     const key = `${Math.round(x)},${Math.round(y)}`;
     if (color === TILE) this.solid.push(key);

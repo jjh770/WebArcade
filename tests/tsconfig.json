@@ -1,0 +1,22 @@
+// 테스트 타입 검사용. 빌드에는 참여하지 않는다(`noEmit`).
+//
+// ⚠️ 왜 루트 tsconfig의 references에 넣지 않았나: 여기 테스트들은 패키지의 **소스 파일을
+//    상대경로로 직접** 읽는다(`../packages/edge/src/Room`). 프로젝트 참조는 참조 대상의
+//    산출물을 통해 들어오길 요구하므로, 참조로 엮으면 그 임포트가 전부 TS6307이 된다.
+//    그래서 참조 없이 따로 검사한다 — `npm run typecheck`이 `tsc -b` 뒤에 이걸 돈다.
+//
+// 이 검사가 없던 동안 무슨 일이 있었나: 계약 타입(SpectateSignal 등)을 바꿔도 typecheck는
+// 깨끗했고 테스트를 **실행해야만** 어긋남이 드러났다. 켜자마자 어긋남 7건이 나왔고, 그중
+// 둘은 실행으로는 안 잡히던 것이었다(쓰이지 않는 반환값·안 도는 헬퍼).
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // 테스트는 세 세계를 한꺼번에 들여다본다 — Node(파일 읽기) · 브라우저(DOM) ·
+    // Workers(edge의 Env). 검사만 하고 실행은 각자 맞는 런타임에서 하므로 다 넣는다.
+    "types": ["node", "@cloudflare/workers-types"]
+  },
+  // vite-env.d.ts: app 소스가 `import.meta.env`를 읽는다. 앰비언트 선언이라
+  // 임포트로는 안 따라 들어와 여기서 직접 집어넣어야 한다.
+  "include": ["**/*.ts", "../packages/app/src/vite-env.d.ts"]
+}

@@ -1,0 +1,16 @@
+// 서버 테스트 타입 검사용. 빌드에는 참여하지 않는다(`noEmit`).
+//
+// ⚠️ 왜 `packages/edge/tsconfig.json`에 합치지 않았나: 그쪽은 `include: ["src"]`에
+//    `rootDir: "./src"`로 묶여 있고 wrangler가 배포하는 것도 src뿐이다. 테스트를 거기
+//    끼워 넣으면 배포 대상 프로젝트가 테스트까지 짊어진다.
+// ⚠️ 여기만 `cloudflare:test`(miniflare가 주는 가상 모듈)를 안다. 그래서 types가 다르다.
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2022"],
+    // `cloudflare:test`의 선언은 types가 아니라 cloudflare-test.d.ts가 끌어온다.
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["**/*.ts"]
+}

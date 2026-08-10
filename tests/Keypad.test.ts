@@ -48,7 +48,7 @@ class Capture implements IRenderer {
 
 function draw(game: BaseballGame): Capture {
   const r = new Capture();
-  game.render(r, 0);
+  game.render(r); // 이 게임은 보간 alpha를 안 받는다(고정 화면이라 쓸 데가 없다).
   return r;
 }
 

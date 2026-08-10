@@ -4,7 +4,8 @@
    서버 주소는 import.meta.env에서 오므로 모듈을 불러오기 전에 심는다. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import.meta.env.VITE_WS_URL = "ws://server.test:8787";
+// 계약상 readonly(빌드 타임에 박히는 값)라 캐스트로 넘긴다 — 시험에서만 심는다.
+(import.meta.env as { VITE_WS_URL?: string }).VITE_WS_URL = "ws://server.test:8787";
 const { takeTicket, submitScore, fetchBoard } = await import("../packages/app/src/soloRanking");
 
 type Call = { url: string; init: RequestInit };

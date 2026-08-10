@@ -16,11 +16,12 @@
     "build": "tsc -b && npm run build --workspace @arcade/app",
     "deploy:server": "npm run deploy --workspace @arcade/edge",
     "board": "node scripts/board.mjs",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && tsc -p tests/tsconfig.json && tsc -p packages/edge/test/tsconfig.json",
     "test": "vitest run",
     "preview": "npm run preview --workspace @arcade/app"
   },
   "devDependencies": {
+    "@types/node": "^26.2.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }

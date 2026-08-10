@@ -5,7 +5,7 @@
       이게 깨지면 소리 때문에 결정론이 갈린다 — 멀티에서 서로 다른 판을 보게 된다.
    2) 한 프레임에 고정 스텝이 여러 번 돌아도(따라잡기) 같은 소리가 겹쳐 나지 않는다. */
 import { describe, expect, it, vi } from "vitest";
-import type { IGame, IRenderer, InputState } from "@arcade/shared";
+import type { IGame, IRenderer, InputState, SpectateSignal } from "@arcade/shared";
 import type { InputSource } from "../packages/core/src/input/InputSource";
 import { GameRunner } from "../packages/core/src/GameRunner";
 import { CurveGame } from "../packages/games/curve/src/CurveGame";
@@ -124,7 +124,9 @@ class ItemProbe implements IRenderer {
   readonly width = 800;
   readonly height = 800;
   item: { x: number; y: number } | null = null;
-  private static readonly COLORS = new Set(jungnimConfig.item.kinds.map((k) => k.color));
+  // Set<string>으로 못박는다 — config가 as const라 그냥 두면 색 리터럴 넷의 유니온이 되어,
+  // 렌더가 넘겨주는 평범한 string으로는 has()를 부를 수 없다.
+  private static readonly COLORS: ReadonlySet<string> = new Set(jungnimConfig.item.kinds.map((k) => k.color));
   reset(): this {
     this.item = null;
     return this;
@@ -167,8 +169,8 @@ class SoundyGame implements IGame {
   isPlayerDead(): boolean {
     return false;
   }
-  getPosition(): { x: number; y: number } {
-    return { x: 0, y: 0 };
+  getPosition(): SpectateSignal {
+    return { a: 0, b: 0 };
   }
   getScore(): number {
     return 0;

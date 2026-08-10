@@ -121,7 +121,7 @@ vercel --prod                              # 이 값이 번들에 박힌다
 ### 참고: 개별 명령
 
 ```bash
-npm run typecheck      # 전체 타입 검사 (tsc -b)
+npm run typecheck      # 전체 타입 검사 (패키지 + tests/ + packages/edge/test/)
 npm test               # 전체 테스트 (Node 단위 + workerd 통합)
 npx vitest run --project unit   # 순수 로직만 (빠름)
 npx vitest run --project edge   # 서버 전송 계층만 (workerd 안에서 실행)
