@@ -56,8 +56,8 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
       return { ...base, ...(ev === undefined ? {} : { ev }), ...(sc === undefined ? {} : { sc }) };
     }
     case "player_died":
-      return Number.isSafeInteger(value.survivalTicks) && Number(value.survivalTicks) >= 0
-        ? { type: value.type, survivalTicks: Number(value.survivalTicks) }
+      return Number.isSafeInteger(value.score) && Number(value.score) >= 0
+        ? { type: value.type, score: Number(value.score) }
         : null;
     case "fire_effect":
       // 서버는 효과의 의미를 모른다 — kind는 짧은 식별자 문자열, durationMs는 상한만,

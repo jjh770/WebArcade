@@ -243,14 +243,14 @@ describe("IGame 계약", () => {
     const game = fresh();
     answer(game, 0);
     const pos = game.getPosition();
-    expect(pos.x).toBe(1); // 푼 문제 수
-    expect(pos.y).toBe(game.getScore());
+    expect(pos.a).toBe(1); // 푼 문제 수
+    expect(pos.b).toBe(game.getScore());
   });
 
   it("관전 화면은 그 사람의 진척도를 보여 준다", () => {
     const game = fresh();
     const r = new Capture();
-    game.renderSpectator(r, { id: "p1", x: 3, y: 240, label: "남" });
+    game.renderSpectator(r, { id: "p1", a: 3, b: 240, label: "남" });
     expect(r.has("관전: 남")).toBe(true);
     expect(r.has("3문제")).toBe(true);
     expect(r.has("240점")).toBe(true);

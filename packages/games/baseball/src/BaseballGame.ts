@@ -151,8 +151,8 @@ export class BaseballGame implements IGame {
     this.drawFrame(r);
     r.text(`관전: ${target.label}`, PAD, PAD - 14, HUD, 20);
     const cx = C.screenWidth / 2;
-    r.text(`${Math.round(target.x)}문제`, cx - 90, C.screenHeight / 2 - 30, HUD, 44);
-    r.text(`${Math.round(target.y)}점`, cx - 60, C.screenHeight / 2 + 40, GOOD, 36);
+    r.text(`${Math.round(target.a)}문제`, cx - 90, C.screenHeight / 2 - 30, HUD, 44);
+    r.text(`${Math.round(target.b)}점`, cx - 60, C.screenHeight / 2 + 40, GOOD, 36);
   }
 
   private drawFrame(r: IRenderer): void {
@@ -238,12 +238,12 @@ export class BaseballGame implements IGame {
     return isOver(this.state, this.worldTick);
   }
 
-  /** 관전 중계에 **위치 대신 진척도를 싣는다** — x=푼 문제 수 / y=점수.
+  /** 관전 중계에 **위치 대신 진척도를 싣는다** — a=푼 문제 수 / b=점수.
    *  이 게임엔 좌표가 없고 통로는 숫자 둘이라(SpectateSignal), 그 둘에 무엇을 담을지는
    *  게임이 정한다. ⚠️ renderSpectator가 같은 뜻으로 읽어야 한다 — 둘은 한 쌍이고,
    *  중간 프레임에는 보간된 소수가 오므로 받는 쪽에서 반올림한다. */
   getPosition(): SpectateSignal {
-    return { x: this.state.solved, y: this.state.score };
+    return { a: this.state.solved, b: this.state.score };
   }
 
   /* syncPeers는 구현하지 않는다 — 남의 화면에 쌓을 로컬 시각 요소가 없다.

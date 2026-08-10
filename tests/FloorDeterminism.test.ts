@@ -63,8 +63,8 @@ function floorFingerprint(inputAt: (tick: number) => InputState, ticks: number, 
 function cellOf(game: FloorGame): { col: number; row: number } {
   const p = game.getPosition();
   return {
-    col: Math.round((p.x - C.margin - CELL / 2) / CELL) + 0,
-    row: Math.round((p.y - C.margin - CELL / 2) / CELL) + 0,
+    col: Math.round((p.a - C.margin - CELL / 2) / CELL) + 0,
+    row: Math.round((p.b - C.margin - CELL / 2) / CELL) + 0,
   };
 }
 

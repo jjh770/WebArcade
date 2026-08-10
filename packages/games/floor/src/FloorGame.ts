@@ -17,7 +17,7 @@
    ⚠️ 플레이어 위치를 절대 보지 않는다 — 보는 순간 클라마다 판이 갈린다.
    ============================================================ */
 
-import type { IGame, IRenderer, InputState, SpectateTarget, PeerState, SpawnContext } from "@arcade/shared";
+import type { IGame, IRenderer, InputState, SpectateSignal, SpectateTarget, PeerState, SpawnContext } from "@arcade/shared";
 import { formatTicks } from "@arcade/shared";
 import { SeededRNG } from "@arcade/shared";
 import { floorConfig as C } from "./config";
@@ -330,8 +330,11 @@ export class FloorGame implements IGame {
     return this.dead;
   }
 
-  getPosition(): { x: number; y: number } {
-    return this.cellCenter(this.col, this.row);
+  /** 이 게임은 관전 신호에 좌표를 싣는다(칸이 아니라 칸의 중심점 — 받는 쪽이
+   *  toCell로 다시 칸을 찾는다). */
+  getPosition(): SpectateSignal {
+    const { x, y } = this.cellCenter(this.col, this.row);
+    return { a: x, b: y };
   }
 
   syncPeers(peers: readonly PeerState[]): void {
@@ -339,7 +342,7 @@ export class FloorGame implements IGame {
     for (const p of peers) {
       seen.add(p.id);
       if (!this.peers.has(p.id)) this.peerOrder.push(p.id);
-      this.peers.set(p.id, { x: p.x, y: p.y });
+      this.peers.set(p.id, { x: p.a, y: p.b }); // a·b는 이 게임에서 좌표다.
     }
     for (const id of [...this.peers.keys()]) if (!seen.has(id)) this.peers.delete(id);
   }

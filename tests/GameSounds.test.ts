@@ -23,7 +23,7 @@ function runPositions(game: IGame, ticks: number, input: InputState, drain: bool
     game.update(tick, input);
     if (drain) game.consumeSounds?.();
     const p = game.getPosition();
-    path.push(`${p.x.toFixed(6)},${p.y.toFixed(6)}`);
+    path.push(`${p.a.toFixed(6)},${p.b.toFixed(6)}`);
   }
   return path;
 }
@@ -98,7 +98,8 @@ describe("게임 소리 — 언제 나고 언제 안 나는가", () => {
       // 아이템 위치는 내부 필드가 아니라 **렌더 출력**에서 읽는다(십자 표시의 중점).
       game.render(probe.reset(), 0);
       if (tick % 37 === 0) phase = (phase * 5 + 3) % WANDER.length; // 결정론적 방향 전환
-      game.update(tick, probe.item ? towards(game.getPosition(), probe.item) : WANDER[phase]);
+      const me = game.getPosition(); // 죽림고수의 a·b는 좌표다
+      game.update(tick, probe.item ? towards({ x: me.a, y: me.b }, probe.item) : WANDER[phase]);
       picked = (game.consumeSounds() ?? []).includes("pickup");
     }
     expect(game.isPlayerDead()).toBe(false); // 줍기 전에 죽었으면 이 테스트는 아무것도 안 본 것

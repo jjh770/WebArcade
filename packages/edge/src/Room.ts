@@ -1,7 +1,9 @@
 /* ============================================================
    Room — 방 상태 (게임 내용을 모르는 순수 로직)
    ------------------------------------------------------------
-   서버는 "누가 방에 있고 얼마나 버텼는가"만 안다. 화살도 판정도 모른다.
+   서버는 "누가 방에 있고 기록이 얼마인가"만 안다. 화살도 판정도 모른다.
+   ⚠️ 그 기록이 **무엇인지도 모른다** — 게임에 따라 생존 tick이거나 점수다. 서버가 하는
+      일은 크기로 줄 세우는 것뿐이고, 단위를 붙이는 건 앱이다(ScoreUnit).
 
    `snapshot()` / `restore()`는 Durable Object 때문에 있다. 하이버네이션되면
    메모리 필드가 날아가므로 방 상태를 ctx.storage에 넣었다 되살려야 하는데,
@@ -19,7 +21,9 @@ export type Member = {
   id: string;
   nickname: string;
   alive: boolean;
-  survivalTicks: number;
+  /** 이 라운드의 **확정된** 기록. 살아 있는 동안은 0이고 죽는 순간 정해진다.
+   *  순위는 이 값으로만 매긴다(lastScore는 아직 확정 전의 중간값이다). */
+  finalScore: number;
   connected: boolean;
   px: number;
   py: number;
@@ -105,7 +109,7 @@ export class Room {
 
   addMember(id: string, nickname: string): boolean {
     if (this.state !== "waiting" || this.connectedCount >= this.capacity || this.hasConnectedMember(id)) return false;
-    this.members.push({ id, nickname, alive: true, survivalTicks: 0, connected: true, px: 0, py: 0, hasPosition: false, lastScore: 0 });
+    this.members.push({ id, nickname, alive: true, finalScore: 0, connected: true, px: 0, py: 0, hasPosition: false, lastScore: 0 });
     this.emptySince = null; // 사람이 들어왔다 → 유예 시계를 끈다.
     return true;
   }
@@ -130,7 +134,7 @@ export class Room {
     this.state = "countdown";
     for (const member of this.members) {
       member.alive = true;
-      member.survivalTicks = 0;
+      member.finalScore = 0;
       member.px = 0;
       member.py = 0;
       member.hasPosition = false;
@@ -161,11 +165,11 @@ export class Room {
     return true;
   }
 
-  markDied(id: string, survivalTicks: number): boolean {
+  markDied(id: string, score: number): boolean {
     const member = this.members.find((candidate) => candidate.id === id);
     if (!member || !member.alive) return false;
     member.alive = false;
-    member.survivalTicks = survivalTicks;
+    member.finalScore = score;
     return true;
   }
 
@@ -186,7 +190,7 @@ export class Room {
         //    무엇인지 모르고, 다만 **지어내지 않는다.**
         //    덤: 회피 게임에서도 이쪽이 정확하다. 끊긴 걸 서버가 알아채는 시각은 실제로
         //    끊긴 시각보다 늦을 수 있어(하이버네이션·타임아웃), 흐른 시간은 늘 부풀려졌다.
-        member.survivalTicks = this.state === "playing" ? member.lastScore : 0;
+        member.finalScore = this.state === "playing" ? member.lastScore : 0;
         died = true;
       }
       member.connected = false;
@@ -209,7 +213,7 @@ export class Room {
     this.startTime = null;
     for (const member of this.members) {
       member.alive = true;
-      member.survivalTicks = 0;
+      member.finalScore = 0;
       member.px = 0;
       member.py = 0;
       member.hasPosition = false;
@@ -230,7 +234,7 @@ export class Room {
       id: member.id,
       nickname: member.nickname,
       alive: member.alive,
-      survivalTicks: member.survivalTicks,
+      score: member.finalScore,
     }));
   }
 

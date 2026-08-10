@@ -177,13 +177,13 @@ describe("방향키 버튼으로 무너지는 바닥 조작하기", () => {
     pad.press("right");
     let tick = run(game, pad.input, 0, 30); // 30tick 내내 누른 채
     const held = game.getPosition();
-    expect(held.x).toBeGreaterThan(start.x);
+    expect(held.a).toBeGreaterThan(start.a);
 
     pad.release("right");
     tick = run(game, pad.input, tick, 5);
     pad.press("right"); // 다시 누르면 한 칸 더
     run(game, pad.input, tick, 5);
-    expect(game.getPosition().x).toBeGreaterThan(held.x);
+    expect(game.getPosition().a).toBeGreaterThan(held.a);
     expect(game.isPlayerDead()).toBe(false); // 아직 첫 물결 전이라 죽을 수 없다
   });
 
@@ -198,8 +198,8 @@ describe("방향키 버튼으로 무너지는 바닥 조작하기", () => {
     pad.press("right");
     tick = run(game, pad.input, tick, 10);
     const right = game.getPosition();
-    expect(right.y).toBe(down.y);
-    expect(right.x).toBeGreaterThan(down.x);
+    expect(right.b).toBe(down.b);
+    expect(right.a).toBeGreaterThan(down.a);
   });
 });
 

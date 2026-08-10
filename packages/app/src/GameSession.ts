@@ -16,7 +16,7 @@ import {
   InputManager,
   KeyEntry,
 } from "@arcade/core";
-import type { IGame, PeerSnapshot, PlayerPublic } from "@arcade/shared";
+import type { IGame, PeerSnapshot, PlayerPublic, SpectateSignal } from "@arcade/shared";
 import { isSoundId, play } from "./audio";
 import { GAME_REGISTRY, isGameId, type GameEntry, type GameId } from "./GameRegistry";
 import { PeerViews } from "./peerViews";
@@ -179,7 +179,8 @@ export class GameSession {
     return this.game?.getScore() ?? null;
   }
 
-  getPosition(): { x: number; y: number } | null {
+  /** 이번 보고에 실을 관전 신호(판이 안 돌면 null). 뜻은 게임이 정한다 — 세션은 나르기만. */
+  getPosition(): SpectateSignal | null {
     return this.roundActive ? this.game?.getPosition() ?? null : null;
   }
 

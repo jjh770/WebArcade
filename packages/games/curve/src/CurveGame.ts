@@ -17,7 +17,7 @@
    같은 시드 + 같은 입력이면 어느 클라에서 돌려도 꼬리가 픽셀 단위로 같다.
    ============================================================ */
 
-import type { IGame, IRenderer, InputState, PeerState, SpawnContext, SpectateTarget } from "@arcade/shared";
+import type { IGame, IRenderer, InputState, PeerState, SpawnContext, SpectateSignal, SpectateTarget } from "@arcade/shared";
 import { TICKS_PER_SECOND, formatTicks } from "@arcade/shared";
 import { SeededRNG } from "@arcade/shared";
 import { curveConfig as C } from "./config";
@@ -304,8 +304,9 @@ export class CurveGame implements IGame {
     return this.dead;
   }
 
-  getPosition(): { x: number; y: number } {
-    return { x: this.x, y: this.y };
+  /** 이 게임은 관전 신호에 좌표를 싣는다. */
+  getPosition(): SpectateSignal {
+    return { a: this.x, b: this.y };
   }
 
   getScore(): number {
@@ -359,10 +360,11 @@ export class CurveGame implements IGame {
       } else if (p.label) {
         trail.label = p.label;
       }
+      // 이 게임에서 관전 신호 a·b는 그 사람의 좌표다(getPosition이 그렇게 싣는다).
       const n = trail.xs.length;
-      if (n === 0 || trail.xs[n - 1] !== p.x || trail.ys[n - 1] !== p.y) {
-        trail.xs.push(p.x);
-        trail.ys.push(p.y);
+      if (n === 0 || trail.xs[n - 1] !== p.a || trail.ys[n - 1] !== p.b) {
+        trail.xs.push(p.a);
+        trail.ys.push(p.b);
       }
     }
   }
@@ -376,10 +378,10 @@ export class CurveGame implements IGame {
       const n = trail.xs.length;
       if (trail.label && n > 0) r.text(trail.label, trail.xs[n - 1]! + 8, trail.ys[n - 1]! - 8, trail.color, 15);
     }
-    // 관전 대상의 머리를 강조. 재구성 꼬리의 끝점을 쓰되, 없으면 target 좌표 폴백.
+    // 관전 대상의 머리를 강조. 재구성 꼬리의 끝점을 쓰되, 없으면 target 신호 폴백.
     const focus = this.peerTrails.get(target.id);
-    const hx = focus && focus.xs.length ? focus.xs[focus.xs.length - 1]! : target.x;
-    const hy = focus && focus.ys.length ? focus.ys[focus.ys.length - 1]! : target.y;
+    const hx = focus && focus.xs.length ? focus.xs[focus.xs.length - 1]! : target.a;
+    const hy = focus && focus.ys.length ? focus.ys[focus.ys.length - 1]! : target.b;
     r.circle(hx, hy, C.lineWidth, HEAD_COLOR);
     r.text(`관전: ${target.label}`, 12, 28, HUD_COLOR, 22);
   }

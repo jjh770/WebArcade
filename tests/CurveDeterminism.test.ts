@@ -164,11 +164,11 @@ describe("커브 피버 장애물 (매판 랜덤, 모두 같은 판)", () => {
       const spawn = game.getPosition();
       const { segments, circles } = captureOf(seed);
       for (const [x1, y1, x2, y2] of segments) {
-        expect(segDist(spawn.x, spawn.y, x1!, y1!, x2!, y2!)).toBeGreaterThan(80);
+        expect(segDist(spawn.a, spawn.b, x1!, y1!, x2!, y2!)).toBeGreaterThan(80);
       }
       for (const [cx, cy, r] of circles) {
         // 원 표면까지 거리(중심거리 - 반지름)가 넉넉해야 한다 — 원 안이면 음수.
-        expect(Math.hypot(spawn.x - cx!, spawn.y - cy!) - r!).toBeGreaterThan(80);
+        expect(Math.hypot(spawn.a - cx!, spawn.b - cy!) - r!).toBeGreaterThan(80);
       }
     }
   });
@@ -219,7 +219,7 @@ describe("관전용 남 꼬리 재구성 (C-1 — 판정엔 안 쓰는 시각 �
 
   /** 스냅샷 위치들을 순서대로 syncPeers에 흘려 넣는다(매 스냅샷 = 점 하나). */
   function feed(game: CurveGame, id: string, pts: readonly [number, number][]): void {
-    for (const [x, y] of pts) game.syncPeers([{ id, x, y }]);
+    for (const [a, b] of pts) game.syncPeers([{ id, a, b }]);
   }
 
   it("흘려 넣은 위치들이 그 순서대로 꼬리 폴리라인이 된다", () => {
@@ -228,7 +228,7 @@ describe("관전용 남 꼬리 재구성 (C-1 — 판정엔 안 쓰는 시각 �
     feed(game, "p1", [[100, 100], [110, 105], [122, 118]]);
 
     const cap = new LineCapture(PEER0);
-    game.renderSpectator(cap, { id: "p1", x: 122, y: 118, label: "고수" });
+    game.renderSpectator(cap, { id: "p1", a: 122, b: 118, label: "고수" });
     // 점 3개 → 선분 2개, 이어지는 좌표가 맞아야 한다.
     expect(cap.segments.map((s) => s.slice(0, 4))).toEqual([
       [100, 100, 110, 105],
@@ -243,17 +243,17 @@ describe("관전용 남 꼬리 재구성 (C-1 — 판정엔 안 쓰는 시각 �
     feed(game, "p1", [[200, 200], [200, 200], [210, 205], [210, 205]]);
 
     const cap = new LineCapture(PEER0);
-    game.renderSpectator(cap, { id: "p1", x: 210, y: 205, label: "고수" });
+    game.renderSpectator(cap, { id: "p1", a: 210, b: 205, label: "고수" });
     expect(cap.segments.map((s) => s.slice(0, 4))).toEqual([[200, 200, 210, 205]]); // 선분 1개뿐
   });
 
   it("여러 피어는 서로 다른 색으로, 입장 순서대로 배정된다", () => {
     const game = new CurveGame();
     game.init(1);
-    game.syncPeers([{ id: "a", x: 10, y: 10 }, { id: "b", x: 20, y: 20 }]);
-    game.syncPeers([{ id: "a", x: 12, y: 10 }, { id: "b", x: 22, y: 20 }]);
+    game.syncPeers([{ id: "a", a: 10, b: 10 }, { id: "b", a: 20, b: 20 }]);
+    game.syncPeers([{ id: "a", a: 12, b: 10 }, { id: "b", a: 22, b: 20 }]);
 
-    const target = { id: "a", x: 12, y: 10, label: "A" };
+    const target = { id: "a", a: 12, b: 10, label: "A" };
     const capA = new LineCapture(PEER0);
     const capB = new LineCapture(PEER1);
     game.renderSpectator(capA, target);
@@ -265,11 +265,11 @@ describe("관전용 남 꼬리 재구성 (C-1 — 판정엔 안 쓰는 시각 �
   it("각 피어 머리에 닉네임 이름표를 붙인다 (A-3)", () => {
     const game = new CurveGame();
     game.init(1);
-    game.syncPeers([{ id: "p1", x: 100, y: 100, label: "고수" }]);
-    game.syncPeers([{ id: "p1", x: 120, y: 110, label: "고수" }]);
+    game.syncPeers([{ id: "p1", a: 100, b: 100, label: "고수" }]);
+    game.syncPeers([{ id: "p1", a: 120, b: 110, label: "고수" }]);
 
     const cap = new TextCapture();
-    game.renderSpectator(cap, { id: "p1", x: 120, y: 110, label: "고수" });
+    game.renderSpectator(cap, { id: "p1", a: 120, b: 110, label: "고수" });
     expect(cap.texts).toContain("고수"); // 이름표
   });
 
@@ -286,7 +286,7 @@ describe("관전용 남 꼬리 재구성 (C-1 — 판정엔 안 쓰는 시각 �
 });
 
 describe("멀티 스폰 분리 (C-2 — 플레이어별 다른 시작점)", () => {
-  const spawnAt = (seed: number, index: number, count: number): { x: number; y: number } => {
+  const spawnAt = (seed: number, index: number, count: number): { a: number; b: number } => {
     const g = new CurveGame();
     g.init(seed, { index, count });
     return g.getPosition();
@@ -297,7 +297,7 @@ describe("멀티 스폰 분리 (C-2 — 플레이어별 다른 시작점)", () =
       const pts = [0, 1, 2, 3].map((i) => spawnAt(seed, i, 4));
       for (let a = 0; a < pts.length; a++) {
         for (let b = a + 1; b < pts.length; b++) {
-          expect(Math.hypot(pts[a]!.x - pts[b]!.x, pts[a]!.y - pts[b]!.y)).toBeGreaterThan(1);
+          expect(Math.hypot(pts[a]!.a - pts[b]!.a, pts[a]!.b - pts[b]!.b)).toBeGreaterThan(1);
         }
       }
     }
@@ -501,11 +501,11 @@ describe("스릴 게이지 발사 → 상대 방해 (2단계)", () => {
     const g = new CurveGame();
     g.init(1);
     g.applyEffect?.("sluggish", 100); // 6tick 둔화
-    const pts: { x: number; y: number }[] = [g.getPosition()];
+    const pts: { a: number; b: number }[] = [g.getPosition()];
     for (let t = 1; t <= 20; t++) { g.update(t, TURN_RIGHT); pts.push(g.getPosition()); }
     const turnAt = (i: number): number => {
-      const ax = pts[i]!.x - pts[i - 1]!.x, ay = pts[i]!.y - pts[i - 1]!.y;
-      const bx = pts[i + 1]!.x - pts[i]!.x, by = pts[i + 1]!.y - pts[i]!.y;
+      const ax = pts[i]!.a - pts[i - 1]!.a, ay = pts[i]!.b - pts[i - 1]!.b;
+      const bx = pts[i + 1]!.a - pts[i]!.a, by = pts[i + 1]!.b - pts[i]!.b;
       return Math.abs(Math.atan2(ax * by - ay * bx, ax * bx + ay * by));
     };
     const duringSluggish = turnAt(3); // 둔화 구간

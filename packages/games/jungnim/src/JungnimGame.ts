@@ -15,7 +15,7 @@
      개인 화살을 관전 화면에서 시각적으로 근사할 수 있다. (DESIGN 관전 가시성)
    ============================================================ */
 
-import type { IGame, IRenderer, InputState, SpectateTarget, PeerState } from "@arcade/shared";
+import type { IGame, IRenderer, InputState, SpectateSignal, SpectateTarget, PeerState } from "@arcade/shared";
 import { TICKS_PER_SECOND, formatTicks } from "@arcade/shared";
 import { SeededRNG } from "@arcade/shared";
 import { jungnimConfig } from "./config";
@@ -268,15 +268,16 @@ export class JungnimGame implements IGame {
     for (const p of peers) {
       seen.add(p.id);
       const existing = this.peers.get(p.id);
+      // 이 게임에서 관전 신호 a·b는 그 사람의 좌표다(getPosition이 그렇게 싣는다).
       if (existing) {
-        existing.tx = p.x; // 목표만 갱신 — 실제 위치(x,y)는 update에서 부드럽게 당김.
-        existing.ty = p.y;
+        existing.tx = p.a; // 목표만 갱신 — 실제 위치(x,y)는 update에서 부드럽게 당김.
+        existing.ty = p.b;
       } else {
         // 새 대상: 첫 위치엔 스냅(0에서 튀지 않게), 이후부터 ease.
-        const a = this.newAvatar();
-        a.x = a.tx = p.x;
-        a.y = a.ty = p.y;
-        this.peers.set(p.id, a);
+        const avatar = this.newAvatar();
+        avatar.x = avatar.tx = p.a;
+        avatar.y = avatar.ty = p.b;
+        this.peers.set(p.id, avatar);
       }
     }
     for (const id of [...this.peers.keys()]) if (!seen.has(id)) this.peers.delete(id);
@@ -325,9 +326,10 @@ export class JungnimGame implements IGame {
     const ring = peer ? this.purgeRingRadius(peer) : null;
     const skip = peer && ring !== null ? { x: peer.purgeX, y: peer.purgeY, radius: ring } : undefined;
     this.drawPool(r, this.commonPool, skip); // 공통 화살(모두 동일)
-    // 점·화살 모두 ease된 위치(peer.x,y)로 그려 부드럽게. 없으면 target 좌표 폴백.
-    const dotX = peer ? peer.x : target.x;
-    const dotY = peer ? peer.y : target.y;
+    // 점·화살 모두 ease된 위치(peer.x,y)로 그려 부드럽게. 없으면 target 신호 폴백
+    // (이 게임의 a·b는 좌표다).
+    const dotX = peer ? peer.x : target.a;
+    const dotY = peer ? peer.y : target.b;
     if (peer) {
       this.drawPool(r, peer.pool, skip); // 그 사람의 개인(조준) 화살 시각 근사
       this.drawPurgeRing(r, peer);
@@ -340,8 +342,9 @@ export class JungnimGame implements IGame {
     return this.dead;
   }
 
-  getPosition(): { x: number; y: number } {
-    return { x: this.me.x, y: this.me.y };
+  /** 이 게임은 관전 신호에 좌표를 싣는다. */
+  getPosition(): SpectateSignal {
+    return { a: this.me.x, b: this.me.y };
   }
 
   getScore(): number {

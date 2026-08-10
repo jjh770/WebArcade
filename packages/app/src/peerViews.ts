@@ -16,14 +16,18 @@ import type { GameView } from "@arcade/core";
 import type { Canvas2DRenderer } from "@arcade/core";
 import type { PeerSnapshot, PeerState, PlayerPublic } from "@arcade/shared";
 
-type Peer = { nickname: string; alive: boolean; x: number; y: number };
+/** a·b는 그 사람의 관전 신호(SpectateSignal) — 앱은 뜻을 모른 채 나른다.
+ *  좌표일 수도 진척도일 수도 있으므로 x·y라고 부르지 않는다. */
+type Peer = { nickname: string; alive: boolean; a: number; b: number };
 type MainViewMode = "self" | "spectating";
 
 export type PeerViewsOptions = {
   /** 우측 관전 슬롯 개수. 렌더러 개수와 같아야 한다. */
   slots: number;
-  /** 첫 스냅샷이 오기 전 임시 위치(게임 좌표계 중앙). 캔버스 픽셀이 아니다 —
-   *  픽셀 크기는 DPR·화면 크기에 따라 변한다. */
+  /** 첫 스냅샷이 오기 전 임시값(게임 좌표계 중앙). 캔버스 픽셀이 아니다 —
+   *  픽셀 크기는 DPR·화면 크기에 따라 변한다.
+   *  ⚠️ 신호가 좌표가 아닌 게임(숫자 야구)에서는 이 값이 뜻을 갖지 않는다. 첫 스냅샷이
+   *     오기 전 한 프레임짜리 자리채움이라 그대로 둔다. */
   logicalWidth: number;
   logicalHeight: number;
   onSideSlot: (index: number, visible: boolean, label: string) => void;
@@ -61,8 +65,8 @@ export class PeerViews {
       this.peers.set(player.id, {
         nickname: player.nickname,
         alive: player.alive,
-        x: this.options.logicalWidth / 2,
-        y: this.options.logicalHeight / 2,
+        a: this.options.logicalWidth / 2,
+        b: this.options.logicalHeight / 2,
       });
     }
     this.viewMode = "self";
@@ -78,22 +82,25 @@ export class PeerViews {
     for (let index = 0; index < this.options.slots; index++) this.options.onSideSlot(index, false, "");
   }
 
-  /** 서버 스냅샷 반영. 남이 낸 시각 이벤트는 onEvent로 흘려보낸다(게임이 재현한다). */
+  /** 서버 스냅샷 반영. 남이 낸 시각 이벤트는 onEvent로 흘려보낸다(게임이 재현한다).
+   *  ⚠️ wire(px·py) → 내부(a·b)로 갈아 끼우는 두 자리 중 하나다. 나머지 하나는
+   *     peerReport의 send. 이름이 다른 건 wire만 아직 옛 이름이기 때문이고,
+   *     나르는 숫자는 같다(PeerSnapshot 주석). */
   applySnapshot(snapshot: readonly PeerSnapshot[], onEvent: (id: string, ev: string) => void): void {
     for (const state of snapshot) {
       if (state.id === this.myId) continue;
       if (state.ev !== undefined) onEvent(state.id, state.ev);
       const existing = this.peers.get(state.id);
       if (existing) {
-        existing.x = state.px;
-        existing.y = state.py;
+        existing.a = state.px;
+        existing.b = state.py;
       } else {
         const player = this.roster.find((candidate) => candidate.id === state.id);
         this.peers.set(state.id, {
           nickname: player?.nickname ?? "플레이어",
           alive: true,
-          x: state.px,
-          y: state.py,
+          a: state.px,
+          b: state.py,
         });
       }
     }
@@ -130,7 +137,7 @@ export class PeerViews {
   alivePeers(): PeerState[] {
     return [...this.peers.entries()]
       .filter(([, peer]) => peer.alive)
-      .map(([id, peer]) => ({ id, x: peer.x, y: peer.y, label: peer.nickname }));
+      .map(([id, peer]) => ({ id, a: peer.a, b: peer.b, label: peer.nickname }));
   }
 
   /** 발사 조준: **지금 우측에 떠 있는** 살아있는 상대 중 하나. "보이는 사람만 맞힌다".
@@ -149,7 +156,7 @@ export class PeerViews {
     let mainTarget: GameView["target"] = null;
     if (this.viewMode === "spectating" && this.spectateId) {
       const peer = this.peers.get(this.spectateId);
-      if (peer?.alive) mainTarget = { id: this.spectateId, x: peer.x, y: peer.y, label: peer.nickname };
+      if (peer?.alive) mainTarget = { id: this.spectateId, a: peer.a, b: peer.b, label: peer.nickname };
     }
     const views: GameView[] = [{ renderer: main, target: mainTarget }];
 
@@ -167,7 +174,7 @@ export class PeerViews {
       const peer = this.peers.get(id);
       if (peer) views.push({
         renderer: sides[index],
-        target: { id, x: peer.x, y: peer.y, label: peer.nickname },
+        target: { id, a: peer.a, b: peer.b, label: peer.nickname },
       });
     });
     for (let index = 0; index < this.options.slots; index++) {

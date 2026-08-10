@@ -23,7 +23,9 @@ export type ClientMessage =
   // 하려고 함께 흘려보낸다 — 서버는 이 숫자가 tick인지 점수인지 모르고, 저장했다가
   // 연결이 끊기면 그때 마지막 값을 그대로 쓴다. 위치와 같은 주기라 새 메시지가 필요 없다.
   | { type: "player_state"; px: number; py: number; ev?: string; sc?: number }
-  | { type: "player_died"; survivalTicks: number }
+  // score는 **그 게임의 기록**(getScore). 앞의 세 게임은 생존 tick이고 숫자 야구는 점수다 —
+  // 서버는 어느 쪽인지 모르고 방향도 모른 채 그대로 받아 순위에만 쓴다(단위는 앱이 붙인다).
+  | { type: "player_died"; score: number }
   | { type: "fire_effect"; kind: string; durationMs: number; targetId: string } // 스릴 게이지 발사 — 조준한 상대 1명에게만 방해 효과. 서버는 내용 모르고 그 1명에게 중계.
   | { type: "leave_room" };
 
@@ -41,10 +43,12 @@ export type ServerMessage =
   | { type: "host_changed"; newHostId: string }
   | { type: "error"; reason: string };
 
-/** 순위표 한 줄 — 등수·닉네임·생존시간 (DESIGN.md 4절) */
+/** 순위표 한 줄 — 등수·닉네임·기록 (DESIGN.md 4절)
+ *  ⚠️ score의 **단위는 여기 없다.** 게임마다 tick이거나 점수이고(ScoreUnit), 그걸 아는 건
+ *     앱의 GameRegistry뿐이다. 서버는 이 숫자를 크기로만 다룬다. */
 export type RankEntry = {
   id: string;
   rank: number;
   nickname: string;
-  survivalTicks: number;
+  score: number;
 };

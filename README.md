@@ -217,8 +217,9 @@ npx wrangler secret put ADMIN_KEY --cwd packages/edge
 
 1. `packages/games/<name>/` 생성, `IGame`을 구현하는 클래스 작성
    (`init`/`update`/`render`/`renderSpectator`/`isPlayerDead`/`getPosition`/`getScore`).
-   `getPosition()`은 **관전 중계에 실을 숫자 둘**이다 — 대개 좌표지만 판이 없는 게임은
-   다른 것을 실어도 된다(숫자 야구는 진척도). `renderSpectator`가 같은 뜻으로 읽기만 하면 된다.
+   `getPosition()`은 **관전 중계에 실을 숫자 둘**(`SpectateSignal {a, b}`)이다 — 대개 좌표지만
+   판이 없는 게임은 다른 것을 실어도 된다(숫자 야구는 진척도). 필드가 `x`·`y`가 아닌 이유가
+   이것이다. `renderSpectator`가 같은 뜻으로 읽기만 하면 된다.
 2. 게임 튜닝값은 `config.ts`에 데이터로 분리 (`scoreDirection`·`scoreUnit` 포함).
    `scoreUnit`은 `getScore()`가 **무엇을** 돌려주는지다 — `"ticks"`면 화면에 `5.1s`,
    `"points"`면 `240점`으로 찍힌다. 게이지가 있으면 `gaugeLabel`·`gaugeAlarm`도 함께 둔다.

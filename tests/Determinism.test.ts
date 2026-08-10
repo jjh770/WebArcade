@@ -282,7 +282,7 @@ describe("죽림고수 아이템 효과", () => {
 
     driveClear(plain, 30, tick, MOVE_RIGHT);
     driveClear(dashing, 30, tick, MOVE_RIGHT);
-    const moved = (game: JungnimGame): number => game.getPosition().x - CENTER.x;
+    const moved = (game: JungnimGame): number => game.getPosition().a - CENTER.x;
     expect(moved(dashing) / moved(plain)).toBeCloseTo(jungnimConfig.item.dash.speedMult, 2);
   });
 
@@ -294,14 +294,14 @@ describe("죽림고수 아이템 효과", () => {
     teleport(game, CENTER.x, CENTER.y);
     const after = tick + jungnimConfig.item.dash.durationTicks;
     driveClear(game, 10, after, MOVE_RIGHT);
-    expect(game.getPosition().x - CENTER.x).toBeCloseTo(10 * jungnimConfig.playerSpeed, 1);
+    expect(game.getPosition().a - CENTER.x).toBeCloseTo(10 * jungnimConfig.playerSpeed, 1);
   });
 
   it("쉴드: 맞은 화살은 부서지고 횟수만큼 버틴 뒤 죽는다", () => {
     const game = new JungnimGame();
     game.init(42);
     let tick = takeKind(game, "shield");
-    const { x, y } = game.getPosition();
+    const { a: x, b: y } = game.getPosition();
     for (let i = 0; i < jungnimConfig.item.shield.charges; i++) {
       placeArrow(game, x, y);
       game.update(tick++, IDLE);
@@ -400,7 +400,7 @@ function drawn(game: JungnimGame): CaptureCalls {
 describe("죽림고수 정화 파동 — 관전 동기화", () => {
   const spectate = (game: JungnimGame, id: string, x: number, y: number): CaptureCalls => {
     const renderer = new CaptureCalls();
-    game.renderSpectator(renderer, { id, x, y, label: "남" });
+    game.renderSpectator(renderer, { id, a: x, b: y, label: "남" });
     return renderer;
   };
   const commonArrowsAt = (frame: CaptureCalls, x: number, y: number, within: number): number =>
@@ -427,7 +427,7 @@ describe("죽림고수 정화 파동 — 관전 동기화", () => {
     const game = new JungnimGame();
     game.init(42);
     step(game, 1);
-    game.syncPeers([{ id: "other", x: CENTER.x, y: CENTER.y, label: "남" }]);
+    game.syncPeers([{ id: "other", a: CENTER.x, b: CENTER.y, label: "남" }]);
     clearArrows(game);
     placeArrow(game, CENTER.x + 40, CENTER.y); // 파동 안쪽에 들 화살
     placeArrow(game, CENTER.x + 300, CENTER.y); // 반경(280) 밖 — 계속 보여야 한다
@@ -446,7 +446,7 @@ describe("죽림고수 정화 파동 — 관전 동기화", () => {
     const game = new JungnimGame();
     game.init(42);
     step(game, 1);
-    game.syncPeers([{ id: "other", x: CENTER.x, y: CENTER.y, label: "남" }]);
+    game.syncPeers([{ id: "other", a: CENTER.x, b: CENTER.y, label: "남" }]);
     clearArrows(game);
     placeArrow(game, CENTER.x + 40, CENTER.y);
     game.applyPeerEvent("other", "purge");
@@ -459,7 +459,7 @@ describe("죽림고수 정화 파동 — 관전 동기화", () => {
     const game = new JungnimGame();
     game.init(42);
     step(game, 1);
-    game.syncPeers([{ id: "other", x: CENTER.x, y: CENTER.y, label: "남" }]);
+    game.syncPeers([{ id: "other", a: CENTER.x, b: CENTER.y, label: "남" }]);
     clearArrows(game);
     placeArrow(game, CENTER.x + 40, CENTER.y);
     game.applyPeerEvent("other", "미래에_생길_이벤트");
@@ -520,7 +520,7 @@ describe("죽림고수 아이템 표시", () => {
     game.init(42);
     const { item } = runToItem(game);
     const renderer = new CaptureCalls();
-    game.renderSpectator(renderer, { id: "other", x: CENTER.x, y: CENTER.y, label: "남" });
+    game.renderSpectator(renderer, { id: "other", a: CENTER.x, b: CENTER.y, label: "남" });
     expect(renderer.circles.some((c) => c.color === colorOf(item.kind) && Math.hypot(c.x - item.x, c.y - item.y) < 1)).toBe(true);
   });
 });
@@ -531,7 +531,7 @@ describe("죽림고수 피격 디버프", () => {
     game.init(9999);
     effect(game);
     step(game, ticks, 0, input);
-    return game.getPosition().x;
+    return game.getPosition().a;
   };
 
   it("invert: 오른쪽 입력이 왼쪽으로 간다", () => {
@@ -547,12 +547,12 @@ describe("죽림고수 피격 디버프", () => {
     game.applyEffect("invert", 1000);
     step(game, 10, 0, MOVE_DOWN); // 아래를 눌렀는데 위로 가야 한다
     const inverted = game.getPosition();
-    expect(inverted.y).toBeCloseTo(CENTER.y - jungnimConfig.playerSpeed * 10);
+    expect(inverted.b).toBeCloseTo(CENTER.y - jungnimConfig.playerSpeed * 10);
 
     const plain = new JungnimGame();
     plain.init(9999);
     step(plain, 10, 0, MOVE_UP); // 반전 없이 위로 간 것과 같은 자리
-    expect(inverted.y).toBeCloseTo(plain.getPosition().y);
+    expect(inverted.b).toBeCloseTo(plain.getPosition().b);
   });
 
   it("invert: 지속시간이 끝나면 원래대로 돌아온다", () => {
@@ -560,10 +560,10 @@ describe("죽림고수 피격 디버프", () => {
     game.init(9999);
     game.applyEffect("invert", 50); // 50ms = 3 tick
     step(game, 3, 0, MOVE_RIGHT); // 반전 구간 — 왼쪽으로 밀린다
-    const afterInvert = game.getPosition().x;
+    const afterInvert = game.getPosition().a;
     expect(afterInvert).toBeCloseTo(CENTER.x - jungnimConfig.playerSpeed * 3);
     step(game, 3, 3, MOVE_RIGHT); // 만료 후 — 다시 오른쪽
-    expect(game.getPosition().x).toBeCloseTo(afterInvert + jungnimConfig.playerSpeed * 3);
+    expect(game.getPosition().a).toBeCloseTo(afterInvert + jungnimConfig.playerSpeed * 3);
   });
 
   it("sluggish: 이동이 느려지고 만료되면 원래 속도로 돌아온다", () => {
@@ -571,11 +571,11 @@ describe("죽림고수 피격 디버프", () => {
     game.init(9999);
     game.applyEffect("sluggish", 50); // 3 tick
     step(game, 3, 0, MOVE_RIGHT);
-    const slowed = game.getPosition().x - CENTER.x;
+    const slowed = game.getPosition().a - CENTER.x;
     expect(slowed).toBeCloseTo(jungnimConfig.playerSpeed * jungnimConfig.fire.sluggishSpeedMult * 3);
-    const before = game.getPosition().x;
+    const before = game.getPosition().a;
     step(game, 3, 3, MOVE_RIGHT);
-    expect(game.getPosition().x - before).toBeCloseTo(jungnimConfig.playerSpeed * 3);
+    expect(game.getPosition().a - before).toBeCloseTo(jungnimConfig.playerSpeed * 3);
   });
 
   it("모르는 디버프는 무시한다", () => {
@@ -589,9 +589,9 @@ describe("죽림고수 피격 디버프", () => {
     placeArrow(game, CENTER.x + HIT_RADIUS - 2, CENTER.y);
     step(game, 1);
     expect(game.isPlayerDead()).toBe(true);
-    const before = game.getPosition().x;
+    const before = game.getPosition().a;
     game.applyEffect("invert", 1000);
     step(game, 5, 1, MOVE_RIGHT);
-    expect(game.getPosition().x).toBe(before); // 죽으면 애초에 안 움직인다
+    expect(game.getPosition().a).toBe(before); // 죽으면 애초에 안 움직인다
   });
 });

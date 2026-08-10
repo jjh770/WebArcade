@@ -40,28 +40,33 @@ export type GaugeAlarm = "full" | "empty";
 /** 서버와 앱이 공유하는 방 수명주기. 게임별 상태가 아니라 멀티 방의 공통 상태다. */
 export type RoomState = "waiting" | "countdown" | "playing" | "finished";
 
-/** 플레이어 공개 상태 — 네트워크로 오가는 최소 정보. */
+/** 플레이어 공개 상태 — 네트워크로 오가는 최소 정보.
+ *  score는 그 게임의 기록(RankEntry와 같은 숫자). 살아 있는 동안은 0이다 —
+ *  확정된 기록만 담기고, 진행 중인 값은 관전용 스냅샷으로 따로 흐른다. */
 export type PlayerPublic = {
   id: string;
   nickname: string;
   alive: boolean;
-  survivalTicks: number;
+  score: number;
 };
 
-/** 게임이 관전 중계에 싣는 숫자 둘. **대개 좌표지만 뜻은 게임이 정한다** —
+/** 게임이 관전 중계에 싣는 숫자 둘. **뜻은 게임이 정한다** — 앞의 셋은 좌표를 싣고,
  *  판 위의 위치라는 게 없는 게임(숫자 야구)은 진척도(푼 문제 수·점수)를 싣는다.
  *  서버도 앱도 뜻을 모른 채 중계하고, 낸 게임의 renderSpectator에게 그대로 돌려준다.
  *
+ *  ⚠️ 이름이 `a`·`b`인 이유: 전에는 `x`·`y`였는데, 그러면 통로가 **좌표라고 말하고**
+ *     있게 된다. 셋이 좌표를 싣는다는 건 그 셋의 사정이지 계약의 내용이 아니다.
+ *     뜻 없는 이름이라야 뜻을 게임이 정한다는 말이 참이 된다.
  *  ⚠️ 이 값은 **보간된다**(10Hz로 오는 것을 60Hz로 부드럽게 잇는다). 정수만 뜻이 있는
  *     값을 실으면 중간 프레임에 소수가 도착하므로 받는 쪽이 반올림해야 한다. */
-export type SpectateSignal = { x: number; y: number };
+export type SpectateSignal = { a: number; b: number };
 
-/** 관전 대상 — 남의 화면을 그릴 때 필요한 정보(x·y는 그 사람의 SpectateSignal).
+/** 관전 대상 — 남의 화면을 그릴 때 필요한 정보(a·b는 그 사람의 SpectateSignal).
  *  id는 원격 플레이어의 시각 요소(syncPeers로 넘긴 아바타)를 찾는 키. */
 export type SpectateTarget = {
   id: string;
-  x: number;
-  y: number;
+  a: number;
+  b: number;
   label: string;
 };
 
@@ -69,13 +74,16 @@ export type SpectateTarget = {
  *  이건 앱→게임 내부 전달용이지 네트워크로 나가는 wire 타입이 아니다(그건 PeerSnapshot). */
 export type PeerState = {
   id: string;
-  x: number;
-  y: number;
+  a: number;
+  b: number;
   label?: string; // 표시용 닉네임(관전 화면 이름표). 없으면 이름은 생략.
 };
 
-/** 서버가 10Hz로 묶어서 전달하는 관전용 위치. 판정에는 사용하지 않는다.
- *  ev가 있으면 그 사람이 방금 낸 게임 정의 시각 이벤트(한 번만 실려 온다). */
+/** 서버가 10Hz로 묶어서 전달하는 관전 신호. 판정에는 사용하지 않는다.
+ *  ev가 있으면 그 사람이 방금 낸 게임 정의 시각 이벤트(한 번만 실려 온다).
+ *  ⚠️ px·py는 SpectateSignal의 a·b와 **같은 숫자 둘**이다. 이름만 아직 좌표를
+ *     말하고 있다 — 여기는 wire라 바꾸면 서버·클라 배포를 맞춰야 해서 남겨 뒀다.
+ *     앱이 갈아 끼우는 자리는 둘뿐이다(peerReport의 send, peerViews의 applySnapshot). */
 export type PeerSnapshot = {
   id: string;
   px: number;

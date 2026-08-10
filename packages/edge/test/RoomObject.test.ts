@@ -153,9 +153,9 @@ describe("전체 방 흐름", () => {
     }
     expect(snapshot?.peers).toHaveLength(2);
 
-    host.send({ type: "player_died", survivalTicks: 1 });
+    host.send({ type: "player_died", score:1 });
     await guest.wait("peer_died", (m) => m.id === host.id);
-    guest.send({ type: "player_died", survivalTicks: 5 });
+    guest.send({ type: "player_died", score:5 });
 
     const over = await host.wait("game_over");
     expect(over.finalRanks).toHaveLength(2);
@@ -298,8 +298,8 @@ describe("입력 검증", () => {
     const start = await host.wait("game_start");
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, start.startTime - Date.now()) + 100));
 
-    host.send({ type: "player_died", survivalTicks: 100_000 });
-    expect((await host.wait("error")).reason).toBe("유효하지 않은 생존시간입니다.");
+    host.send({ type: "player_died", score:100_000 });
+    expect((await host.wait("error")).reason).toBe("유효하지 않은 기록입니다.");
   });
 
   it("클럭 동기화 요청에 같은 requestId로 답한다", async () => {

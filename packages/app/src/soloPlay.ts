@@ -149,7 +149,7 @@ export function createSoloPlay(deps: SoloPlayDeps): SoloPlay {
     finish(gameId, score) {
       if (!deps.transition("game_over")) return;
       const ranks: readonly RankEntry[] = [
-        { id: SOLO_ID, rank: 1, nickname: deps.nickname(), survivalTicks: score },
+        { id: SOLO_ID, rank: 1, nickname: deps.nickname(), score },
       ];
       deps.setRanks(ranks);
       // amHost=true로 넘겨 "다시 하기"를 보이게 한다(혼자 할 때는 언제나 내가 방장이다).

@@ -46,20 +46,20 @@ describe("Room", () => {
       // 80초가 흐른 뒤 끊긴다. 예전이라면 4800(=80초×60)이 들어갔다.
       room.disconnectMember("a", 80_000);
       const [entry] = RankingService.computeRanks(room.getRankingMembers()).filter((r) => r.id === "a");
-      expect(entry!.survivalTicks).toBe(220);
+      expect(entry!.score).toBe(220);
     });
 
     it("한 번도 안 알려왔으면 0이다 — 모르는 값을 추측하지 않는다", () => {
       const room = playing();
       room.disconnectMember("a", 80_000);
-      expect(room.getRankingMembers().find((m) => m.id === "a")!.survivalTicks).toBe(0);
+      expect(room.getRankingMembers().find((m) => m.id === "a")!.finalScore).toBe(0);
     });
 
     it("계속 알려오면 마지막 값이 남는다", () => {
       const room = playing();
       for (const score of [50, 120, 300]) room.updatePosition("a", 0, 0, undefined, score);
       room.disconnectMember("a", 80_000);
-      expect(room.getRankingMembers().find((m) => m.id === "a")!.survivalTicks).toBe(300);
+      expect(room.getRankingMembers().find((m) => m.id === "a")!.finalScore).toBe(300);
     });
 
     it("이미 죽은 사람의 기록은 끊겨도 안 바뀐다 — 본인이 낸 최종값이 우선이다", () => {
@@ -67,7 +67,7 @@ describe("Room", () => {
       room.updatePosition("a", 0, 0, undefined, 300);
       room.markDied("a", 450); // 마지막 문제를 풀고 죽었다 → 300이 아니라 450
       room.disconnectMember("a", 80_000);
-      expect(room.getRankingMembers().find((m) => m.id === "a")!.survivalTicks).toBe(450);
+      expect(room.getRankingMembers().find((m) => m.id === "a")!.finalScore).toBe(450);
     });
 
     it("새 라운드는 지난 판의 기록을 물려받지 않는다", () => {
@@ -76,7 +76,7 @@ describe("Room", () => {
       room.startCountdown(2, 0);
       room.ensurePlaying(1);
       room.disconnectMember("a", 80_000);
-      expect(room.getRankingMembers().find((m) => m.id === "a")!.survivalTicks).toBe(0);
+      expect(room.getRankingMembers().find((m) => m.id === "a")!.finalScore).toBe(0);
     });
   });
 
@@ -219,7 +219,7 @@ describe("프로토콜 런타임 검증", () => {
       expect(parseClientMessage({ type: "player_state", px: 1, py: 2, sc: bad }))
         .toEqual({ type: "player_state", px: 1, py: 2 });
     }
-    expect(parseClientMessage({ type: "player_died", survivalTicks: -1 })).toBeNull();
+    expect(parseClientMessage({ type: "player_died", score: -1 })).toBeNull();
     expect(parseClientMessage({ type: "join_room", code: "AIO1", nickname: "고수" })).toBeNull();
   });
 

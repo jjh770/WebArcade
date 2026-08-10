@@ -35,9 +35,13 @@ const COUNTDOWN_MS = 3000;
 /** 관전용 위치를 방 전체에 묶어 내보내는 최소 간격. 기존 서버와 같은 10Hz. */
 const SNAPSHOT_MS = 100;
 
-/** 자기신고 생존시간의 허용 오차(tick). 이보다 더 오래 버텼다는 주장은 거부한다.
+/** 자기신고 기록의 허용 오차(tick). 이보다 더 오래 버텼다는 주장은 거부한다.
  *  ⚠️ 상한만 막을 뿐 "일찍 죽고 늦게 신고"는 못 막는다 — 서버가 게임을 모르기 때문.
- *     리플레이 검증을 하지 않기로 한 이유는 DESIGN 10절 참조. */
+ *     리플레이 검증을 하지 않기로 한 이유는 DESIGN 10절 참조.
+ *  ⚠️ **이 검사는 기록이 tick일 때만 뜻이 있다.** 흐른 tick과 신고값을 직접 비교하므로,
+ *     기록이 점수인 게임(숫자 야구)에서는 사실상 아무것도 막지 못한다. 서버가 단위를
+ *     모르는 채 tick이라고 가정하는 유일한 자리다(soloRules.checkClaim에 같은 가정이
+ *     하나 더 있다). 고치려면 단위를 서버까지 흘려야 하므로 따로 다룬다. */
 const SURVIVAL_TOLERANCE_TICKS = 120;
 
 /** 소켓에 붙여 두는 신원. 하이버네이션을 건너 살아남는다. */
@@ -216,10 +220,10 @@ export class RoomObject {
       case "player_died": {
         const now = Date.now();
         if (!this.room.ensurePlaying(now)) return;
-        if (msg.survivalTicks > this.room.elapsedTicks(now) + SURVIVAL_TOLERANCE_TICKS) {
-          return this.send(ws, { type: "error", reason: "유효하지 않은 생존시간입니다." });
+        if (msg.score > this.room.elapsedTicks(now) + SURVIVAL_TOLERANCE_TICKS) {
+          return this.send(ws, { type: "error", reason: "유효하지 않은 기록입니다." });
         }
-        if (!this.room.markDied(id, msg.survivalTicks)) return;
+        if (!this.room.markDied(id, msg.score)) return;
         await this.persist(); // 사망은 라운드당 한 번뿐이라 저장해도 싸다.
         this.broadcastExcept(id, { type: "peer_died", id });
         await this.checkGameOver();

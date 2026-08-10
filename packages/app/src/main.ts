@@ -195,7 +195,7 @@ function onLocalDeath(): void {
   fallScreen(); // 내 화면이 아래로 떨어진다.
   // 혼자 하면 죽는 순간이 곧 끝이다. 관전할 남도, 기다릴 서버도 없다.
   if (soloMode) return solo.finish(selectedGameId, score);
-  net.send({ type: "player_died", survivalTicks: score });
+  net.send({ type: "player_died", score });
   transition("local_death"); // → dying (카드 없음, 낙하만 재생)
   // 낙하가 끝나면 자동으로 관전 전환. 선택 화면은 없다.
   clearTimeout(fallTimer);

@@ -220,7 +220,7 @@ export function renderResult(
     }
     row.innerHTML = `<td class="rank">${rank.rank}</td>`
       + `<td>${escapeHtml(rank.nickname)}</td>`
-      + `<td class="time">${formatGameScore(gameId, rank.survivalTicks)}</td>`;
+      + `<td class="time">${formatGameScore(gameId, rank.score)}</td>`;
     body.appendChild(row);
   }
   byId("result-sub").textContent = myRank ? `내 순위 ${myRank}위` : "";
