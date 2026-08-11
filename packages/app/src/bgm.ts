@@ -284,6 +284,23 @@ function start(audio: HTMLAudioElement): void {
   audio.play().catch(() => armGesture());
 }
 
+/** 자동재생이 막혔을 때 첫 조작을 기다렸다 다시 튼다.
+ *
+ *  ⚠️ 이 길은 **테스트가 없다.** DOM 없이 확인할 수가 없고(이 저장소는 그런 건 브라우저에서
+ *     본다), 개발 브라우저는 자동재생을 허용해서 평소엔 아예 안 탄다. 주소로 바로 들어온
+ *     첫 방문자는 **늘** 여기를 지나므로, 이 언저리를 고치면 손으로 확인할 것:
+ *
+ *       // 미리보기 탭은 늘 배경으로 판정된다 — start()가 일찍 돌아가 play()가 안 불린다.
+ *       Object.defineProperty(document,'hidden',{configurable:true,get:()=>false});
+ *       document.hasFocus = () => true;
+ *       (await import('/src/pageFocus.ts')).initPageFocus();  // 모듈 상태라 다시 켜야 한다
+ *       HTMLMediaElement.prototype.play = () => Promise.reject(new Error('blocked'));
+ *       (await import('/src/bgm.ts?probe')).playBgm('assault');
+ *       window.dispatchEvent(new PointerEvent('pointerdown'));  // play가 다시 불려야 한다
+ *
+ *  2026-08-11에 이렇게 확인한 것: ① 막히면 조용히 기다린다 ② 조작 때 다시 시도한다
+ *  ③ 그 시도가 또 막히면 다시 기다린다 ④ 조작 전에 곡이 갈려 playBgm이 두 번 불려도
+ *  리스너는 하나뿐이고(waitingForGesture) **나중 곡**이 재생된다. */
 function armGesture(): void {
   if (waitingForGesture) return;
   waitingForGesture = true;
