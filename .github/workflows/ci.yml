@@ -38,6 +38,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # 아래 build의 `tsc -b`는 패키지만 본다. 테스트 파일(tests/, packages/edge/test/)은
+      # vitest가 esbuild로 타입을 벗겨 내고 돌리므로, 이 단계가 없으면 테스트의 타입
+      # 오류가 CI를 그대로 통과한다 — 계약을 바꿔도 초록불이 뜬다.
+      - name: Typecheck (packages + tests)
+        run: npm run typecheck
+
       - name: Run unit and Workers tests
         run: npm test -- --reporter=verbose --reporter=github-actions --includeTaskLocation
 

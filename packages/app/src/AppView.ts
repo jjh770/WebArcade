@@ -87,8 +87,13 @@ export function renderGameList(onSelect: (id: GameId) => void): void {
     const entry = GAME_REGISTRY[id];
     const button = document.createElement("button");
     button.className = "game-card";
-    button.innerHTML = `<div class="g-title">${escapeHtml(entry.title)}</div>`
-      + `<div class="g-desc">${escapeHtml(entry.description)}</div>`;
+    // 왼쪽 칸은 **미리보기 자리**다. 지금은 비어 있고(3단계에서 실제 판이 들어온다)
+    // 장식뿐이라 스크린리더에서 감춘다 — 옆의 제목이 이미 무슨 게임인지 말한다.
+    button.innerHTML = `<div class="g-thumb" aria-hidden="true"></div>`
+      + `<div class="g-text">`
+      + `<div class="g-title">${escapeHtml(entry.title)}</div>`
+      + `<div class="g-desc">${escapeHtml(entry.description)}</div>`
+      + `</div>`;
     button.addEventListener("click", () => onSelect(id));
     wrapper.appendChild(button);
   }

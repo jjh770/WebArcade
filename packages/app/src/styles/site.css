@@ -167,17 +167,32 @@ table.ranks td.time { text-align: right; color: var(--text-muted);
 .tabs button.on { color: var(--primary);
   background: color-mix(in srgb, var(--primary) 14%, transparent); }
 
-/* 게임 한 줄. 2단계에서 왼쪽에 미리보기 자리가 들어오므로 지금 높이를 미리 키워
-   둔다 — 그때 행 높이가 다시 흔들리지 않게. */
-.game-card { display: block; width: 100%; text-align: left; background: var(--surface-elevated);
-  border: 1px solid transparent; border-radius: 12px; padding: var(--sp-3) var(--sp-4);
+/* 게임 한 줄. 카드가 아니라 **행**이다 — 왼쪽은 미리보기 자리, 오른쪽은 글이다.
+   목록을 훑을 때 눈이 왼쪽 열을 따라 내려가고 제목이 그 옆에 나란히 선다.
+   ⚠️ 미리보기는 3단계에서 들어온다. 지금 자리를 잡아 두는 이유는 그때 행 높이가
+      다시 흔들리지 않게 하려는 것이다 — 빈 칸이 아니라 **예약된 칸**이다. */
+.game-card { --thumb: clamp(68px, 7vw, 96px);
+  display: grid; grid-template-columns: var(--thumb) 1fr; gap: var(--sp-3); align-items: center;
+  width: 100%; text-align: left; background: var(--surface-elevated);
+  border: 1px solid transparent; border-radius: 12px; padding: var(--sp-3);
   cursor: pointer; color: var(--text-primary); font: inherit;
   transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
 .game-card:hover { border-color: var(--primary); transform: translateY(-2px);
   box-shadow: 0 8px 22px rgba(0, 0, 0, .35); }
 .game-card:active { transform: translateY(0) scale(.99); }
+/* 판은 정사각이다(게임 캔버스가 그렇다) — 3단계에서 들어올 그림의 비율을 미리 지킨다.
+   격자는 배경 장식(.bg-grid)과 같은 어휘라, 비어 있어도 "판 자리"로 읽힌다. */
+.g-thumb { width: var(--thumb); height: var(--thumb); border-radius: 9px;
+  background-color: var(--bg-deep); border: 1px solid var(--border);
+  background-image:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--primary) 12%, transparent) 0 1px, transparent 1px 12px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--primary) 12%, transparent) 0 1px, transparent 1px 12px); }
+.g-text { min-width: 0; } /* 긴 설명이 격자 칸을 밀지 않게 */
 .game-card .g-title { font-size: var(--fs-title); font-weight: 700; }
 .game-card .g-desc { font-size: var(--fs-sub); color: var(--text-muted); margin-top: 4px; }
+/* 목록은 행이 길어 다른 화면보다 넓은 자리가 필요하다. */
+#screen-gamelist .card { width: min(760px, 100%); }
+#game-cards { gap: var(--sp-2); }
 
 
 /* 에러 토스트는 무엇에도 가리면 안 된다 — 사용자가 왜 실패했는지 알 유일한 통로다.
