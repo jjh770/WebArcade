@@ -35,7 +35,7 @@ import { cancelCountdown, runCountdown } from "./countdown";
 import { byId } from "./dom";
 import { initOptions, renderOptions } from "./optionsScreen";
 import { initPageFocus } from "./pageFocus";
-import { resizeGamePreviews } from "./gamePreview";
+import { mountBackgroundGame, resizeGamePreviews } from "./gamePreview";
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, layoutPlayArea } from "./playLayout";
 import { ROOM_CODE_PATTERN, createRoom, joinRoom } from "./roomConnect";
 import { initSoundShell } from "./soundShell";
@@ -119,6 +119,8 @@ function relayout(): void {
   // 목록의 미리보기 판도 같은 이유로 해상도를 다시 잡는다(표시 크기가 clamp라 폭을 탄다).
   resizeGamePreviews();
 }
+// 메뉴 뒤에 흐르는 배경 판. relayout보다 먼저 붙여야 첫 해상도 계산에 함께 들어간다.
+mountBackgroundGame(byId<HTMLCanvasElement>("bg-game"));
 relayout();
 // 창 크기·모니터(DPR) 변경 시 다시 맞춘다.
 window.addEventListener("resize", relayout);

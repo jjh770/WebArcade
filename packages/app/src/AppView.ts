@@ -9,7 +9,12 @@ import type { PlayerPublic, RankEntry } from "@arcade/shared";
 import { GAME_REGISTRY, formatGameScore, type GameId } from "./GameRegistry";
 import { PLAY_STATES, type AppState } from "./AppFlow";
 import { byId } from "./dom";
-import { clearGamePreviews, mountGamePreview, setGamePreviewsRunning } from "./gamePreview";
+import {
+  clearGamePreviews,
+  mountGamePreview,
+  setBackgroundRunning,
+  setGamePreviewsRunning,
+} from "./gamePreview";
 import { NOTICES } from "./siteContent";
 import type { BoardRow } from "./soloRanking";
 import { newcomers, staggerIndex } from "./stagger";
@@ -38,6 +43,9 @@ export function renderState(state: AppState): void {
   setGamePreviewsRunning(screen === "gamelist");
   // 카운트다운 동안에도 플레이 영역을 보여준다 — 그 위에 게임판이 내려와 자리잡는다.
   const showPlay = PLAY_STATES.has(state) || state === "countdown";
+  // 배경 판은 판이 도는 동안 멈춘다. CSS로도 걷히지만(body.playing #bg-decor) 안 보이는
+  // 것을 계속 굴리면 정작 진짜 판이 쓸 힘을 먹는다 — 걷는 것과 멈추는 것은 다른 일이다.
+  setBackgroundRunning(!showPlay);
   byId("play").classList.toggle("on", showPlay);
   // 시간·스릴 게이지 HUD는 **내가 살아서 뛰는 동안에만**. 죽는 순간 값이 멈추므로
   // 그 뒤로도 띄워두면 낡은 숫자가 남는다 — 관전 중엔 남의 기록으로, 결과 화면에선

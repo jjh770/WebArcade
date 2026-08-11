@@ -28,6 +28,16 @@ body.playing #bg-decor { display: none; }
     color-mix(in srgb, var(--primary-strong) 10%, transparent) 0%, transparent 60%);
   animation: glowDrift 22s ease-in-out infinite alternate; }
 @keyframes glowDrift { to { transform: translate3d(2.5%, -2%, 0) scale(1.08); } }
+/* 배경에서 도는 실제 게임 판. 격자 위, 광원 아래에 깔린다.
+   ⚠️ **정사각형이어야 한다.** 렌더러는 가로·세로 배율을 따로 잡으므로
+      (Canvas2DRenderer.applyTransform의 sx·sy) 직사각형에 넣으면 판이 찌그러진다.
+      그래서 긴 변에 맞춘 정사각형을 가운데 두고 넘치는 부분은 #bg-decor가 자른다.
+   ⚠️ 흐리게 깔되 글자 대비를 해치지 않는 선까지만 올린다 — 이 위에 카드가 아니라
+      맨 글자가 앉는 자리도 있다(화면 제목). */
+#bg-game { position: absolute; top: 50%; left: 50%; translate: -50% -50%;
+  width: max(100vw, 100vh); height: max(100vw, 100vh); opacity: .13; }
+/* 움직임을 줄여 달라는 사람에게는 gamePreview가 한 장만 그린다(멈춘 그림은 남는다). */
+
 /* …다른 하나는 포인터를 늦게 따라간다(bgDecor.ts가 좌표만 넣어준다).
    그라데이션 중심을 옮기면 매 프레임 다시 칠해야 하므로, 원판을 하나 만들어
    translate로 민다 — 합성만 하면 되는 형태다.
@@ -51,7 +61,11 @@ body.playing #bg-decor { display: none; }
   opacity: 0; visibility: hidden; pointer-events: none;
   transition: opacity .28s ease, visibility .28s; }
 .screen.active { opacity: 1; visibility: visible; pointer-events: auto; }
-.screen.play-overlay { background: color-mix(in srgb, var(--bg) 62%, transparent); }
+/* ⚠️ 판 위에 뜨는 화면(카운트다운·결과)은 **가운데**다. 왼쪽에 붙이는 건 프레임이
+   보이는 사이트 화면 이야기이고, 여기서는 헤더·푸터가 숨어 있어 기준이 게임판이다.
+   여백도 프레임 몫을 뺀다 — 안 그러면 숨어 있는 헤더/푸터 자리만큼 가운데가 밀린다. */
+.screen.play-overlay { background: color-mix(in srgb, var(--bg) 62%, transparent);
+  justify-content: center; padding: var(--sp-3); }
 /* 판을 덮는 안내(좌/우 절반)가 깔렸을 때만 카운트다운이 막을 걷는다. 두 겹이면
    안내가 묻히고, 숫자 대비는 안내가 깐 막이 대신 책임진다.
    ⚠️ 조이스틱 방식에는 이 클래스가 안 붙는다 — 판을 덮는 게 없어서 막을 걷으면

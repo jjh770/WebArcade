@@ -12,9 +12,11 @@
     <link rel="stylesheet" href="/src/styles/main.css" />
   </head>
   <body>
-    <!-- 비플레이 배경 장식(격자 + 광원). 순수 장식이라 스크린리더에서 감춘다. -->
+    <!-- 비플레이 배경 장식(격자 + 실제 게임 한 판 + 광원). 순수 장식이라 스크린리더에서 감춘다.
+         #bg-game은 gamePreview가 굴린다 — 그림 파일이 아니라 게임 자신이다. -->
     <div id="bg-decor" aria-hidden="true">
       <div class="bg-grid"></div>
+      <canvas id="bg-game"></canvas>
       <div class="bg-glow"></div>
       <div class="bg-spot"></div>
     </div>
