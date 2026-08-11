@@ -25,6 +25,18 @@ const SCREEN_NAMES = [
 ] as const;
 type ScreenName = (typeof SCREEN_NAMES)[number];
 
+/** 푸터에 뜨는 한 줄. **화면 제목이 아니라 할 일**이다 — 제목은 카드가 이미 크게 적고
+ *  있으므로 여기서 되풀이하면 자리만 먹는다.
+ *  ⚠️ 읽을거리(공지·소개·커뮤니티·순위·옵션)는 일부러 비운다. 거기서는 할 일이 아니라
+ *     읽는 것이 전부라, 없는 지시를 지어내면 안내가 아니라 소음이 된다. */
+const FOOTER_HINTS: Partial<Record<ScreenName, string>> = {
+  nickname: "이름을 정하고 들어오세요",
+  main: "무엇을 할지 고르세요",
+  gamelist: "게임을 고르세요",
+  lobby: "혼자 연습할지, 방을 만들지 고르세요",
+  ready: "방 코드를 친구에게 알려 주세요",
+};
+
 let toastTimer = 0;
 
 // 대기실은 renderReady가 목록을 통째로 다시 그린다. 누가 새로 들어왔는지는
@@ -46,6 +58,8 @@ export function renderState(state: AppState): void {
   // 배경 판은 판이 도는 동안 멈춘다. CSS로도 걷히지만(body.playing #bg-decor) 안 보이는
   // 것을 계속 굴리면 정작 진짜 판이 쓸 힘을 먹는다 — 걷는 것과 멈추는 것은 다른 일이다.
   setBackgroundRunning(!showPlay);
+  // 푸터 안내. 없는 화면은 빈 문자열이라 :not(:empty) 규칙이 자리까지 걷는다.
+  byId("footer-hint").textContent = screen ? (FOOTER_HINTS[screen] ?? "") : "";
   byId("play").classList.toggle("on", showPlay);
   // 시간·스릴 게이지 HUD는 **내가 살아서 뛰는 동안에만**. 죽는 순간 값이 멈추므로
   // 그 뒤로도 띄워두면 낡은 숫자가 남는다 — 관전 중엔 남의 기록으로, 결과 화면에선

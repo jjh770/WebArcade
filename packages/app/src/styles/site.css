@@ -204,8 +204,12 @@ table.ranks td.time { text-align: right; color: var(--text-muted);
 .g-text { min-width: 0; } /* 긴 설명이 격자 칸을 밀지 않게 */
 .game-card .g-title { font-size: var(--fs-title); font-weight: 700; }
 .game-card .g-desc { font-size: var(--fs-sub); color: var(--text-muted); margin-top: 4px; }
-/* 목록은 행이 길어 다른 화면보다 넓은 자리가 필요하다. */
-#screen-gamelist .card { width: min(760px, 100%); }
+/* 목록은 행이 길어 다른 화면보다 넓은 자리가 필요하다.
+   그리고 **상자를 벗는다** — 행 하나하나가 이미 판이라, 그걸 또 상자에 담으면 상자 안의
+   상자가 된다. 벗기면 행이 배경(뒤에서 도는 게임) 위에 바로 얹히고, 제목도 프레임의
+   왼쪽 세로선에 정확히 선다. tetr.io의 목록도 배경 위에 행만 얹는다. */
+#screen-gamelist .card { width: min(760px, 100%);
+  background: none; box-shadow: none; padding-left: 0; padding-right: 0; }
 #game-cards { gap: var(--sp-2); }
 
 
@@ -238,6 +242,11 @@ body:not(.playing) #error-toast { bottom: calc(var(--frame-bottom) + var(--sp-4)
   gap: var(--sp-3); justify-content: center;
   flex-wrap: wrap; border-top: 1px solid var(--border); font-size: var(--fs-small);
   color: var(--text-muted); }
+/* 문맥 안내는 **왼쪽 끝**에 서고 나머지를 오른쪽으로 민다(프레임의 두 모서리를 쓴다).
+   본문보다 밝고 굵다 — 저작권 표시나 링크와 같은 무게로 두면 안내로 안 읽힌다.
+   ⚠️ 비어 있을 때는 자리를 차지하지 않는다. 안 그러면 읽을거리 화면에서 링크가
+      오른쪽으로 밀린 채 왼쪽만 뻥 빈다. */
+#footer-hint:not(:empty) { margin-right: auto; color: var(--text-secondary); font-weight: 600; }
 body.playing #site-header, body.playing #site-footer { display: none; }
 .brand { background: none; border: none; color: var(--text-primary); font-weight: 800;
   font-size: var(--fs-title); letter-spacing: -.01em;
