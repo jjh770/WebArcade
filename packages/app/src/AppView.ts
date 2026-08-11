@@ -9,6 +9,7 @@ import type { PlayerPublic, RankEntry } from "@arcade/shared";
 import { GAME_REGISTRY, formatGameScore, type GameId } from "./GameRegistry";
 import { PLAY_STATES, type AppState } from "./AppFlow";
 import { byId } from "./dom";
+import { clearGamePreviews, mountGamePreview, setGamePreviewsRunning } from "./gamePreview";
 import { NOTICES } from "./siteContent";
 import type { BoardRow } from "./soloRanking";
 import { newcomers, staggerIndex } from "./stagger";
@@ -33,6 +34,8 @@ export function renderState(state: AppState): void {
   else if (!PLAY_STATES.has(state)) screen = state as ScreenName;
 
   for (const name of SCREEN_NAMES) byId(`screen-${name}`).classList.toggle("active", name === screen);
+  // 미리보기 판 넷은 목록이 보일 때만 돈다 — 안 보이는 화면을 굴리면 판에 쓸 힘을 먹는다.
+  setGamePreviewsRunning(screen === "gamelist");
   // 카운트다운 동안에도 플레이 영역을 보여준다 — 그 위에 게임판이 내려와 자리잡는다.
   const showPlay = PLAY_STATES.has(state) || state === "countdown";
   byId("play").classList.toggle("on", showPlay);
@@ -83,19 +86,23 @@ export function renderNotices(): void {
 export function renderGameList(onSelect: (id: GameId) => void): void {
   const wrapper = byId("game-cards");
   wrapper.innerHTML = "";
+  // 지운 캔버스에 계속 그리지 않도록 먼저 버린다(gamePreview 주석).
+  clearGamePreviews();
   for (const id of Object.keys(GAME_REGISTRY) as GameId[]) {
     const entry = GAME_REGISTRY[id];
     const button = document.createElement("button");
     button.className = "game-card";
-    // 왼쪽 칸은 **미리보기 자리**다. 지금은 비어 있고(3단계에서 실제 판이 들어온다)
-    // 장식뿐이라 스크린리더에서 감춘다 — 옆의 제목이 이미 무슨 게임인지 말한다.
-    button.innerHTML = `<div class="g-thumb" aria-hidden="true"></div>`
+    // 왼쪽 칸에는 그 게임이 **실제로 돌아간다**. 그림 파일이 아니라 게임 자신이라
+    // 장식이고, 무슨 게임인지는 옆 제목이 말하므로 스크린리더에서 감춘다.
+    button.innerHTML = `<canvas class="g-thumb" aria-hidden="true"></canvas>`
       + `<div class="g-text">`
       + `<div class="g-title">${escapeHtml(entry.title)}</div>`
       + `<div class="g-desc">${escapeHtml(entry.description)}</div>`
       + `</div>`;
     button.addEventListener("click", () => onSelect(id));
     wrapper.appendChild(button);
+    // ⚠️ appendChild 뒤에 붙인다 — 붙기 전에는 캔버스 표시 크기가 0이라 해상도를 못 잡는다.
+    mountGamePreview(button.querySelector("canvas") as HTMLCanvasElement, id);
   }
 }
 

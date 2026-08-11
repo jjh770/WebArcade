@@ -35,7 +35,8 @@ import { cancelCountdown, runCountdown } from "./countdown";
 import { byId } from "./dom";
 import { initOptions, renderOptions } from "./optionsScreen";
 import { initPageFocus } from "./pageFocus";
-import { layoutPlayArea } from "./playLayout";
+import { resizeGamePreviews } from "./gamePreview";
+import { LOGICAL_HEIGHT, LOGICAL_WIDTH, layoutPlayArea } from "./playLayout";
 import { ROOM_CODE_PATTERN, createRoom, joinRoom } from "./roomConnect";
 import { initSoundShell } from "./soundShell";
 import {
@@ -55,11 +56,6 @@ import { createServerRouter } from "./serverRoutes";
 import { loadNickname, saveNickname } from "./prefs";
 import { createRankingScreen } from "./rankingScreen";
 import { createSoloPlay } from "./soloPlay";
-
-/** 게임 좌표계(논리) 크기. 캔버스 픽셀 크기와 별개다 — 표시 크기는 CSS/DPR이 정하고,
- *  Canvas2DRenderer가 논리->픽셀 변환을 맡는다. 게임 로직은 항상 이 좌표만 본다. */
-const LOGICAL_WIDTH = 800;
-const LOGICAL_HEIGHT = 800; // 정사각형 — 원형 경기장에 맞춤(죽림고수 config와 일치).
 
 const mainCanvas = byId<HTMLCanvasElement>("game");
 const sideCanvases = Array.from({ length: 3 }, (_, index) => byId<HTMLCanvasElement>(`side-${index}`));
@@ -120,6 +116,8 @@ function showHud(score: number, gauge: number | null): void {
 function relayout(): void {
   layoutPlayArea(LOGICAL_WIDTH / LOGICAL_HEIGHT);
   session.resizeViews();
+  // 목록의 미리보기 판도 같은 이유로 해상도를 다시 잡는다(표시 크기가 clamp라 폭을 탄다).
+  resizeGamePreviews();
 }
 relayout();
 // 창 크기·모니터(DPR) 변경 시 다시 맞춘다.

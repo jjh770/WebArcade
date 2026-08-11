@@ -12,6 +12,14 @@
 
 import { byId } from "./dom";
 
+/** 게임 좌표계(논리) 크기. 캔버스 픽셀 크기와 별개다 — 표시 크기는 CSS/DPR이 정하고,
+ *  Canvas2DRenderer가 논리->픽셀 변환을 맡는다. 게임 로직은 항상 이 좌표만 본다.
+ *  정사각형인 이유는 원형 경기장에 맞춘 것이다(죽림고수 config와 일치).
+ *  ⚠️ 판을 그리는 곳(main)과 목록 미리보기(gamePreview)가 **같은 값**을 써야 한다 —
+ *     미리보기는 같은 게임을 작은 캔버스에 띄우는 것이라 좌표계가 다르면 그림이 어긋난다. */
+export const LOGICAL_WIDTH = 800;
+export const LOGICAL_HEIGHT = 800;
+
 /** 이 폭 미만이면 관전 칼럼을 접고 메인 화면에 공간을 전부 준다(모바일·좁은 창). */
 const NARROW_VIEWPORT = 900;
 /** 관전 칼럼 폭 = 뷰포트 폭의 이 비율, 단 [min, max]로 제한. */
