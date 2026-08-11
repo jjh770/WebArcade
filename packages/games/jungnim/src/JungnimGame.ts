@@ -24,33 +24,26 @@ import { PersonalSpawner } from "./PersonalSpawner";
 import { ArrowPool } from "./ArrowPool";
 import { advanceArrows, clampToArena, clearArrowsNear, findHit } from "./arrowField";
 import { ItemSpawner } from "./ItemSpawner";
+import {
+  HUD_COLOR,
+  INVERT_COLOR,
+  ITEM_COLOR,
+  PLAYER_COLOR,
+  SLUGGISH_COLOR,
+  drawArena,
+  drawItem,
+  drawPool,
+  drawPurgeRing,
+  kindColor,
+  kindLabel,
+  purgeRingRadius,
+} from "./draw";
 
-const PLAYER_COLOR = "#e63946";
-const ARROW_COLOR = "#1d3557"; // 공통(시드) 화살 — 짙은 남색.
-const PERSONAL_COLOR = "#f77f00"; // 개인(조준) 화살 — 주황. "너를 노린다"는 신호.
-const HUD_COLOR = "#e8eef2"; // HUD 텍스트 — 원 밖 어두운 영역 위라 밝게.
-const ITEM_COLOR = "#ffd166"; // 아이템 기본색(모르는 종류). 종류별 색은 config.item.kinds.
-const INVERT_COLOR = "#c77dff"; // 조작 반전 피격 중.
-const SLUGGISH_COLOR = "#4dd0e1"; // 조작 둔화 피격 중.
-
-/** 아이템이 커졌다 작아지는 맥동 주기(tick)와 진폭(배율). 순수 렌더. */
-const ITEM_PULSE_TICKS = 40;
-const ITEM_PULSE_AMOUNT = 0.18;
-/** 사라지기 직전 이 tick 동안 깜빡여 "곧 없어진다"를 알린다. */
-const ITEM_FADE_TICKS = 120;
-/** 등장 순간 이 tick 동안 부풀어 오른다 — 탄막 속에서 "새로 생겼다"가 보이게. */
-const ITEM_POP_TICKS = 15;
-/** 획득 순간 아이템 자리에서 튀는 불꽃이 남는 시간(tick)과 개수. */
+/** 획득 순간 아이템 자리에서 튀는 불꽃이 남는 시간(tick)과 개수.
+ *  이건 draw.ts로 안 갔다 — 불꽃을 그리는 쪽이 여기 남았고(주운 자리·색·이름표를
+ *  다 읽는다), 지속시간은 takeItem에서도 세팅한다. */
 const PICKUP_FLASH_TICKS = 20;
 const PICKUP_SPARKS = 10;
-/** 정화 파동 고리를 이루는 점 개수(반경이 커서 성기면 고리로 안 보인다). */
-const PURGE_RING_DOTS = 28;
-
-// 원형 경기장 색: 어두운 바깥 + 얇은 테두리 + 밝은 바닥.
-const ARENA_OUTSIDE = "#15171d";
-const ARENA_BORDER = "#457b9d";
-const ARENA_FLOOR = "#f1faee";
-const ARENA_BORDER_W = 3;
 
 /** 개인 시드 = 공통 시드에서 파생(별도 스트림 보장). 값 자체는 임의의 큰 홀수 상수.
  *  ⚠️ 현재는 모든 플레이어가 같은 personalSeed → 개인 스폰 스케줄·패턴이 동일하고
@@ -279,12 +272,12 @@ export class JungnimGame implements IGame {
   }
 
   render(r: IRenderer, _alpha: number): void {
-    this.drawArena(r);
-    this.drawItem(r); // 화살보다 먼저 — 화살이 아이템 위를 지나가야 "위험을 뚫고 줍는" 그림이 된다
+    drawArena(r);
+    drawItem(r, this.items.current, this.worldTick); // 화살보다 먼저 — 화살이 아이템 위를 지나가야 "위험을 뚫고 줍는" 그림이 된다
     // 내 화면에선 화살이 실제로 지워졌으니 걸러낼 게 없다 — 파동만 얹는다.
-    this.drawPool(r, this.commonPool); // 공통 화살
-    this.drawPool(r, this.me.pool); // 내 개인 화살
-    this.drawPurgeRing(r, this.me);
+    drawPool(r, this.commonPool); // 공통 화살
+    drawPool(r, this.me.pool); // 내 개인 화살
+    drawPurgeRing(r, this.me);
 
     // 획득 불꽃은 주운 자리에 남는다(플레이어는 이미 다른 데로 움직였을 수 있다).
     if (!this.dead && this.pickupFlash > 0) this.drawPickupSparks(r);
@@ -311,23 +304,23 @@ export class JungnimGame implements IGame {
   }
 
   renderSpectator(r: IRenderer, target: SpectateTarget): void {
-    this.drawArena(r);
+    drawArena(r);
     // ⚠️ 아이템은 내 인스턴스 기준이라, 관전 대상이 이미 먹은 아이템도 남아 보일 수 있다
     // (획득은 각자의 로컬 판정 — 개인 화살이 근사인 것과 같은 종류의 오차).
-    this.drawItem(r);
+    drawItem(r, this.items.current, this.worldTick);
     const peer = this.peers.get(target.id);
     // 그 사람이 정화를 썼다면, 퍼지는 파동 안쪽 화살을 빼고 그린다 — 그 사람 화면에선
     // 이미 없는 화살이다. 내 공통 풀은 그대로 두므로 내 판정엔 영향이 없다.
-    const ring = peer ? this.purgeRingRadius(peer) : null;
+    const ring = peer ? purgeRingRadius(peer) : null;
     const skip = peer && ring !== null ? { x: peer.purgeX, y: peer.purgeY, radius: ring } : undefined;
-    this.drawPool(r, this.commonPool, skip); // 공통 화살(모두 동일)
+    drawPool(r, this.commonPool, skip); // 공통 화살(모두 동일)
     // 점·화살 모두 ease된 위치(peer.x,y)로 그려 부드럽게. 없으면 target 신호 폴백
     // (이 게임의 a·b는 좌표다).
     const dotX = peer ? peer.x : target.a;
     const dotY = peer ? peer.y : target.b;
     if (peer) {
-      this.drawPool(r, peer.pool, skip); // 그 사람의 개인(조준) 화살 시각 근사
-      this.drawPurgeRing(r, peer);
+      drawPool(r, peer.pool, skip); // 그 사람의 개인(조준) 화살 시각 근사
+      drawPurgeRing(r, peer);
     }
     r.circle(dotX, dotY, jungnimConfig.playerRadius, PLAYER_COLOR);
     r.text(`관전: ${target.label}`, 12, 28, HUD_COLOR, 22);
@@ -382,27 +375,7 @@ export class JungnimGame implements IGame {
   }
 
   // ---- 내부 ----
-
-  /** 떠 있는 아이템: 맥동하는 금색 원 + 십자 반짝임. 사라지기 직전엔 깜빡인다.
-   *  전부 tick의 함수라 관전 화면에서도 같은 모습으로 보인다(렌더 전용 — 판정과 무관). */
-  private drawItem(r: IRenderer): void {
-    const item = this.items.current;
-    if (!item) return;
-    const age = this.worldTick - item.bornTick;
-    const left = item.expireTick - this.worldTick;
-    // 곧 사라지는 동안 8tick 주기로 깜빡 — 한 프레임 걸러 그리지 않는다.
-    if (left < ITEM_FADE_TICKS && Math.floor(left / 8) % 2 === 1) return;
-
-    const pulse = 1 + Math.sin((age / ITEM_PULSE_TICKS) * Math.PI * 2) * ITEM_PULSE_AMOUNT;
-    // 등장 직후엔 0에서 부풀어 오른다(ease-out). 탄막 한복판에 조용히 나타나면 못 본다.
-    const pop = Math.min(1, age / ITEM_POP_TICKS);
-    const radius = jungnimConfig.item.radius * pulse * pop * (2 - pop);
-    const color = kindColor(item.kind); // 종류마다 색이 달라 멀리서도 무엇인지 안다
-    r.circle(item.x, item.y, radius, color);
-    const spike = radius + 5;
-    r.line(item.x - spike, item.y, item.x + spike, item.y, color, 2);
-    r.line(item.x, item.y - spike, item.x, item.y + spike, color, 2);
-  }
+  // 상태를 안 읽는 그리기는 draw.ts에 있다. 여기 남은 것은 전부 이 판의 상태를 읽는다.
 
   /** 획득 순간: 아이템이 있던 자리에서 불꽃이 사방으로 튀며 작아진다.
    *  발사 버스트(플레이어에 붙음)와 자리가 달라, "여기서 주웠고 → 내가 쐈다"가 함께 읽힌다. */
@@ -450,67 +423,4 @@ export class JungnimGame implements IGame {
     a.y = jungnimConfig.screenHeight / 2;
   }
 
-  /** 원형 경기장: 어두운 배경을 깔고, 그 위에 테두리 원 → 밝은 바닥 원을 겹쳐 링을 만든다. */
-  private drawArena(r: IRenderer): void {
-    const { cx, cy, radius } = jungnimConfig.arena;
-    r.clear();
-    r.rect(0, 0, jungnimConfig.screenWidth, jungnimConfig.screenHeight, ARENA_OUTSIDE);
-    r.circle(cx, cy, radius, ARENA_BORDER);
-    r.circle(cx, cy, radius - ARENA_BORDER_W, ARENA_FLOOR);
-  }
-
-  /** skip이 있으면 그 원 안의 화살은 안 그린다 — 남의 정화 파동을 내 화면에서 흉내 낼 때 쓴다.
-   *  (그 사람은 실제로 지웠지만 내 공통 풀엔 남아 있다. 지우면 내 판정까지 바뀐다.) */
-  private drawPool(r: IRenderer, pool: ArrowPool, skip?: { x: number; y: number; radius: number }): void {
-    const skip2 = skip ? skip.radius * skip.radius : 0;
-    for (const a of pool.items) {
-      if (!a.active) continue;
-      if (skip) {
-        const dx = a.x - skip.x;
-        const dy = a.y - skip.y;
-        if (dx * dx + dy * dy <= skip2) continue;
-      }
-      this.drawArrow(r, a);
-    }
-  }
-
-  /** 지금 퍼지고 있는 정화 파동의 반경(없으면 null). tick의 함수라 어느 화면에서든 같다. */
-  private purgeRingRadius(avatar: Avatar): number | null {
-    if (avatar.purgeFlash <= 0) return null;
-    const { radius, ringTicks } = jungnimConfig.item.purge;
-    const progress = 1 - avatar.purgeFlash / ringTicks; // 0(막 씀) → 1(끝)
-    // 점이 아니라 **몸에서** 퍼져나간다 — 0에서 시작하면 첫 프레임이 한 점에 뭉쳐 얼룩처럼 보인다.
-    const from = jungnimConfig.playerRadius;
-    return from + (radius - from) * progress;
-  }
-
-  /** 정화 파동: 그 자리에서 금색 고리가 반경까지 퍼지며 옅어진다. */
-  private drawPurgeRing(r: IRenderer, avatar: Avatar): void {
-    const ring = this.purgeRingRadius(avatar);
-    if (ring === null) return;
-    const dot = 5 * (avatar.purgeFlash / jungnimConfig.item.purge.ringTicks);
-    for (let i = 0; i < PURGE_RING_DOTS; i++) {
-      const angle = ((Math.PI * 2) / PURGE_RING_DOTS) * i;
-      r.circle(avatar.purgeX + Math.cos(angle) * ring, avatar.purgeY + Math.sin(angle) * ring, dot, kindColor("purge"));
-    }
-  }
-
-  /** 화살 하나를 진행 방향(대각선 포함) 짧은 선으로 그린다. 색은 공통/개인 구분. */
-  private drawArrow(r: IRenderer, a: { x: number; y: number; vx: number; vy: number; personal: boolean }): void {
-    const half = jungnimConfig.arrowLength / 2;
-    const len = Math.hypot(a.vx, a.vy) || 1;
-    const ux = (a.vx / len) * half;
-    const uy = (a.vy / len) * half;
-    r.line(a.x - ux, a.y - uy, a.x + ux, a.y + uy, a.personal ? PERSONAL_COLOR : ARROW_COLOR, 3);
-  }
-
-}
-
-/** 아이템 종류의 표시색·이름. 모르는 종류면 기본값(종류가 늘어도 옛 판정이 안 죽는다). */
-function kindColor(kind: string): string {
-  return jungnimConfig.item.kinds.find((entry) => entry.kind === kind)?.color ?? ITEM_COLOR;
-}
-
-function kindLabel(kind: string): string {
-  return jungnimConfig.item.kinds.find((entry) => entry.kind === kind)?.label ?? "아이템";
 }
