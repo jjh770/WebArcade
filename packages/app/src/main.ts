@@ -278,7 +278,7 @@ byId("menu-options").addEventListener("click", () => {
   transition("nav_options");
 });
 byId("options-back").addEventListener("click", () => transition("nav_game_main"));
-byId("menu-credits").addEventListener("click", () => toast("Arcade — 웹 멀티 아케이드 게임"));
+// 크레딧은 배선이 없다 — 저장소의 ASSET_CREDITS.md로 나가는 <a>라 브라우저가 알아서 한다.
 
 const FIRST_GAME_ID = Object.keys(GAME_REGISTRY)[0] as GameId;
 

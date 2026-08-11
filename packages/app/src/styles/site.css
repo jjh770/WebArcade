@@ -79,9 +79,22 @@ body.hint-dims #screen-countdown.play-overlay { background: transparent; }
    건 아래 미디어 쿼리 몫이다 — min이 max보다 크면 CSS는 min을 택한다).
    세로로 넘치면 카드 안에서 스크롤한다 — 가로로 누운 폰에서 대기실 카드가
    화면보다 쉽게 길어진다. */
-.card { background: var(--surface); padding: var(--sp-5); border-radius: 16px;
-  width: min(560px, 100%); max-width: 100%; max-height: 100%; overflow-y: auto;
-  box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+/* `.card`는 이름만 남고 **상자가 아니다.** 내용이 배경(뒤에서 도는 게임) 위에 바로
+   얹히고, 구조는 프레임(헤더·푸터)과 제목 크기가 맡는다. 묶음이 필요한 것들은 각자
+   테두리를 갖고 있다 — 순위표는 행 밑줄, 공지는 항목 테두리, 옵션은 줄 밑줄,
+   대기실 명단과 입력칸은 자기 배경. 그래서 이 판을 걷어도 흩어지지 않는다.
+   여백을 0으로 두는 이유: 화면 여백(.screen의 --frame-inset)이 이미 자리를 잡고 있어서,
+   여기서 또 주면 제목이 로고보다 안쪽으로 밀려 세로선이 어긋난다.
+   ⚠️ 판 위에 뜨는 결과 화면만 예외다(바로 아래) — 게임 그림 위에 글이 얹히는 자리라
+      판이 없으면 읽을 수가 없다. */
+/* ⚠️ 여기에 `overflow-y: auto`를 두면 안 된다. 한 축이 auto면 다른 축도 스크롤 컨테이너가
+   되는데(CSS 규칙), 그러면 줄이 hover에서 1.5% 커질 때 그만큼 삐져나가 **가로 스크롤바가
+   생긴다.** 실제로 그랬다. 세로 스크롤은 글이 긴 화면(.page)에만 준다 — 거기에는 커지는
+   줄이 없다. 대신 늘 넘칠 일이 없는 화면은 그림자와 커진 줄이 자유롭게 번지게 둔다. */
+.card { background: none; box-shadow: none; border-radius: 0; padding: 0;
+  width: min(var(--w-form), 100%); max-width: 100%; max-height: 100%; overflow: visible; }
+.play-overlay .card { background: var(--surface); border-radius: 16px; padding: var(--sp-5);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
 /* 스크롤바도 UI다. 기본 막대는 어두운 카드 위에서 혼자 밝고 두껍게 뜬다.
    쉴 때는 테두리색으로 조용히, 손이 올라가면 밝아진다.
    두 벌을 쓰는 이유: 최신 크롬·파이어폭스는 표준 속성(scrollbar-*)만 보고,
@@ -104,6 +117,10 @@ body.hint-dims #screen-countdown.play-overlay { background: transparent; }
 .card h2 { margin: 0 0 var(--sp-4); font-size: var(--fs-title); font-weight: 500;
   color: var(--text-muted); }
 .card .hint { color: var(--text-muted); font-size: var(--fs-sub); margin: var(--sp-1) 0 0; }
+/* 화면을 끝맺는 버튼(뒤로·나가기)은 바로 위 내용과 떨어뜨린다. 붙어 있으면 그 글에
+   딸린 것처럼 보인다 — 행동은 읽을거리와 한 칸 떨어져 있어야 한다.
+   :last-child라 문단 사이에 낀 버튼(닉네임의 「입장」)은 건드리지 않는다. */
+.card > button:last-child { margin-top: var(--sp-4); }
 
 input { width: 100%; padding: 14px 16px; margin: var(--sp-1) 0 var(--sp-3);
   border: 1px solid transparent;
@@ -181,19 +198,38 @@ table.ranks td.time { text-align: right; color: var(--text-muted);
 .tabs button.on { color: var(--primary);
   background: color-mix(in srgb, var(--primary) 14%, transparent); }
 
-/* 게임 한 줄. 카드가 아니라 **행**이다 — 왼쪽은 미리보기 자리, 오른쪽은 글이다.
-   목록을 훑을 때 눈이 왼쪽 열을 따라 내려가고 제목이 그 옆에 나란히 선다.
-   ⚠️ 미리보기는 3단계에서 들어온다. 지금 자리를 잡아 두는 이유는 그때 행 높이가
-      다시 흔들리지 않게 하려는 것이다 — 빈 칸이 아니라 **예약된 칸**이다. */
-.game-card { --thumb: clamp(68px, 7vw, 96px);
-  display: grid; grid-template-columns: var(--thumb) 1fr; gap: var(--sp-3); align-items: center;
-  width: 100%; text-align: left; background: var(--surface-elevated);
+/* ---- 고르는 줄 ---------------------------------------------------------
+   메뉴와 게임 목록이 **같은 어휘**를 쓴다. 둘 다 "무언가를 고르는 화면"이라
+   생김새가 다르면 화면이 이어지지 않는다 — 메뉴에서 목록으로 넘어갈 때 같은 것을
+   계속 훑는 느낌이 나야 한다.
+   버튼을 채운 알약에서 이쪽으로 옮긴 이유: 판을 걷어낸 화면에 밝은 알약만 남으면
+   그것만 부품처럼 뜬다. 다만 **맨 글자로 두지는 않는다** — 덩어리가 커야 눌리는
+   곳인지 헷갈리지 않는다(tetr.io의 메뉴 항목도 112px짜리 행이다). */
+.row-item { display: block; width: 100%; text-align: left; background: var(--surface-elevated);
   border: 1px solid transparent; border-radius: 12px; padding: var(--sp-3);
-  cursor: pointer; color: var(--text-primary); font: inherit;
-  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
-.game-card:hover { border-color: var(--primary); transform: translateY(-2px);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, .35); }
-.game-card:active { transform: translateY(0) scale(.99); }
+  cursor: pointer; color: var(--text-primary); font: inherit; text-decoration: none;
+  transition: transform .16s var(--ease-out), border-color .16s ease,
+    background .16s ease, box-shadow .16s ease; }
+/* 손이 올라간 줄만 청록으로 켜지고 살짝 떠오른다. 늘 켜져 있으면 신호가 아니라 장식이다. */
+.row-item:hover:not(:disabled) { border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface-elevated));
+  transform: translateY(-3px) scale(1.015); filter: none;
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--primary) 22%, transparent); }
+/* 누르는 순간은 **확실하게 내려앉는다** — 떠오른 것을 되돌리는 정도가 아니라 원래보다
+   아래로, 더 작게, 더 어둡게. 안쪽 그림자가 "눌려 들어갔다"를 만든다.
+   ⚠️ 전환 시간을 여기서만 확 줄인다. 누름은 손가락보다 늦으면 안 된다 —
+      올라올 때(hover)는 부드러워도 되지만 들어갈 때가 느리면 반응이 없는 것처럼 느껴진다. */
+.row-item:active:not(:disabled) { transform: translateY(2px) scale(.975);
+  background: color-mix(in srgb, var(--primary) 16%, var(--bg));
+  border-color: var(--primary-strong); filter: none;
+  box-shadow: inset 0 3px 12px rgba(0, 0, 0, .5);
+  transition-duration: .04s; }
+.row-title { font-size: var(--fs-title); font-weight: 700; }
+.row-desc { font-size: var(--fs-sub); color: var(--text-muted); margin-top: 4px; }
+
+/* 게임 한 줄. 고르는 줄에 **미리보기 칸**을 붙인 것이다 — 왼쪽은 판, 오른쪽은 글이다. */
+.game-card { --thumb: clamp(68px, 7vw, 96px);
+  display: grid; grid-template-columns: var(--thumb) 1fr; gap: var(--sp-3); align-items: center; }
 /* 판은 정사각이다(게임 캔버스가 그렇다) — 3단계에서 들어올 그림의 비율을 미리 지킨다.
    격자는 배경 장식(.bg-grid)과 같은 어휘라, 비어 있어도 "판 자리"로 읽힌다. */
 .g-thumb { width: var(--thumb); height: var(--thumb); border-radius: 9px;
@@ -202,15 +238,19 @@ table.ranks td.time { text-align: right; color: var(--text-muted);
     repeating-linear-gradient(0deg, color-mix(in srgb, var(--primary) 12%, transparent) 0 1px, transparent 1px 12px),
     repeating-linear-gradient(90deg, color-mix(in srgb, var(--primary) 12%, transparent) 0 1px, transparent 1px 12px); }
 .g-text { min-width: 0; } /* 긴 설명이 격자 칸을 밀지 않게 */
-.game-card .g-title { font-size: var(--fs-title); font-weight: 700; }
-.game-card .g-desc { font-size: var(--fs-sub); color: var(--text-muted); margin-top: 4px; }
-/* 목록은 행이 길어 다른 화면보다 넓은 자리가 필요하다.
-   그리고 **상자를 벗는다** — 행 하나하나가 이미 판이라, 그걸 또 상자에 담으면 상자 안의
-   상자가 된다. 벗기면 행이 배경(뒤에서 도는 게임) 위에 바로 얹히고, 제목도 프레임의
-   왼쪽 세로선에 정확히 선다. tetr.io의 목록도 배경 위에 행만 얹는다. */
-#screen-gamelist .card { width: min(760px, 100%);
-  background: none; box-shadow: none; padding-left: 0; padding-right: 0; }
-#game-cards { gap: var(--sp-2); }
+/* 제목·설명은 .row-title/.row-desc가 맡는다(메뉴와 공유). */
+/* 게임 목록은 **상자를 벗고 폭을 다 쓴다.**
+   상자를 벗는 이유: 행 하나하나가 이미 판이라, 그걸 또 상자에 담으면 상자 안의 상자가
+   된다. 벗기면 행이 배경(뒤에서 도는 게임) 위에 바로 얹히고 제목도 프레임의 왼쪽
+   세로선에 정확히 선다(tetr.io의 목록도 배경 위에 행만 얹는다).
+   ⚠️ 다만 상자를 벗는 것과 **오른쪽이 비는 것은 다른 문제다.** 한 줄로 세워 두면 넓은
+      화면에서 목록 오른쪽이 통째로 빈다 — 그래서 자리가 되는 만큼 칸을 늘린다. */
+#screen-gamelist .card { width: min(var(--w-wide), 100%); }
+/* 한 칸이 이만큼은 돼야 미리보기 + 제목 + 설명이 답답하지 않다. 폭이 되면 두 칸,
+   더 되면 그 이상으로 저절로 늘어난다(폰에서는 min(100%)에 걸려 한 칸).
+   ⚠️ .stack이 flex-column이라 display를 여기서 덮는다 — 순서상 뒤에 있어야 이긴다. */
+#game-cards { display: grid; gap: var(--sp-2);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
 
 
 /* 에러 토스트는 무엇에도 가리면 안 된다 — 사용자가 왜 실패했는지 알 유일한 통로다.
@@ -289,9 +329,41 @@ body.playing #sound-toggle { top: auto; bottom: calc(14px + env(safe-area-inset-
       고치면 카드가 그 아래로 파고들었다. */
 .screen { padding: calc(var(--frame-top) + var(--sp-4)) var(--frame-inset)
   calc(var(--frame-bottom) + var(--sp-4)); }
-/* 읽을거리(공지·소개·순위·옵션)는 세로로 길어지므로 위에서부터 채운다. */
+/* 읽을거리(공지·소개·순위·커뮤니티·옵션)는 세로로 길어지므로 위에서부터 채운다.
+   폭은 읽기용으로 넓힌다 — 표와 목록이 왼쪽에 몰려 오른쪽이 통째로 비던 문제를 없앤다. */
 .page { align-items: flex-start !important; }
-.page .card { width: min(720px, 100%); max-width: 100%; max-height: 100%; overflow-y: auto; }
+/* 읽을거리만 세로로 스크롤한다(글이 화면보다 길다). 여기엔 hover에서 커지는 줄이 없어
+   가로축이 함께 스크롤 컨테이너가 돼도 넘칠 것이 없다. */
+.page .card { width: min(var(--w-read), 100%); max-width: 100%; max-height: 100%; overflow-y: auto; }
+/* ⚠️ 폭이 넓어졌다고 **문단까지** 넓히면 안 된다. 한 줄이 길면 눈이 다음 줄 첫머리를
+   놓친다 — 카드는 넓히되 읽는 덩어리는 글줄 길이로 묶는다. 표·목록은 넓어도 괜찮다
+   (행마다 눈이 되돌아올 자리가 있다). */
+.about-body p, .about-body .hook, .about-body .how { max-width: 68ch; }
+ul.notice-body { max-width: 80ch; }
+
+/* 표와 목록은 **프레임 폭을 다 쓴다.** 960에 묶어 두면 넓은 화면에서 오른쪽이 통째로
+   비는데, 이 둘은 넓어질수록 읽기가 나아진다 — 순위는 등수·이름·기록이 양끝으로
+   벌어지고, 공지는 여러 칸으로 늘어선다. */
+#screen-ranking .card, #screen-notice .card,
+#screen-about .card, #screen-community .card { width: 100%; }
+/* 옵션은 읽을거리가 아니라 **폼**이다. 읽기 폭(960)에 두면 설명과 슬라이더 사이가
+   300~400px씩 벌어져, 이름을 읽고 눈이 화면을 가로질러야 그 손잡이를 만난다.
+   좁히면 손잡이가 설명 바로 옆에 선다. */
+#screen-options .card { width: min(var(--w-form), 100%); }
+/* 소개는 글이라 늘릴 수 없다 — 대신 **여러 단으로 흘린다.** 폭을 다 쓰면서 한 줄은
+   짧게 유지하는 방법이 이것뿐이다. 좁은 화면에서는 한 단이 되어 지금과 같아진다.
+   ⚠️ 제목은 뒤따르는 글과 떨어지면 안 되고(break-after), 문단은 단 사이에서 잘리면
+      안 된다(break-inside). 이게 없으면 소제목만 단 끝에 홀로 남는다. */
+.about-body { column-width: 30rem; column-gap: var(--sp-6); }
+.about-body h3 { break-after: avoid; }
+.about-body p { break-inside: avoid; }
+/* 공지는 자리가 되는 만큼 칸을 늘린다. 한 칸이 이만큼은 돼야 제목과 본문이 안 눌린다. */
+#notice-list { display: grid; gap: var(--sp-3) var(--sp-5);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); align-items: start; }
+/* 칸으로 나뉘면 아래 줄이 구분선 노릇을 못 한다 — 칸마다 테두리를 둘러 덩어리를 만든다. */
+#notice-list .notice-item { border: 1px solid var(--border); border-radius: 12px;
+  padding: var(--sp-3); }
+#notice-list .notice-item:last-child { border-bottom: 1px solid var(--border); }
 .notice-item { padding: 12px 2px; border-bottom: 1px solid var(--border); }
 .notice-item:last-child { border-bottom: none; }
 .notice-date { color: var(--text-muted); font-size: 12px; }
@@ -316,8 +388,10 @@ ul.notice-body li::before { content: ""; position: absolute; left: 1px; top: .62
 /* ---- 옵션 -------------------------------------------------------------
    한 줄 = 설정 하나. 이름과 설명은 왼쪽, 스위치는 오른쪽 끝에 세로로 맞춘다
    — 줄이 늘어도 누르는 자리가 한 열에 모여 있어 눈이 헤매지 않는다. */
+/* ⚠️ 구분선을 --border로 올렸다. 예전 색(--surface-elevated)은 카드 판 위에서 보이라고
+   고른 값이라, 판을 걷어내고 어두운 배경 위에 놓으니 거의 사라진다. */
 .opt-row { display: flex; align-items: center; gap: 16px; padding: 14px 0;
-  border-bottom: 1px solid var(--surface-elevated); }
+  border-bottom: 1px solid var(--border); }
 .opt-row:last-child { border-bottom: none; }
 .opt-text { flex: 1; min-width: 0; }
 .opt-text b { display: block; font-size: 15px; }
@@ -339,6 +413,9 @@ ul.notice-body li::before { content: ""; position: absolute; left: 1px; top: .62
 @media (prefers-reduced-motion: reduce) {
   .bg-grid, .bg-glow { animation: none; }
   ul.players li.enter, table.ranks tr.enter { animation: none; }
+  /* 줄이 떠오르고 내려앉는 건 걷되 **색은 남긴다.** 움직임이 싫은 것이지
+     어디에 손이 올라가 있는지 모르고 싶은 게 아니다. */
+  .row-item, .row-item:hover:not(:disabled), .row-item:active:not(:disabled) { transform: none; }
 }
 
 /* ---- 작은 화면(폰) -------------------------------------------------------
@@ -346,7 +423,10 @@ ul.notice-body li::before { content: ""; position: absolute; left: 1px; top: .62
    것까지가 목표다. (판 여백은 base.css의 토큰, 조작면은 play.css 몫이다.) */
 @media (max-width: 600px) {
   /* 카드 폭·화면 여백은 토큰(clamp)이 이미 좁은 쪽 끝으로 내려온다 — 여기서
-     다시 정하지 않는다. 폰에서만 다른 것은 안쪽 여백과 방 코드 자간뿐이다. */
-  .card { padding: var(--sp-4) var(--sp-3); }
+     다시 정하지 않는다. 폰에서만 다른 것은 방 코드 자간뿐이다.
+     ⚠️ `.card`에 안쪽 여백을 다시 주지 않는다 — 판을 걷어낸 뒤로는 그 여백이 제목을
+        화면 여백보다 더 안쪽으로 밀어 로고와의 세로선을 깨뜨린다. */
   #ready-code { font-size: 26px; letter-spacing: 4px; }
+  /* 판 위 결과 화면은 여전히 상자라 좁은 화면에서 안쪽 여백을 줄인다. */
+  .play-overlay .card { padding: var(--sp-4) var(--sp-3); }
 }

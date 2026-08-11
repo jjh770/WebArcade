@@ -113,13 +113,13 @@ export function renderGameList(onSelect: (id: GameId) => void): void {
   for (const id of Object.keys(GAME_REGISTRY) as GameId[]) {
     const entry = GAME_REGISTRY[id];
     const button = document.createElement("button");
-    button.className = "game-card";
+    button.className = "row-item game-card";
     // 왼쪽 칸에는 그 게임이 **실제로 돌아간다**. 그림 파일이 아니라 게임 자신이라
     // 장식이고, 무슨 게임인지는 옆 제목이 말하므로 스크린리더에서 감춘다.
     button.innerHTML = `<canvas class="g-thumb" aria-hidden="true"></canvas>`
       + `<div class="g-text">`
-      + `<div class="g-title">${escapeHtml(entry.title)}</div>`
-      + `<div class="g-desc">${escapeHtml(entry.description)}</div>`
+      + `<div class="row-title">${escapeHtml(entry.title)}</div>`
+      + `<div class="row-desc">${escapeHtml(entry.description)}</div>`
       + `</div>`;
     button.addEventListener("click", () => onSelect(id));
     wrapper.appendChild(button);

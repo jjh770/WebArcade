@@ -88,9 +88,26 @@
             <h1>Arcade</h1>
             <h2 id="main-hello"></h2>
             <div class="stack">
-              <button id="menu-start" style="width:100%">게임 시작</button>
-              <button id="menu-options" class="secondary" style="width:100%">옵션</button>
-              <button id="menu-credits" class="secondary" style="width:100%">크레딧</button>
+              <!-- 채운 버튼이 아니라 **고르는 줄**이다(게임 목록과 같은 어휘).
+                   설명 한 줄이 붙는 이유: 줄이 크면 제목만 덩그러니 있는 게 더 허전하고,
+                   무엇보다 "옵션"이 무슨 옵션인지 눌러보기 전에 알 수 있다. -->
+              <button id="menu-start" class="row-item">
+                <div class="row-title">게임 시작</div>
+                <div class="row-desc">혼자 연습하거나 친구와 함께</div>
+              </button>
+              <button id="menu-options" class="row-item">
+                <div class="row-title">옵션</div>
+                <div class="row-desc">음악과 효과음 크기</div>
+              </button>
+              <!-- 크레딧은 화면이 아니라 **저장소의 ASSET_CREDITS.md**로 보낸다. 출처와
+                   라이선스의 정본이 거기 하나뿐이라, 화면에 옮겨 적으면 둘이 어긋난다.
+                   ⚠️ button이 아니라 a다 — 밖으로 나가는 것은 링크의 일이고, 가운데 클릭·
+                      새 탭으로 열기 같은 브라우저 기본 동작도 그래야 따라온다. -->
+              <a id="menu-credits" class="row-item" target="_blank" rel="noopener noreferrer"
+                 href="https://github.com/jjh770/WebArcade/blob/main/ASSET_CREDITS.md">
+                <div class="row-title">크레딧</div>
+                <div class="row-desc">음악 출처와 라이선스 — 저장소에서 열립니다</div>
+              </a>
             </div>
           </div>
         </section>
@@ -100,7 +117,7 @@
           <div class="card">
             <h1>게임 선택</h1>
             <div id="game-cards" class="stack"></div>
-            <button id="gamelist-back" class="secondary" style="width:100%; margin-top:14px">뒤로</button>
+            <button id="gamelist-back" class="secondary" style="width:100%">뒤로</button>
           </div>
         </section>
 
@@ -121,7 +138,7 @@
               <button id="join-btn" style="flex:0 0 auto">입장</button>
             </div>
             <button id="lobby-rank-btn" class="textlink" style="width:100%">이 게임 순위 보기</button>
-            <button id="lobby-back" class="secondary" style="width:100%; margin-top:6px">뒤로</button>
+            <button id="lobby-back" class="secondary" style="width:100%">뒤로</button>
           </div>
         </section>
 
