@@ -15,26 +15,46 @@
    깨지면 **첫 조작 한 번을 기다렸다가 다시 시도한다.** 이게 없으면 주소로 바로 들어온
    사람에게 음악이 영원히 안 나온다.
 
-   ⚠️ 실패는 전부 **조용한 무음**이다. 파일이 없든, 코덱을 모르든(오래된 iOS의 ogg),
-   자동재생이 막히든 게임은 그대로 돌아간다. 음악은 없어도 되는 것이다.
+   ⚠️ 실패는 전부 **조용한 무음**이다. 파일이 없든, 코덱을 모르든, 자동재생이 막히든
+   게임은 그대로 돌아간다. 음악은 없어도 되는 것이다.
+   ⚠️ 그 관대함이 한동안 버그를 덮고 있었다: **iOS Safari는 Ogg Vorbis를 못 읽어**
+      아이폰에서 음악이 통째로 안 났는데, 조용한 무음이라 아무 신호도 없었다. 그래서
+      곡마다 .m4a(AAC)를 한 벌 더 두고 브라우저에게 물어 고른다(chooseExtension).
+      두 벌을 만드는 건 `node scripts/encode-bgm.mjs`.
    ============================================================ */
 
 import { isPageActive, watchPageFocus } from "./pageFocus";
 import { DEFAULT_VOLUME, loadMusicMuted, loadVolume, saveMusicMuted, saveVolume } from "./prefs";
 
-/** 곡 이름 → `public/bgm/`의 파일. 부르는 쪽은 파일명을 모른다 — 곡을 갈아끼울 때
+/** 곡 이름 → `public/bgm/`의 파일 이름. 부르는 쪽은 파일명을 모른다 — 곡을 갈아끼울 때
  *  고치는 자리가 여기 한 줄이다.
- *  ⚠️ 여기 있는 파일은 번들에 들어가지 않고 그대로 배포된다(`public/`). 12MB짜리를
+ *  ⚠️ **확장자가 없다.** 같은 곡이 `.ogg`와 `.m4a` 두 벌로 있고 어느 쪽을 트는지는
+ *     브라우저가 정한다(chooseExtension). 곡을 추가하면 두 벌 다 있어야 한다 —
+ *     `scripts/encode-bgm.mjs`가 만들고, 빠지면 tests/Bgm.test.ts가 잡는다.
+ *  ⚠️ 여기 있는 파일은 번들에 들어가지 않고 그대로 배포된다(`public/`). 20MB짜리를
  *     JS 번들에 넣으면 첫 화면이 그만큼 늦게 뜬다. */
-const TRACKS = {
-  headinthesand: "headinthesand.ogg",
-  blue_intermission: "blue_intermission.ogg",
-  assault: "assault.ogg",
-  escape_from_metal_city: "escape_from_metal_city.ogg",
-  midnight_drive: "midnight_drive.ogg",
+export const TRACKS = {
+  headinthesand: "headinthesand",
+  blue_intermission: "blue_intermission",
+  assault: "assault",
+  escape_from_metal_city: "escape_from_metal_city",
+  midnight_drive: "midnight_drive",
 } as const;
 
 export type TrackId = keyof typeof TRACKS;
+
+/** 이 브라우저가 읽을 수 있는 확장자.
+ *  ogg를 먼저 보는 이유: 같은 곡이 m4a보다 대체로 작다. 둘 다 되는 브라우저(크롬·파이어폭스)는
+ *  ogg를 받고, ogg에 빈 문자열을 돌려주는 쪽(iOS Safari)만 m4a로 넘어간다.
+ *  ⚠️ 둘 다 못 읽는 브라우저면 m4a를 고르고 조용히 실패한다 — 이 파일의 실패 방침 그대로다.
+ *  @param canPlayType `HTMLMediaElement.canPlayType` — "" | "maybe" | "probably". */
+export function chooseExtension(canPlayType: (type: string) => string): "ogg" | "m4a" {
+  return canPlayType('audio/ogg; codecs="vorbis"') !== "" ? "ogg" : "m4a";
+}
+
+/** 확장자는 **한 번만 묻고 기억한다.** 곡을 갈아탈 때마다 물을 이유가 없고 답이 도중에
+ *  바뀌지도 않는다. */
+let extension: "ogg" | "m4a" | null = null;
 
 /** 판 밖에서 흐르는 곡(메뉴·로비·대기실·결과·읽을거리).
  *  게임별 곡은 GameRegistry가 정한다 — 어느 게임에 무엇을 트는가는 UI 메타데이터다. */
@@ -196,7 +216,8 @@ export function playBgm(track: TrackId): void {
 
 /** 파일을 갈아끼운다. src를 바꾸는 순간 재생 위치는 버려진다(곡마다 처음부터). */
 function swap(audio: HTMLAudioElement, track: TrackId): void {
-  audio.src = `${import.meta.env.BASE_URL}bgm/${TRACKS[track]}`;
+  extension ??= chooseExtension((type) => audio.canPlayType(type));
+  audio.src = `${import.meta.env.BASE_URL}bgm/${TRACKS[track]}.${extension}`;
   if (!isMusicMuted()) start(audio);
 }
 

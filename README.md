@@ -128,6 +128,18 @@ npx vitest run --project edge   # 서버 전송 계층만 (workerd 안에서 실
 npm run build          # 클라이언트 정적 빌드
 ```
 
+### 참고: 배경음악을 추가·교체할 때
+
+곡은 `packages/app/public/bgm/`에 **`.ogg`와 `.m4a` 두 벌**로 둔다. iOS Safari가 Ogg
+Vorbis를 못 읽어서, 한 벌만 있으면 아이폰에서만 조용해진다(실패가 무음이라 오류도 안 난다).
+
+```bash
+node scripts/encode-bgm.mjs        # .ogg 옆에 없거나 낡은 .m4a를 만든다
+```
+
+`ffmpeg`가 PATH에 있어야 한다(`winget install Gyan.FFmpeg`). 비트레이트는 원본에서
+자동으로 정한다. 두 벌 중 하나가 빠지면 `tests/Bgm.test.ts`가 잡는다.
+
 ## 배포
 
 **라이브**: https://web-arcade-sigma.vercel.app (서버: `wss://webarcade.leon770.workers.dev`)
