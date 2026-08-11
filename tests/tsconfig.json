@@ -12,6 +12,9 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    // GameTables 테스트가 운영 스크립트(scripts/scoreUnits.mjs)를 읽는다. 그 표가
+    // 게임 목록과 어긋나지 않는지 보려면 .mjs를 프로그램에 들여야 한다(검사는 안 한다).
+    "allowJs": true,
     // 테스트는 세 세계를 한꺼번에 들여다본다 — Node(파일 읽기) · 브라우저(DOM) ·
     // Workers(edge의 Env). 검사만 하고 실행은 각자 맞는 런타임에서 하므로 다 넣는다.
     "types": ["node", "@cloudflare/workers-types"]

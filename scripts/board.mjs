@@ -20,23 +20,16 @@
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
+import { GAMES, formatScore } from "./scoreUnits.mjs";
 
 /** 배포된 게임 서버. 로컬 서버로 시험할 때는 ARCADE_SERVER=http://localhost:8787 로 덮는다. */
 const SERVER = process.env.ARCADE_SERVER ?? "https://webarcade.leon770.workers.dev";
 const KEY_FILE = new URL("../.admin-key", import.meta.url);
 
-/** 순위표가 있는 게임과 그 기록의 단위. `rm all`은 이 목록을 훑는다.
- *  ⚠️ 게임을 추가하면 여기도 추가한다 — 서버에 "게임 목록"을 묻는 경로가 없어서
- *     (서버는 gameId를 문자열로만 다룬다) 클라가 알 방법이 없다.
- *  ⚠️ 단위도 여기 있는 이유는 같다. **서버가 내려주는 건 숫자 하나뿐이고 그게 tick인지
- *     점수인지 모른다.** 앱은 GameRegistry에서 알지만 이 스크립트는 TS를 못 읽는다. */
-const SCORE_UNIT = { jungnim: "ticks", curve: "ticks", floor: "ticks", baseball: "points" };
-const GAMES = Object.keys(SCORE_UNIT);
-
 const USAGE = `사용법:
   node scripts/board.mjs ls <게임id>              순위표 보기
   node scripts/board.mjs rm <게임id> <닉네임>      기록 지우기 (되돌릴 수 없음)
-  node scripts/board.mjs rm all <닉네임>          세 게임에서 한꺼번에 지우기
+  node scripts/board.mjs rm all <닉네임>          모든 게임에서 한꺼번에 지우기
   node scripts/board.mjs mv <게임id> <옛이름> <새이름>   이름만 바꾸기 (기록·등수 유지)
 
 게임id: ${GAMES.join(" | ")}
@@ -62,13 +55,6 @@ async function adminKey() {
   // 여기서 걸러 주지 않으면 fetch가 "ByteString" 어쩌고로 죽어 원인이 안 보인다.
   if (/[^\x20-\x7e]/.test(key)) fail("열쇠에 ASCII가 아닌 문자가 있습니다 — 영문·숫자·기호로 지어 주세요.");
   return key;
-}
-
-/** 기록 하나를 그 게임의 단위로 적는다. 모르는 게임이면 숫자만 — 단위를 지어내지 않는다. */
-function formatScore(gameId, score) {
-  if (SCORE_UNIT[gameId] === "ticks") return `${(score / 60).toFixed(1)}s`;
-  if (SCORE_UNIT[gameId] === "points") return `${score}점`;
-  return String(score);
 }
 
 function printBoard(gameId, entries) {
@@ -111,7 +97,7 @@ async function remove(gameId, nickname) {
   const key = await adminKey();
   if (!key) fail("열쇠가 없습니다. `.admin-key` 파일을 만들거나 ADMIN_KEY를 넣어 주세요.");
 
-  // 같은 사람이 세 게임에 흩어져 있을 때 게임 이름을 세 번 치지 않게 한다.
+  // 같은 사람이 여러 게임에 흩어져 있을 때 게임 이름을 그 수만큼 치지 않게 한다.
   // 판을 통째로 지우는 게 아니라 **이름 하나**만 훑는 것이라 확인 절차는 두지 않는다.
   if (gameId === "all") {
     let hit = 0;

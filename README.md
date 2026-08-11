@@ -182,7 +182,7 @@ vercel --prod
 ```bash
 npm run board -- ls curve              # 순위표 보기 (열쇠 불필요)
 npm run board -- rm curve 닉네임        # 지우기 (되돌릴 수 없음)
-npm run board -- rm all 닉네임          # 세 게임에서 한꺼번에
+npm run board -- rm all 닉네임          # 모든 게임에서 한꺼번에
 npm run board -- mv curve 옛이름 새이름  # 이름만 바꾸기 (기록·등수 유지)
 ```
 
