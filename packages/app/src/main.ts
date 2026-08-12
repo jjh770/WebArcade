@@ -260,13 +260,20 @@ const RANDOM_NAMES = ["고수", "초심자", "바람", "그림자", "은둔자",
 // 지난 방문에 쓴 닉네임을 입력칸에 미리 채운다(매번 다시 안 치게).
 byId<HTMLInputElement>("nick-input").value = loadNickname();
 
-byId("nick-go").addEventListener("click", () => {
-  const value = byId<HTMLInputElement>("nick-input").value.trim();
-  myNickname = value || `${RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]}${Math.floor(Math.random() * 100)}`;
+/** 이름을 세우고 입구를 지난다. **버튼과 자동 입장이 같은 길을 쓴다** — 이름을 기억하고
+ *  인사말을 채우고 전이하는 셋 중 하나만 빠져도 헤더의 「게임」이 이름 화면으로 되돌아간다
+ *  (navigation의 `named`가 이 값을 본다). */
+function enterAs(nickname: string): void {
+  myNickname = nickname;
   saveNickname(myNickname); // 랜덤으로 정해진 이름도 기억해 다음에 이어 쓴다.
   byId("main-hello").textContent = `${myNickname} 님, 환영합니다`;
   transition("nickname_submit");
   tryAutoJoin();
+}
+
+byId("nick-go").addEventListener("click", () => {
+  const value = byId<HTMLInputElement>("nick-input").value.trim();
+  enterAs(value || `${RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]}${Math.floor(Math.random() * 100)}`);
 });
 // 이름을 다 치고 나면 손은 이미 Enter 위에 있다. 거기서 버튼까지 가는 건 헛걸음이다.
 // ⚠️ 조합 중인 Enter는 제출이 아니라 **한글을 확정하는 키**다. 여기서 가로채면 마지막
@@ -455,6 +462,18 @@ initSoundShell(renderOptions);
 // — 덕분에 서버가 자고 있어도 혼자 플레이는 그대로 돌아간다.
 renderState(appState.state);
 
+/* 지난번에 쓴 이름이 있으면 입구를 건너뛴다. 이름은 이미 정해져 있는데 방문할 때마다
+   같은 화면에서 「입장」을 한 번씩 더 누르고 있었다 — 물어볼 것이 없으면 묻지 않는다.
+   되돌아갈 길은 메인의 「이름 바꾸기」가 맡는다(그게 생기기 전이라면 못 할 짓이었다).
+   ⚠️ 첫 그림보다 먼저 서야 한다. 늦으면 이름 화면이 한 번 떴다가 사라진다.
+   ⚠️ 방 코드 해시(`#ABCD`)는 이 전이가 주소에서 지운다(hashFor). 지워져도 되는 이유는
+      코드를 이 파일 맨 위에서 이미 읽어 뒀기 때문이고, 그래서 enterAs가 자동 입장까지
+      이어서 한다 — 링크를 받은 사람은 이름 화면도 목록도 안 거치고 방에 들어간다. */
+// ⚠️ 주소부터 읽어 둔다. 아래 전이가 해시를 지우고 나서 읽으면 순위표 링크가 사라진다.
+const wantRanking = location.hash.slice(1).toLowerCase() === "ranking";
+const savedNickname = loadNickname();
+if (savedNickname) enterAs(savedNickname);
+
 // #ranking으로 들어오면 순위표부터 연다. 닉네임을 정하기 전에도 볼 수 있다 —
 // 남이 보낸 링크를 받은 사람에게 이름부터 지으라고 할 이유가 없다.
-if (location.hash.slice(1).toLowerCase() === "ranking") nav.navTo("ranking");
+if (wantRanking) nav.navTo("ranking");
