@@ -39,7 +39,8 @@
     <button id="sound-toggle" type="button" aria-label="소리 끄기" title="소리 끄기">🔊</button>
     <!-- 사이트 헤더: 로고 + 내비 -->
     <header id="site-header">
-      <button class="brand" data-nav="game">🎯 Arcade</button>
+      <!-- 표식과 이름을 나눠 둔다 — 폰에서는 이름을 접어 내비가 한 줄에 서게 한다. -->
+      <button class="brand" data-nav="game" aria-label="Arcade 처음으로"><span aria-hidden="true">🎯</span><span class="brand-word">Arcade</span></button>
       <nav class="site-nav">
         <button data-nav="game">게임</button>
         <button data-nav="ranking">순위</button>

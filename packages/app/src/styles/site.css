@@ -288,18 +288,37 @@ body:not(.playing) #error-toast { bottom: calc(var(--frame-bottom) + var(--sp-4)
       오른쪽으로 밀린 채 왼쪽만 뻥 빈다. */
 #footer-hint:not(:empty) { margin-right: auto; color: var(--text-secondary); font-weight: 600; }
 body.playing #site-header, body.playing #site-footer { display: none; }
-.brand { background: none; border: none; color: var(--text-primary); font-weight: 800;
+.brand { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  background: none; border: none; color: var(--text-primary); font-weight: 800;
   font-size: var(--fs-title); letter-spacing: -.01em;
   cursor: pointer; padding: 6px 4px; box-shadow: none; }
 .brand:hover:not(:disabled) { filter: brightness(1.12); transform: none; box-shadow: none; }
-.site-nav { display: flex; gap: 4px; margin-left: auto; }
+/* 내비는 줄어들지 않는다. 좁아지면 flex가 버튼을 글자 폭 아래로 눌러 "게 임"처럼
+   두 줄로 접혔다 — 헤더에서 양보해야 하는 쪽은 로고지 길 안내가 아니다. */
+.site-nav { display: flex; gap: 4px; margin-left: auto; flex-shrink: 0; }
 .site-nav button { background: none; border: none; color: var(--text-muted); font-weight: 600;
+  white-space: nowrap;
   font-size: var(--fs-sub); padding: 8px 12px; border-radius: 8px; box-shadow: none; }
 .site-nav button:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-elevated);
   transform: none; box-shadow: none; }
 /* 현재 화면은 색만이 아니라 배경 블록으로도 구분된다(색각 이상 대비). */
 .site-nav button.on { color: var(--primary);
   background: color-mix(in srgb, var(--primary) 14%, transparent); }
+/* 폰에서는 헤더에 다섯 칸이 다 들어가지 않는다(375px에서 로고 95 + 내비 279 > 자리 299).
+   이름을 접고 표식만 남겨 그 폭을 내비에 준다 — 이름은 첫 화면이 큰 글씨로 다시 말한다.
+   ⚠️ 글자 크기는 줄이지 않는다. 13px가 이미 아래 끝이고, 여백만으로 26px가 남는다. */
+@media (max-width: 600px) {
+  #site-header { gap: var(--sp-2); }
+  .brand-word { display: none; }
+  .site-nav { gap: 2px; }
+  .site-nav button { padding: 8px; }
+}
+/* 더 좁은 폰(320px)에서는 그래도 19px이 모자라 내비가 소리 버튼 밑으로 파고들었다.
+   줄이는 건 여백뿐이다 — 항목을 접거나 글자를 줄이면 길 안내가 길 안내를 그만둔다. */
+@media (max-width: 360px) {
+  .site-nav { gap: 0; }
+  .site-nav button { padding: 8px 5px; }
+}
 #site-footer a, #site-footer button { color: var(--text-muted); background: none; border: none;
   font: inherit; font-size: 12px; cursor: pointer; text-decoration: none; padding: 2px 4px;
   box-shadow: none; }
