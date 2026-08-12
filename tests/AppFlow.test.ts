@@ -141,6 +141,24 @@ describe("연습(싱글) 모드 흐름", () => {
     expect(flow.state).toBe("playing");
     expect(flow.can("nav_ranking")).toBe(false);
   });
+
+  it("메인에서 이름을 다시 정하러 갔다가 돌아온다", () => {
+    // 이름은 한 번 정하면 끝이 아니다 — 순위표에 남는 것이라 고칠 길이 있어야 한다.
+    const flow = createFlow();
+    advance(flow, ["nickname_submit", "change_nickname"]);
+    expect(flow.state).toBe("nickname");
+    flow.transition("nickname_submit");
+    expect(flow.state).toBe("main");
+  });
+
+  it("방이나 판 안에서는 이름을 바꾸러 나갈 수 없다", () => {
+    // 남들에게 이미 그 이름으로 보이는 중이다. 나가는 길을 열면 명단과 어긋난다.
+    const flow = createFlow();
+    advance(flow, [...toLobby, "room_joined"]);
+    expect(flow.can("change_nickname")).toBe(false);
+    advance(flow, ["game_start", "countdown_done"]);
+    expect(flow.can("change_nickname")).toBe(false);
+  });
 });
 
 /* 주소에 남는 해시. 주인이 둘(순위 화면·방 코드)이라 한 함수가 정한다.

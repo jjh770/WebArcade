@@ -277,6 +277,16 @@ byId("menu-options").addEventListener("click", () => {
   renderOptions(); // 헤더 🔊로 바뀐 값이 있을 수 있다 — 열 때마다 지금 상태를 그린다.
   transition("nav_options");
 });
+byId("menu-nickname").addEventListener("click", () => {
+  const input = byId<HTMLInputElement>("nick-input");
+  // 지금 이름을 담아 열고 골라 둔다 — 바꾸러 온 사람은 대개 처음부터 다시 치거나 한 글자만 고친다.
+  input.value = myNickname;
+  // 라벨을 바꾼다. 이미 들어와 있는 사람에게 "입장"은 어디로 들어가라는 말인지 모를 소리다.
+  byId("nick-go").textContent = "바꾸기";
+  transition("change_nickname");
+  input.focus();
+  input.select();
+});
 byId("options-back").addEventListener("click", () => transition("nav_game_main"));
 // 크레딧은 배선이 없다 — 저장소의 ASSET_CREDITS.md로 나가는 <a>라 브라우저가 알아서 한다.
 

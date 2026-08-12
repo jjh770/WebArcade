@@ -10,7 +10,7 @@ export type AppEvent =
   | "room_joined" | "start_solo" | "game_start" | "countdown_done" | "local_death" | "keep_result"
   | "watch" | "game_over" | "return_ready" | "leave_room"
   | "nav_notice" | "nav_about" | "nav_community" | "nav_ranking" | "nav_options"
-  | "nav_game_main" | "nav_game_nickname";
+  | "nav_game_main" | "nav_game_nickname" | "change_nickname";
 
 /** 읽을거리·설정처럼 판 밖에서 오가는 화면들. 어디서든 서로 넘나들 수 있다.
  *  ⚠️ 옵션도 여기 있다 — 소리 설정은 방에 들어가기 전에도 정할 수 있어야 한다.
@@ -26,7 +26,9 @@ const CONTENT_TRANSITIONS = {
 
 export const APP_TRANSITIONS = {
   nickname: { nickname_submit: "main", nav_game_nickname: "nickname", ...CONTENT_TRANSITIONS },
-  main: { open_games: "gamelist", nav_game_main: "main", ...CONTENT_TRANSITIONS },
+  // change_nickname: 이름을 정한 뒤에도 그 화면으로 되돌아가는 유일한 길. 되돌아간 자리에서
+  // 입장을 누르면 nickname_submit이 다시 main으로 데려오므로 새 길은 하나면 된다.
+  main: { open_games: "gamelist", change_nickname: "nickname", nav_game_main: "main", ...CONTENT_TRANSITIONS },
   gamelist: { back_main: "main", select_game: "lobby", ...CONTENT_TRANSITIONS },
   // start_solo: 서버 없이 로컬 시드로 플레이(연습). 방은 안 거치지만 카운트다운은 거친다
   // (멀티는 서버시각 기준, 솔로는 로컬시각 기준 — 둘 다 countdown 상태를 지난다).
