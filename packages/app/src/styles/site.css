@@ -116,7 +116,23 @@ body.hint-dims #screen-countdown.play-overlay { background: transparent; }
   letter-spacing: -.02em; }
 .card h2 { margin: 0 0 var(--sp-4); font-size: var(--fs-title); font-weight: 500;
   color: var(--text-muted); }
-.card .hint { color: var(--text-muted); font-size: var(--fs-sub); margin: var(--sp-1) 0 0; }
+/* 한 줄 설명은 **자기가 딸린 것 아래**에 놓인다. 기본값은 한 칸 떨어뜨린다 —
+   6px일 때는 바로 위 버튼이나 설정 줄에 달라붙어 그것의 일부처럼 읽혔다.
+   제목 바로 밑에 올 때만 더 가깝다(아래 h1 + .hint). */
+.card .hint { color: var(--text-muted); font-size: var(--fs-sub); margin: var(--sp-3) 0 0; }
+/* 제목 아래 여백은 **다음에 무엇이 오느냐**로 갈린다. 부제(h2)는 제목에 딸린 줄이라
+   붙여 두지만, 곧바로 내용이 오면 떨어뜨린다 — 폰에서 28px 제목 밑 6px에 내용이 붙어
+   있으면 둘이 한 덩어리로 뭉쳐 어디까지가 제목인지 안 보인다.
+   ⚠️ 위아래 여백은 맞닿으면 **큰 쪽만 남는다**(margin collapse). h1의 6px과 여기 값이
+      더해지지 않으니, 여기 적은 값이 그대로 간격이 된다. */
+.card h1 + *:not(h2) { margin-top: var(--sp-3); }
+/* 제목 밑 한 줄 설명은 제목 쪽에 붙여 읽는다. 대신 그 다음 것과는 확실히 벌린다 —
+   설명과 내용이 0px로 맞닿아 있어 설명이 목록의 첫 줄처럼 보였다(순위의 게임 고르기, 옵션의 첫 줄). */
+.card h1 + .hint { margin-top: var(--sp-2); }
+.card .hint + * { margin-top: var(--sp-4); }
+/* 곁길 링크(순위표 보기)는 바로 위 입력 줄과 상자가 맞닿아 있었다. 자기 padding 10px가
+   있어 글자끼리는 안 붙었지만, 상자가 붙어 있으면 그 줄에 딸린 버튼처럼 보인다. */
+.card .textlink { margin-top: var(--sp-2); }
 /* 화면을 끝맺는 버튼(뒤로·나가기)은 바로 위 내용과 떨어뜨린다. 붙어 있으면 그 글에
    딸린 것처럼 보인다 — 행동은 읽을거리와 한 칸 떨어져 있어야 한다.
    :last-child라 문단 사이에 낀 버튼(닉네임의 「입장」)은 건드리지 않는다. */
@@ -172,7 +188,9 @@ ul.players li { padding: 9px 12px; background: var(--field); border-radius: 8px;
   text-shadow: 0 6px 30px color-mix(in srgb, var(--primary) 40%, transparent); }
 
 table.ranks { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-table.ranks td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+/* 훑어 내려가는 목록이라 줄 사이가 손가락 하나는 돼야 한다 — 8px에서는 등수와 이름이
+   위아래로 붙어 어느 기록이 누구 것인지 눈이 한 번 더 확인해야 했다. */
+table.ranks td { padding: var(--sp-2) 10px; border-bottom: 1px solid var(--border); }
 table.ranks tr.self { background: color-mix(in srgb, var(--primary) 12%, transparent); }
 table.ranks td.rank { width: 40px; color: var(--text-muted); font-weight: 700; }
 /* 1위만 금색. 색 하나로 끝내지 않고 굵기도 올려 색각 이상에서도 구분된다. */
@@ -191,7 +209,10 @@ table.ranks td.time { text-align: right; color: var(--text-muted);
 
 /* 순위표의 게임 고르기. 내비와 같은 방식으로 현재 항목을 표시한다
    — 색만이 아니라 배경 블록으로도(색각 이상 대비). */
-.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+/* ⚠️ 가로 틈은 6px 그대로 둔다. 폰에서 칩 넷의 합이 이미 화면 폭에 아슬아슬해서(375px
+   에서 338px), 여기를 벌리면 마지막 칩이 다음 줄로 떨어진다. 줄이 접혔을 때의 세로 틈만
+   키운다 — 두 줄이 6px로 붙어 있으면 어느 칩이 어느 줄인지 눈이 헷갈린다. */
+.tabs { display: flex; flex-wrap: wrap; gap: var(--sp-2) 6px; margin: 0 0 var(--sp-3); }
 .tabs button { background: var(--surface-elevated); color: var(--text-muted); font-size: 13px;
   font-weight: 600; padding: 7px 14px; border-radius: 999px; box-shadow: none; }
 .tabs button:hover:not(:disabled) { color: var(--text-primary); transform: none; box-shadow: none; }
