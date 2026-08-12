@@ -18,7 +18,7 @@
 
 import { NetClient, StateMachine } from "@arcade/core";
 import type { RankEntry } from "@arcade/shared";
-import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
+import { APP_TRANSITIONS, type AppEvent, type AppState, resultShortcut } from "./AppFlow";
 import { initAudio, play } from "./audio";
 import { LOBBY_TRACK, initBgm, playBgm, silenceBgm } from "./bgm";
 import { initBgDecor } from "./bgDecor";
@@ -268,6 +268,14 @@ byId("nick-go").addEventListener("click", () => {
   transition("nickname_submit");
   tryAutoJoin();
 });
+// 이름을 다 치고 나면 손은 이미 Enter 위에 있다. 거기서 버튼까지 가는 건 헛걸음이다.
+// ⚠️ 조합 중인 Enter는 제출이 아니라 **한글을 확정하는 키**다. 여기서 가로채면 마지막
+//    글자가 확정되기 전에 화면이 넘어가 이름 끝 글자가 잘린다.
+byId("nick-input").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.isComposing) return;
+  event.preventDefault();
+  byId("nick-go").click();
+});
 
 byId("menu-start").addEventListener("click", () => {
   renderGameList(selectGame);
@@ -402,6 +410,21 @@ byId("again-btn").addEventListener("click", () => {
   // 혼자: 대기실이 없으므로 새 시드로 곧장 다시 시작한다. 멀티: 호스트가 전원을 대기실로.
   if (soloMode) return startSolo();
   net.send({ type: "return_to_ready" });
+});
+
+/* 혼자 플레이 결과 화면의 손가락 단축키 — Enter로 다시, Esc로 나가기. 연습은 죽고 다시
+   하기를 반복하는 리듬이라, 그 사이에 마우스를 한 번 잡는 게 제일 걸린다.
+   무엇을 셀지는 resultShortcut이 정한다(멀티 제외·눌린 채 제외·초점 제외 — AppFlow 참조). */
+window.addEventListener("keydown", (event) => {
+  const action = resultShortcut(event.key, {
+    state: appState.state,
+    solo: soloMode,
+    repeat: event.repeat,
+    buttonFocused: document.activeElement instanceof HTMLButtonElement,
+  });
+  if (!action) return;
+  event.preventDefault();
+  byId(action === "again" ? "again-btn" : "result-leave-btn").click();
 });
 
 const hashCode = location.hash.slice(1).toUpperCase();

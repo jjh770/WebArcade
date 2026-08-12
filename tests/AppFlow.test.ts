@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { StateMachine } from "../packages/core/src/StateMachine";
-import { APP_TRANSITIONS, type AppEvent, type AppState } from "../packages/app/src/AppFlow";
+import { APP_TRANSITIONS, type AppEvent, type AppState, resultShortcut } from "../packages/app/src/AppFlow";
 import { hashFor } from "../packages/app/src/navigation";
 
 function createFlow(): StateMachine<AppState, AppEvent> {
@@ -158,6 +158,42 @@ describe("연습(싱글) 모드 흐름", () => {
     expect(flow.can("change_nickname")).toBe(false);
     advance(flow, ["game_start", "countdown_done"]);
     expect(flow.can("change_nickname")).toBe(false);
+  });
+});
+
+describe("혼자 플레이 결과 화면의 단축키", () => {
+  const solo = { state: "result" as AppState, solo: true, repeat: false, buttonFocused: false };
+
+  it("Enter는 다시 하기, Esc는 나가기", () => {
+    expect(resultShortcut("Enter", solo)).toBe("again");
+    expect(resultShortcut("Escape", solo)).toBe("leave");
+  });
+
+  it("멀티에서는 둘 다 듣지 않는다 — 남들까지 움직이는 버튼이다", () => {
+    // 전원을 대기실로 돌리고 방을 나가는 일이라, 스치듯 누른 키로 일어나면 되돌릴 수 없다.
+    expect(resultShortcut("Enter", { ...solo, solo: false })).toBe(null);
+    expect(resultShortcut("Escape", { ...solo, solo: false })).toBe(null);
+  });
+
+  it("결과 화면이 아니면 듣지 않는다", () => {
+    expect(resultShortcut("Enter", { ...solo, state: "playing" })).toBe(null);
+    expect(resultShortcut("Escape", { ...solo, state: "main" })).toBe(null);
+  });
+
+  it("눌린 채로 있는 키는 한 번도 세지 않는다", () => {
+    // 세면 Enter를 붙들고 있는 동안 새 판이 계속 다시 깔린다.
+    expect(resultShortcut("Enter", { ...solo, repeat: true })).toBe(null);
+  });
+
+  it("버튼에 초점이 있으면 Enter는 브라우저에 맡긴다 — 한 번이 두 판이 되면 안 된다", () => {
+    expect(resultShortcut("Enter", { ...solo, buttonFocused: true })).toBe(null);
+    // Esc는 초점이 있어도 브라우저가 하는 일이 없으므로 그대로 듣는다.
+    expect(resultShortcut("Escape", { ...solo, buttonFocused: true })).toBe("leave");
+  });
+
+  it("그 밖의 키는 아무 뜻도 없다", () => {
+    expect(resultShortcut(" ", solo)).toBe(null);
+    expect(resultShortcut("a", solo)).toBe(null);
   });
 });
 
