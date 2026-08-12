@@ -7,7 +7,7 @@
 
 import type { PlayerPublic, RankEntry } from "@arcade/shared";
 import { GAME_REGISTRY, formatGameScore, type GameId } from "./GameRegistry";
-import { PLAY_STATES, type AppState } from "./AppFlow";
+import { PLAY_STATES, isPlayState, type AppState, type PlayState } from "./AppFlow";
 import { byId } from "./dom";
 import {
   clearGamePreviews,
@@ -19,23 +19,36 @@ import { NOTICES } from "./siteContent";
 import type { BoardRow } from "./soloRanking";
 import { newcomers, staggerIndex } from "./stagger";
 
-const SCREEN_NAMES = [
-  "nickname", "main", "gamelist", "lobby", "ready", "countdown", "result",
-  "notice", "about", "community", "ranking", "options",
-] as const;
-type ScreenName = (typeof SCREEN_NAMES)[number];
+/** `<section id="screen-*">`이 있는 화면. **AppState에서 파생된다** — 판 상태를 뺀 나머지
+ *  전부에 결과 화면을 더한 것이다(결과는 판 위에 뜨지만 자기 카드를 가진 유일한 예외).
+ *  ⚠️ 손으로 적은 두 번째 목록이 아니라는 게 요점이다. 예전에는 이름 열둘을 따로 적어 두고
+ *     `state as ScreenName`으로 이어 붙였는데, 앱 상태를 하나 늘리면서 여기를 안 고치면
+ *     **아무 화면도 안 켜져 빈 화면이 됐다**(오류도 안 났다 — 목록을 훑어 아무것도 안 맞을
+ *     뿐이라). 이제는 그런 상태를 만들면 아래 표에서 컴파일이 멈춘다. */
+type ScreenName = Exclude<AppState, PlayState> | "result";
 
 /** 푸터에 뜨는 한 줄. **화면 제목이 아니라 할 일**이다 — 제목은 카드가 이미 크게 적고
  *  있으므로 여기서 되풀이하면 자리만 먹는다.
- *  ⚠️ 읽을거리(공지·소개·커뮤니티·순위·옵션)는 일부러 비운다. 거기서는 할 일이 아니라
- *     읽는 것이 전부라, 없는 지시를 지어내면 안내가 아니라 소음이 된다. */
-const FOOTER_HINTS: Partial<Record<ScreenName, string>> = {
+ *  ⚠️ `Partial`이 아니라 **빠짐없는 표**다. 읽을거리(공지·소개·커뮤니티·순위·옵션)의 빈
+ *     문자열은 빠뜨린 게 아니라 "여기엔 시킬 일이 없다"는 답이고, 그렇게 적어 두어야
+ *     화면이 늘었을 때 답을 정하지 않고 지나갈 수가 없다.
+ *  ⚠️ 화면 이름 목록(SCREEN_NAMES)이 이 표의 열쇠에서 나온다. 표가 곧 목록이다. */
+const FOOTER_HINTS: Record<ScreenName, string> = {
   nickname: "이름을 정하고 들어오세요",
   main: "무엇을 할지 고르세요",
   gamelist: "게임을 고르세요",
   lobby: "혼자 연습할지, 방을 만들지 고르세요",
   ready: "방 코드를 친구에게 알려 주세요",
+  countdown: "",
+  result: "",
+  notice: "",
+  about: "",
+  community: "",
+  ranking: "",
+  options: "",
 };
+
+const SCREEN_NAMES = Object.keys(FOOTER_HINTS) as readonly ScreenName[];
 
 let toastTimer = 0;
 
@@ -48,7 +61,7 @@ export function renderState(state: AppState): void {
   let screen: ScreenName | null = null;
   // dying/deadResult/spectating은 카드 없이 플레이 영역만 — 낙하·관전 연출이 그 자리를 채운다.
   if (state === "result") screen = "result";
-  else if (!PLAY_STATES.has(state)) screen = state as ScreenName;
+  else if (!isPlayState(state)) screen = state; // 좁혀져서 들어온다 — 우겨 넣지 않는다.
 
   for (const name of SCREEN_NAMES) byId(`screen-${name}`).classList.toggle("active", name === screen);
   // 미리보기 판 넷은 목록이 보일 때만 돈다 — 안 보이는 화면을 굴리면 판에 쓸 힘을 먹는다.
@@ -58,8 +71,8 @@ export function renderState(state: AppState): void {
   // 배경 판은 판이 도는 동안 멈춘다. CSS로도 걷히지만(body.playing #bg-decor) 안 보이는
   // 것을 계속 굴리면 정작 진짜 판이 쓸 힘을 먹는다 — 걷는 것과 멈추는 것은 다른 일이다.
   setBackgroundRunning(!showPlay);
-  // 푸터 안내. 없는 화면은 빈 문자열이라 :not(:empty) 규칙이 자리까지 걷는다.
-  byId("footer-hint").textContent = screen ? (FOOTER_HINTS[screen] ?? "") : "";
+  // 푸터 안내. 빈 문자열인 화면은 :not(:empty) 규칙이 자리까지 걷는다.
+  byId("footer-hint").textContent = screen ? FOOTER_HINTS[screen] : "";
   byId("play").classList.toggle("on", showPlay);
   // 시간·스릴 게이지 HUD는 **내가 살아서 뛰는 동안에만**. 죽는 순간 값이 멈추므로
   // 그 뒤로도 띄워두면 낡은 숫자가 남는다 — 관전 중엔 남의 기록으로, 결과 화면에선

@@ -51,9 +51,19 @@ export const APP_TRANSITIONS = {
   options: { ...CONTENT_TRANSITIONS, nav_game_main: "main", nav_game_nickname: "nickname" },
 } satisfies TransitionTable<AppState, AppEvent>;
 
-export const PLAY_STATES: ReadonlySet<AppState> = new Set([
-  "playing", "dying", "deadResult", "spectating", "result",
-]);
+/** 판이 도는 동안의 상태들. 여기 있는 것은 사이트 화면(카드)이 아니라 **게임판 위**에 산다.
+ *  ⚠️ 목록을 `as const`로 두는 이유는 타입도 여기서 나오기 때문이다 — 화면 이름 목록이
+ *     이것의 여집합으로 파생되므로(AppView의 `ScreenName`), 둘을 손으로 맞출 일이 없다. */
+export const PLAY_STATE_NAMES = ["playing", "dying", "deadResult", "spectating", "result"] as const;
+export type PlayState = (typeof PLAY_STATE_NAMES)[number];
+
+export const PLAY_STATES: ReadonlySet<AppState> = new Set(PLAY_STATE_NAMES);
+
+/** `PLAY_STATES.has()`와 같은 것을 묻되 **타입까지 좁힌다.** Set 검사만으로는 좁혀지지
+ *  않아서, 이걸 쓰기 전에는 화면 이름으로 넘길 때 `as`로 우겨 넣고 있었다. */
+export function isPlayState(state: AppState): state is PlayState {
+  return PLAY_STATES.has(state);
+}
 
 /** 결과 화면에서 누른 키 하나가 무엇을 뜻하는지. 아무 뜻도 없으면 null.
  *
