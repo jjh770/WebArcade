@@ -51,6 +51,10 @@
          플레이 중에는 둘이 함께 아래로 내려간다(자리 규칙은 #shell-buttons 하나가 갖는다).
          라벨은 상태가 아니라 "누르면 일어날 일"을 말한다(각자 자기 모듈이 갱신). -->
     <div id="shell-buttons">
+      <!-- 홈 화면에 추가. 평소엔 감춰져 있고, 크롬이 "설치할 수 있다"고 알려 준 뒤에만
+           뜬다(install.ts). 크롬이 스스로 띄우던 배너는 그 자리에서 막는다. -->
+      <button id="install-toggle" class="shell-btn" type="button" hidden
+              aria-label="홈 화면에 추가" title="홈 화면에 추가">+</button>
       <!-- 전체화면. 지원하지 않는 브라우저(아이폰 사파리)에서는 fullscreen.ts가 감춘다. -->
       <button id="fullscreen-toggle" class="shell-btn" type="button"
               aria-label="전체화면으로" title="전체화면으로">⛶</button>

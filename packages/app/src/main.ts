@@ -35,6 +35,7 @@ import {
 import { cancelCountdown, runCountdown } from "./countdown";
 import { byId } from "./dom";
 import { initFullscreenShell } from "./fullscreen";
+import { initInstallShell } from "./install";
 import { initOptions, renderOptions } from "./optionsScreen";
 import { initPageFocus } from "./pageFocus";
 import { mountBackgroundGame, resizeGamePreviews } from "./gamePreview";
@@ -457,6 +458,8 @@ initSoundShell(renderOptions);
 // 전체화면 버튼. 지원하지 않는 브라우저(아이폰 사파리)에서는 스스로 감춘다.
 // 거절당하는 경우도 있다(인앱 웹뷰) — 그때는 왜 안 되는지 한 줄로 알린다.
 initFullscreenShell(() => toast("이 브라우저에서는 전체화면을 쓸 수 없습니다. 홈 화면에 추가하면 같은 효과가 납니다."));
+// 홈 화면 추가 버튼. 크롬이 스스로 띄우던 배너를 막고 그 기회를 이 버튼으로 옮긴다.
+initInstallShell();
 
 // 시작 시점에는 서버에 연결하지 않는다. 연결은 방에 들어갈 때 맺는다
 // — 덕분에 서버가 자고 있어도 혼자 플레이는 그대로 돌아간다.

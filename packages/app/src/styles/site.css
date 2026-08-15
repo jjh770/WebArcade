@@ -368,8 +368,11 @@ body.playing #site-header, body.playing #site-footer { display: none; }
    흐린 색, 전체화면은 켜졌을 때 강조색). */
 #sound-toggle.off { color: var(--text-muted); }
 #fullscreen-toggle.on { color: var(--primary); border-color: var(--primary); }
-/* 지원하지 않는 브라우저에서는 감춘다 — flex 항목이라 hidden만으로는 안 사라진다. */
-#fullscreen-toggle[hidden] { display: none; }
+/* 감출 때는 자리까지 걷는다 — flex 항목이라 hidden 속성만으로는 안 사라진다.
+   (전체화면은 아이폰에서, 홈 화면 추가는 설치 가능 신호가 오기 전까지 감춰진다.) */
+#fullscreen-toggle[hidden], #install-toggle[hidden] { display: none; }
+/* 「+」는 글자라 다른 둘(그림 기호)보다 작아 보인다. 광학적으로 맞춘다. */
+#install-toggle { font-size: 19px; font-weight: 700; }
 /* 폰에서는 아래로 내려간다 — 엄지가 닿는 자리이고, 헤더는 그만큼 내비에 내준다.
    ⚠️ **이 블록은 위 기본 규칙보다 아래에 있어야 한다.** 같은 자세함(specificity)이라
       순서로 이기는데, 위에 두면 `top: auto`가 져서 top·bottom이 동시에 걸리고 묶음이
