@@ -47,9 +47,16 @@
         <div id="hud-gauge-track"><div id="hud-gauge-fill"></div></div>
       </div>
     </div>
-    <!-- 소리 토글. 헤더 안이 아니다 — 플레이 중에도 남아야 해서 형제로 둔다.
-         라벨은 상태가 아니라 "누르면 일어날 일"을 말한다(main.ts가 갱신). -->
-    <button id="sound-toggle" type="button" aria-label="소리 끄기" title="소리 끄기">🔊</button>
+    <!-- 껍데기 버튼들. 헤더 안이 아니다 — 플레이 중에도 남아야 해서 형제로 둔다.
+         플레이 중에는 둘이 함께 아래로 내려간다(자리 규칙은 #shell-buttons 하나가 갖는다).
+         라벨은 상태가 아니라 "누르면 일어날 일"을 말한다(각자 자기 모듈이 갱신). -->
+    <div id="shell-buttons">
+      <!-- 전체화면. 지원하지 않는 브라우저(아이폰 사파리)에서는 fullscreen.ts가 감춘다. -->
+      <button id="fullscreen-toggle" class="shell-btn" type="button"
+              aria-label="전체화면으로" title="전체화면으로">⛶</button>
+      <button id="sound-toggle" class="shell-btn" type="button"
+              aria-label="소리 끄기" title="소리 끄기">🔊</button>
+    </div>
     <!-- 사이트 헤더: 로고 + 내비 -->
     <header id="site-header">
       <!-- 표식과 이름을 나눠 둔다 — 폰에서는 이름을 접어 내비가 한 줄에 서게 한다. -->

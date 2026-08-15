@@ -297,7 +297,7 @@ body:not(.playing) #error-toast { bottom: calc(var(--frame-bottom) + var(--sp-4)
 /* 프레임은 화면 폭을 끝까지 쓴다. 안쪽 내용만 --frame-inset만큼 물러나 본문과
    같은 세로선에 선다 — 로고와 카드 왼쪽 끝이 어긋나면 프레임이 따로 논다. */
 #site-header { top: 0; height: var(--frame-top);
-  padding: 0 calc(var(--frame-inset) + 44px) 0 var(--frame-inset); gap: var(--sp-4);
+  padding: 0 calc(var(--frame-inset) + var(--shell-w) + var(--sp-2)) 0 var(--frame-inset); gap: var(--sp-4);
   border-bottom: 1px solid var(--border); }
 #site-footer { bottom: 0; min-height: var(--frame-bottom); padding: var(--sp-2) var(--frame-inset);
   gap: var(--sp-3); justify-content: center;
@@ -333,6 +333,9 @@ body.playing #site-header, body.playing #site-footer { display: none; }
   .brand-word { display: none; }
   .site-nav { gap: 2px; }
   .site-nav button { padding: 8px; }
+  /* 폰에서는 껍데기 버튼이 아래로 내려간다(자리 규칙은 #shell-buttons 옆에 있다).
+     그만큼 헤더가 넓어져 내비 다섯 칸이 한 줄에 더 편히 선다(320px에서 특히). */
+  #site-header { padding-right: var(--frame-inset); }
 }
 /* 더 좁은 폰(320px)에서는 그래도 19px이 모자라 내비가 소리 버튼 밑으로 파고들었다.
    줄이는 건 여백뿐이다 — 항목을 접거나 글자를 줄이면 길 안내가 길 안내를 그만둔다. */
@@ -350,19 +353,37 @@ body.playing #site-header, body.playing #site-footer { display: none; }
    순간이 플레이 중인데, 헤더는 그때 숨는다(body.playing). HUD(좌상단)와
    좌우로 짝을 이뤄 플레이 화면에서도 자리가 자연스럽다.
    상태를 아이콘 모양만이 아니라 색·취소선으로도 알린다(색각 이상 대비). */
-#sound-toggle { position: fixed; top: calc((var(--frame-top) - 34px) / 2); right: var(--sp-3); z-index: 40;
-  width: 34px; height: 34px; padding: 0; display: flex; align-items: center; justify-content: center;
+/* ⚠️ 자리는 **묶음이 갖고 버튼은 모양만 갖는다.** 버튼마다 right를 계산해 두면 하나
+   늘 때마다 나머지 숫자를 전부 고쳐야 하고, 플레이 중에 내려가는 규칙도 버튼 수만큼
+   늘어난다. 헤더의 오른쪽 여백(--shell-w)도 이 묶음의 실제 폭에서 나온다. */
+#shell-buttons { position: fixed; top: calc((var(--frame-top) - 34px) / 2); right: var(--sp-3);
+  z-index: 40; display: flex; gap: 6px; }
+.shell-btn { width: 34px; height: 34px; padding: 0; display: flex; align-items: center; justify-content: center;
   font-size: 15px; line-height: 1; border-radius: 9px;
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   border: 1px solid var(--border); color: var(--text-primary); box-shadow: none; }
-#sound-toggle:hover:not(:disabled) { background: var(--surface-elevated);
+.shell-btn:hover:not(:disabled) { background: var(--surface-elevated);
   border-color: var(--primary); transform: none; box-shadow: none; filter: none; }
+/* 상태를 아이콘 모양만이 아니라 색으로도 알린다(색각 이상 대비 — 소리는 취소선 대신
+   흐린 색, 전체화면은 켜졌을 때 강조색). */
 #sound-toggle.off { color: var(--text-muted); }
+#fullscreen-toggle.on { color: var(--primary); border-color: var(--primary); }
+/* 지원하지 않는 브라우저에서는 감춘다 — flex 항목이라 hidden만으로는 안 사라진다. */
+#fullscreen-toggle[hidden] { display: none; }
+/* 폰에서는 아래로 내려간다 — 엄지가 닿는 자리이고, 헤더는 그만큼 내비에 내준다.
+   ⚠️ **이 블록은 위 기본 규칙보다 아래에 있어야 한다.** 같은 자세함(specificity)이라
+      순서로 이기는데, 위에 두면 `top: auto`가 져서 top·bottom이 동시에 걸리고 묶음이
+      화면 높이만큼 늘어난다(실제로 그랬다 — 세로 463px짜리 상자가 됐다).
+   ⚠️ 푸터 위에 앉힌다. 14px만 주면 이용약관 링크 위에 겹친다. */
+@media (max-width: 600px) {
+  #shell-buttons { top: auto;
+    bottom: calc(var(--frame-bottom) + var(--sp-2) + env(safe-area-inset-bottom)); }
+}
 /* 플레이 중에는 아래로 내려간다. 우상단은 관전 칼럼(#side-views)이 쓰는 자리라
    판이 화면 폭을 꽉 채우는 창 비율에서 첫 관전창의 모서리를 덮는다.
    아래쪽은 항상 비어 있다 — 관전 칼럼은 위에서부터 채우고, 조이스틱은
    가운데(가로 화면에선 왼쪽)에 앉는다. */
-body.playing #sound-toggle { top: auto; bottom: calc(14px + env(safe-area-inset-bottom)); }
+body.playing #shell-buttons { top: auto; bottom: calc(14px + env(safe-area-inset-bottom)); }
 
 /* 화면 안쪽 여백. 위아래는 프레임을 피하고, 좌우는 본문이 서는 세로선을 정한다.
    ⚠️ 숫자가 아니라 토큰에서 나온다 — 예전엔 62px/50px로 박아 두어 헤더 높이를
