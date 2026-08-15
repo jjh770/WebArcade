@@ -65,20 +65,5 @@ export function isPlayState(state: AppState): state is PlayState {
   return PLAY_STATES.has(state);
 }
 
-/** 결과 화면에서 누른 키 하나가 무엇을 뜻하는지. 아무 뜻도 없으면 null.
- *
- *  ⚠️ **혼자 플레이에서만 듣는다.** 멀티에서 저 두 버튼은 남들까지 움직이는 일이라
- *     (전원을 대기실로 / 방을 나가기), 스치듯 누른 키로 일어나면 되돌릴 방법이 없다.
- *  ⚠️ 눌린 채로 있는 키(repeat)는 세지 않는다 — Enter를 붙들고 있는 동안 새 판이
- *     프레임마다 다시 깔린다.
- *  ⚠️ 버튼에 초점이 가 있을 때의 Enter도 세지 않는다. 브라우저가 이미 그 버튼을
- *     누르므로, 여기서 또 세면 한 번 누른 Enter가 두 판을 시작한다. */
-export function resultShortcut(
-  key: string,
-  context: { state: AppState; solo: boolean; repeat: boolean; buttonFocused: boolean },
-): "again" | "leave" | null {
-  if (context.repeat || !context.solo || context.state !== "result") return null;
-  if (key === "Escape") return "leave";
-  if (key === "Enter" && !context.buttonFocused) return "again";
-  return null;
-}
+/* 키 하나가 무슨 뜻인지는 여기 없다 — shortcuts.ts가 화면 밖 키를 전부 맡는다.
+   여기는 화면과 화면 사이의 길만 정한다. */

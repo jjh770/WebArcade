@@ -18,7 +18,8 @@
 
 import { NetClient, StateMachine } from "@arcade/core";
 import type { RankEntry } from "@arcade/shared";
-import { APP_TRANSITIONS, type AppEvent, type AppState, resultShortcut } from "./AppFlow";
+import { APP_TRANSITIONS, type AppEvent, type AppState } from "./AppFlow";
+import { shortcutFor } from "./shortcuts";
 import { initAudio, play } from "./audio";
 import { LOBBY_TRACK, initBgm, playBgm, silenceBgm } from "./bgm";
 import { initBgDecor } from "./bgDecor";
@@ -202,13 +203,23 @@ function onLocalDeath(): void {
   fallTimer = window.setTimeout(autoSpectate, FALL_MS);
 }
 
-// 관전 중 ←/→로 다른 생존자로 넘긴다(대상 선택이 아니라 순환). e.repeat 무시 = 한 번 눌러 한 칸.
+/* 판 밖에서 듣는 키는 여기 한 곳으로 들어온다. **뜻은 shortcuts.ts가 정하고 여기서는
+   그 뜻대로 하기만 한다** — 리스너가 늘 때마다 "지금 무슨 화면인가"를 되묻던 것을 없앴다. */
 window.addEventListener("keydown", (event) => {
-  if (appState.state !== "spectating" || event.repeat) return;
-  const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-  if (direction === 0) return;
+  const action = shortcutFor(event.key, {
+    state: appState.state,
+    solo: soloMode,
+    repeat: event.repeat,
+    buttonFocused: document.activeElement instanceof HTMLButtonElement,
+  });
+  if (!action) return;
   event.preventDefault();
-  if (session.cycleSpectate(direction)) swapSpectateScreen(direction);
+  if (action.kind === "spectate") {
+    // 넘길 남이 없으면 cycleSpectate가 거절한다 — 그때는 화면도 안 민다.
+    if (session.cycleSpectate(action.direction)) swapSpectateScreen(action.direction);
+    return;
+  }
+  byId(action.kind === "again" ? "again-btn" : "result-leave-btn").click();
 });
 
 /** 낙하 후 살아있는 남의 화면으로 슬라이드 전환. 남이 없으면 결과를 기다린다. */
@@ -417,21 +428,6 @@ byId("again-btn").addEventListener("click", () => {
   // 혼자: 대기실이 없으므로 새 시드로 곧장 다시 시작한다. 멀티: 호스트가 전원을 대기실로.
   if (soloMode) return startSolo();
   net.send({ type: "return_to_ready" });
-});
-
-/* 혼자 플레이 결과 화면의 손가락 단축키 — Enter로 다시, Esc로 나가기. 연습은 죽고 다시
-   하기를 반복하는 리듬이라, 그 사이에 마우스를 한 번 잡는 게 제일 걸린다.
-   무엇을 셀지는 resultShortcut이 정한다(멀티 제외·눌린 채 제외·초점 제외 — AppFlow 참조). */
-window.addEventListener("keydown", (event) => {
-  const action = resultShortcut(event.key, {
-    state: appState.state,
-    solo: soloMode,
-    repeat: event.repeat,
-    buttonFocused: document.activeElement instanceof HTMLButtonElement,
-  });
-  if (!action) return;
-  event.preventDefault();
-  byId(action === "again" ? "again-btn" : "result-leave-btn").click();
 });
 
 const hashCode = location.hash.slice(1).toUpperCase();
