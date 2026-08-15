@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 탭 아이콘. PNG와 같은 과녁이지만 이건 벡터라 어느 배율에서도 또렷하다.
+       색은 base.css의 --bg/--primary/--danger와 같은 값이다(scripts/make-icons.mjs도 같은 값). -->
+  <rect width="64" height="64" fill="#0d1017"/>
+  <circle cx="32" cy="32" r="29.4" fill="#5eebff"/>
+  <circle cx="32" cy="32" r="22.4" fill="#0d1017"/>
+  <circle cx="32" cy="32" r="15.4" fill="#5eebff"/>
+  <circle cx="32" cy="32" r="7.7" fill="#0d1017"/>
+  <circle cx="32" cy="32" r="3.8" fill="#ff4d67"/>
+</svg>

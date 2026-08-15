@@ -7,6 +7,19 @@
          touch-action:none으로 빠져 있고, 공지·소개 글까지 못 키우면 안 된다. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Arcade - 웹 멀티 아케이드 게임</title>
+    <!-- 홈 화면에 추가되는 앱으로서의 신분. 폰에서 설치하면 주소창이 사라져 게임판이
+         쓸 세로가 그만큼 늘어난다 — 짧은 화면에서 제일 아쉬운 것이 세로였다.
+         아이콘 PNG는 scripts/make-icons.mjs가 굽는다(색이 바뀌면 다시 돌릴 것).
+         ⚠️ theme-color는 --bg와 같은 값이다. 다르면 설치한 창의 위아래 띠만 딴 색이 된다.
+         ⚠️ apple-* 셋은 낡았지만 iOS는 여전히 manifest 대신 이걸 본다. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0d1017" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Arcade" />
     <!-- 스타일. 나눈 기준과 순서는 src/styles/main.css 머리말에 있다.
          ⚠️ JS에서 import하지 않는 이유도 거기 적혀 있다(첫 프레임 번쩍임). -->
     <link rel="stylesheet" href="/src/styles/main.css" />
