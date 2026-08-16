@@ -57,8 +57,8 @@ export function bindNav(deps: NavDeps): {
   function navTo(target: string | undefined): void {
     const event: AppEvent = target === "notice" ? "nav_notice"
       : target === "about" ? "nav_about"
-        : target === "community" ? "nav_community"
-          : target === "ranking" ? "nav_ranking"
+        : target === "ranking" ? "nav_ranking"
+          : target === "legal" ? "nav_legal"
             : deps.named() ? "nav_game_main" : "nav_game_nickname";
     if (deps.inRoom() && target !== "game") return toast(IN_ROOM);
     if (target === "notice") renderNotices();

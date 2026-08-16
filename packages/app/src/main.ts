@@ -315,7 +315,7 @@ byId("menu-nickname").addEventListener("click", () => {
   input.focus();
   input.select();
 });
-byId("options-back").addEventListener("click", () => transition("nav_game_main"));
+byId("options-back").addEventListener("click", () => nav.navTo("game"));
 // 크레딧은 배선이 없다 — 저장소의 ASSET_CREDITS.md로 나가는 <a>라 브라우저가 알아서 한다.
 
 const FIRST_GAME_ID = Object.keys(GAME_REGISTRY)[0] as GameId;
@@ -330,7 +330,11 @@ const nav = bindNav({
 });
 byId("lobby-rank-btn").addEventListener("click", () => nav.goRanking(selectedGameId ?? FIRST_GAME_ID));
 byId("result-rank-btn").addEventListener("click", () => nav.goRanking(selectedGameId ?? FIRST_GAME_ID));
-byId("footer-legal").addEventListener("click", () => toast("이용약관·개인정보는 준비 중입니다."));
+/* 푸터의 「이용약관 · 개인정보」는 배선이 없다 — data-nav="legal"이라 bindNav가 가져간다.
+   ⚠️ 두 화면의 「뒤로」는 **헤더의 「게임」과 같은 길을 쓴다.** 고정으로 메인에 보내면
+      이름을 아직 안 정한 사람(이 둘은 닉네임 화면에서도 열린다)이 빈 인사말이 뜬 메인에
+      떨어진다. navTo가 이름 유무를 보고 갈라 준다. */
+byId("legal-back").addEventListener("click", () => nav.navTo("game"));
 byId("gamelist-back").addEventListener("click", () => transition("back_main"));
 
 function selectGame(id: GameId): void {

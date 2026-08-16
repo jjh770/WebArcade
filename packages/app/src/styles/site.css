@@ -407,7 +407,7 @@ body.playing #shell-buttons { top: auto; bottom: calc(14px + env(safe-area-inset
      상한을 풀어 카드가 제 키대로 서야 화면이 그만큼 내려갈 자리를 만든다. */
   .screen:not(.play-overlay) .card { max-height: none; }
 }
-/* 읽을거리(공지·소개·순위·커뮤니티·옵션)는 세로로 길어지므로 위에서부터 채운다.
+/* 읽을거리(공지·소개·순위·옵션)는 세로로 길어지므로 위에서부터 채운다.
    폭은 읽기용으로 넓힌다 — 표와 목록이 왼쪽에 몰려 오른쪽이 통째로 비던 문제를 없앤다. */
 .page { align-items: flex-start !important; }
 /* 읽을거리만 세로로 스크롤한다(글이 화면보다 길다). 여기엔 hover에서 커지는 줄이 없어
@@ -422,8 +422,7 @@ ul.notice-body { max-width: 80ch; }
 /* 표와 목록은 **프레임 폭을 다 쓴다.** 960에 묶어 두면 넓은 화면에서 오른쪽이 통째로
    비는데, 이 둘은 넓어질수록 읽기가 나아진다 — 순위는 등수·이름·기록이 양끝으로
    벌어지고, 공지는 여러 칸으로 늘어선다. */
-#screen-ranking .card, #screen-notice .card,
-#screen-about .card, #screen-community .card { width: 100%; }
+#screen-ranking .card, #screen-notice .card, #screen-about .card { width: 100%; }
 /* 옵션은 읽을거리가 아니라 **폼**이다. 읽기 폭(960)에 두면 설명과 슬라이더 사이가
    300~400px씩 벌어져, 이름을 읽고 눈이 화면을 가로질러야 그 손잡이를 만난다.
    좁히면 손잡이가 설명 바로 옆에 선다. */

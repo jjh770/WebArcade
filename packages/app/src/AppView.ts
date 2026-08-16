@@ -29,7 +29,7 @@ type ScreenName = Exclude<AppState, PlayState> | "result";
 
 /** 푸터에 뜨는 한 줄. **화면 제목이 아니라 할 일**이다 — 제목은 카드가 이미 크게 적고
  *  있으므로 여기서 되풀이하면 자리만 먹는다.
- *  ⚠️ `Partial`이 아니라 **빠짐없는 표**다. 읽을거리(공지·소개·커뮤니티·순위·옵션)의 빈
+ *  ⚠️ `Partial`이 아니라 **빠짐없는 표**다. 읽을거리(공지·소개·순위·옵션)의 빈
  *     문자열은 빠뜨린 게 아니라 "여기엔 시킬 일이 없다"는 답이고, 그렇게 적어 두어야
  *     화면이 늘었을 때 답을 정하지 않고 지나갈 수가 없다.
  *  ⚠️ 화면 이름 목록(SCREEN_NAMES)이 이 표의 열쇠에서 나온다. 표가 곧 목록이다. */
@@ -43,9 +43,9 @@ const FOOTER_HINTS: Record<ScreenName, string> = {
   result: "",
   notice: "",
   about: "",
-  community: "",
   ranking: "",
   options: "",
+  legal: "",
 };
 
 const SCREEN_NAMES = Object.keys(FOOTER_HINTS) as readonly ScreenName[];
@@ -81,7 +81,7 @@ export function renderState(state: AppState): void {
   document.body.classList.toggle("playing", showPlay);
   byId("spectate-hint").hidden = state !== "spectating"; // 관전 중에만 ←/→ 힌트
 
-  const navKey = state === "notice" || state === "about" || state === "community" || state === "ranking"
+  const navKey = state === "notice" || state === "about" || state === "ranking"
     ? state
     : "game";
   document.querySelectorAll<HTMLElement>("#site-header .site-nav button").forEach((button) => {

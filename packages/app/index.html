@@ -70,7 +70,6 @@
         <button data-nav="ranking">순위</button>
         <button data-nav="notice">공지</button>
         <button data-nav="about">소개</button>
-        <button data-nav="community">커뮤니티</button>
       </nav>
     </header>
 
@@ -157,11 +156,12 @@
           <div class="card">
             <h1 id="lobby-title">로비</h1>
             <h2 id="lobby-hello"></h2>
-            <!-- 세 갈래. 연습은 서버 없이도 되고, 나머지 둘은 서버가 필요하다. -->
+            <!-- 두 갈래. 연습은 서버 없이도 되고, 방 만들기는 서버가 필요하다.
+                 (「빠른 대전 찾기」를 비활성 버튼으로 걸어 뒀었는데 걷었다 — 없는 기능을
+                 자리까지 차지하며 광고하는 꼴이었다. 매치메이킹이 생기면 그때 다시 넣는다.) -->
             <div class="stack">
               <button id="solo-btn" class="secondary" style="width:100%">혼자 플레이</button>
               <button id="create-btn" style="width:100%">방 만들기</button>
-              <button id="quick-btn" class="secondary" style="width:100%" disabled>빠른 대전 찾기 (준비 중)</button>
             </div>
             <div class="divider">— 또는 코드로 입장 —</div>
             <div class="row">
@@ -282,6 +282,40 @@
           </div>
         </section>
 
+        <!-- 이용약관 · 개인정보. 푸터 링크가 "준비 중입니다" 토스트만 띄우던 자리다.
+             ⚠️ 여기 적힌 것은 **코드가 실제로 하는 일**이다. 저장하는 것이 바뀌면
+                (보드 줄 수, localStorage 열쇠, 외부 요청) 이 글도 같이 고쳐야 한다. -->
+        <section id="screen-legal" class="screen page">
+          <div class="card">
+            <h1>이용약관 · 개인정보</h1>
+            <p class="hint">2026-08-17 기준. 법률 문서가 아니라, 이 사이트가 무엇을 남기고 무엇을 안 남기는지 그대로 적은 글입니다.</p>
+            <div class="about-body">
+              <h3>계정이 없습니다</h3>
+              <p>가입도 로그인도 없습니다. 닉네임은 이름표일 뿐 아무도 소유하지 않습니다 — 같은 이름을 여러 사람이 쓸 수 있습니다.</p>
+
+              <h3>서버에 남는 것</h3>
+              <p>혼자 플레이 기록이 순위표에 오를 때, <b>게임마다 상위 50줄</b>만 남습니다. 한 줄에 담기는 건 셋뿐입니다 — <b>닉네임 · 기록 · 등록 시각</b>. 50등 밖으로 밀리면 지워집니다.</p>
+              <p>여럿이 한 기록은 순위표에 오르지 않습니다. 방은 노는 동안만 서버에 있고 마지막 사람이 나가면 사라집니다.</p>
+              <p>이메일·전화번호·생년월일 같은 것은 묻지 않습니다. 접속 기록(IP)도 우리 저장소에는 담지 않습니다 — 다만 사이트를 띄우는 곳(Vercel · Cloudflare)은 자기 운영을 위해 접속 기록을 남길 수 있습니다.</p>
+
+              <h3>이 기기에만 남는 것</h3>
+              <p>닉네임, 소리 설정(켬·끔과 음량), 게임별 개인 최고기록은 브라우저 안(localStorage)에 저장됩니다. 기기 밖으로 나가지 않고, 브라우저 데이터를 지우면 함께 사라집니다.</p>
+
+              <h3>쿠키와 추적</h3>
+              <p>쿠키를 쓰지 않습니다. 분석 도구도 광고도 없습니다. 페이지가 불러오는 것은 전부 이 사이트의 것이라 — 음악 파일까지 직접 담고 있어서 — 바깥으로 나가는 요청이 없습니다.</p>
+
+              <h3>기록을 지우고 싶다면</h3>
+              <p>순위표에 올라간 이름을 내리고 싶으면 저장소에 알려 주세요. 어느 게임의 어떤 이름인지만 있으면 됩니다.</p>
+              <p class="how"><a href="https://github.com/jjh770/WebArcade/issues" target="_blank" rel="noopener noreferrer">github.com/jjh770/WebArcade/issues</a></p>
+
+              <h3>지키는 선</h3>
+              <p>남을 불쾌하게 하는 이름은 예고 없이 내립니다. 기록을 조작해 순위표에 올리는 시도는 서버에서 막고 있습니다.</p>
+              <p>이 사이트는 취미로 운영합니다. <b>예고 없이 멈추거나 기록이 사라질 수 있습니다</b> — 잃으면 곤란한 것을 여기 두지 마세요.</p>
+            </div>
+            <button id="legal-back" class="secondary" style="width:100%">뒤로</button>
+          </div>
+        </section>
+
         <!-- 옵션. 헤더의 🔊는 "전부 조용히"라는 빠른 동작이고, 여기는 음악만 끄고
              게임 소리는 듣는 식으로 **따로** 정하는 자리다. -->
         <section id="screen-options" class="screen page">
@@ -321,13 +355,6 @@
           </div>
         </section>
 
-        <!-- 커뮤니티 (플레이스홀더) -->
-        <section id="screen-community" class="screen page">
-          <div class="card">
-            <h1>커뮤니티</h1>
-            <div class="placeholder">준비 중입니다. 곧 만나요! 🙌</div>
-          </div>
-        </section>
 
         <!-- 순위. 혼자 플레이 기록만 오른다 — 여럿이 하면 인원수가 곧 난이도라
              판마다 조건이 달라 같은 잣대로 잴 수 없다. 그 이유를 화면에서도 말해 준다. -->
@@ -394,8 +421,7 @@
         <a data-nav="about" href="#">소개</a>
         <a data-nav="ranking" href="#">순위</a>
         <a data-nav="notice" href="#">공지</a>
-        <a data-nav="community" href="#">커뮤니티</a>
-        <button id="footer-legal">이용약관 · 개인정보</button>
+        <button id="footer-legal" data-nav="legal">이용약관 · 개인정보</button>
       </footer>
     <script type="module" src="/src/main.ts"></script>
   </body>
