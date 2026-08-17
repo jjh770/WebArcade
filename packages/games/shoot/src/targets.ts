@@ -28,27 +28,50 @@ export type Target = {
   readonly life: number;
 };
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
+/** 그 tick이 몇 번째 10초 구간인가(마지막 구간을 넘어가면 마지막으로 친다). */
+export function phaseAt(tick: number): number {
+  const phase = Math.floor(Math.max(0, tick) / C.phaseTicks);
+  return Math.min(C.phaseIntervals.length - 1, phase);
 }
 
-/** i번째 표적이 뜬 뒤 다음 표적까지의 간격(tick). */
-export function intervalFor(index: number): number {
-  const t = Math.min(1, index / C.rampTargets);
-  return Math.round(lerp(C.startIntervalTicks, C.endIntervalTicks, t));
+/** 이 시각에 뜨는 표적의 다음 표적까지의 간격(tick). */
+export function intervalAt(tick: number): number {
+  return C.phaseIntervals[phaseAt(tick)]!;
 }
 
-/** i번째 표적이 떠 있는 시간(tick). */
-export function lifeFor(index: number): number {
-  const t = Math.min(1, index / C.rampTargets);
-  return Math.round(lerp(C.startLifeTicks, C.endLifeTicks, t));
+/** 이 시각에 뜨는 표적이 떠 있는 시간(tick). */
+export function lifeAt(tick: number): number {
+  return C.phaseLives[phaseAt(tick)]!;
 }
 
-/** i번째 표적이 뜨는 tick. 앞의 간격들을 더한 값이다. */
-export function bornTickFor(index: number): number {
+/** 표적이 뜨는 시각표. **시드와 무관하다**(간격은 시계만 본다) — 그래서 한 번 만들어
+ *  두고 계속 쓴다. 판 끝을 넘는 것 하나까지 담아 "더는 없다"를 바로 알 수 있게 한다.
+ *  ⚠️ 예전엔 매번 앞에서부터 더했다. 표적이 마흔 개일 땐 티가 안 났는데 판이 60초가 되며
+ *     아흔 개를 넘자 **매 프레임 제곱으로** 훑는 꼴이 됐다(liveTargets가 이걸 부른다). */
+let bornTicks: number[] | null = null;
+
+function schedule(): number[] {
+  if (bornTicks) return bornTicks;
+  const out: number[] = [];
   let at = 0;
-  for (let i = 0; i < index; i++) at += intervalFor(i);
-  return at;
+  while (at < C.timeLimitTicks) {
+    out.push(at);
+    at += intervalAt(at);
+  }
+  out.push(at); // 판 끝을 넘는 첫 표적 — 여기까지 오면 그만 본다는 표시
+  bornTicks = out;
+  return out;
+}
+
+/** i번째 표적이 뜨는 tick. 앞의 간격들을 더한 값이다.
+ *  ⚠️ 간격이 **시각**으로 정해지는데도 서로 물지 않는다: i번째의 간격은 i번째가 뜬 시각이
+ *     정하고, 그 시각은 앞의 것들만 더하면 나온다. 그래서 앞에서부터 한 번 훑으면 끝이다. */
+export function bornTickFor(index: number): number {
+  const table = schedule();
+  if (index < table.length) return table[index]!;
+  // 표에 없는 번호(판이 끝난 뒤)는 마지막 간격으로 이어 붙인다.
+  const last = table[table.length - 1]!;
+  return last + intervalAt(last) * (index - table.length + 1);
 }
 
 /** 후보를 몇 개 뽑아 볼 것인가. **개수를 고정하는 게 중요하다** — "될 때까지 다시 뽑기"로
@@ -75,25 +98,25 @@ export function pointFor(seed: number, index: number): { x: number; y: number } 
 /** i번째 표적. 자리·시각·수명이 전부 시드와 번호에서 나온다. */
 export function targetAt(seed: number, index: number): Target {
   const { x, y } = pointFor(seed, index);
-  return { index, x, y, bornTick: bornTickFor(index), life: lifeFor(index) };
+  const bornTick = bornTickFor(index);
+  return { index, x, y, bornTick, life: lifeAt(bornTick) };
 }
 
 /** 이 tick에 판 위에 떠 있는 표적들(맞았는지는 여기서 모른다 — 그건 각자의 사정이다).
  *  ⚠️ 0번부터 훑는다. 한 판이 30초라 표적은 많아야 마흔몇 개고, 그 정도 되짚기는 매
  *     프레임 해도 표가 안 난다 — 대신 어느 tick을 묻든 답이 같다는 성질을 지킨다. */
 export function liveTargets(seed: number, tick: number): Target[] {
+  const table = schedule();
   const out: Target[] = [];
-  for (let index = 0; ; index++) {
-    const born = bornTickFor(index);
+  for (let index = 0; index < table.length; index++) {
+    const born = table[index]!;
     if (born > tick) break; // 아직 안 뜬 표적 — 뒤는 더 늦게 뜬다.
-    if (born + lifeFor(index) > tick) out.push(targetAt(seed, index));
+    if (born + lifeAt(born) > tick) out.push(targetAt(seed, index));
   }
   return out;
 }
 
-/** 한 판에 뜨는 표적 수. 제한시간 안에 뜬 것만 센다. */
+/** 한 판에 뜨는 표적 수. 제한시간 안에 뜬 것만 센다(시각표의 마지막 하나는 넘긴 것이다). */
 export function totalTargets(): number {
-  let index = 0;
-  while (bornTickFor(index) < C.timeLimitTicks) index++;
-  return index;
+  return schedule().length - 1;
 }
