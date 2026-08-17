@@ -15,7 +15,7 @@ import {
   GameRunner,
   InputManager,
   KeyEntry,
-  PointerAim,
+  PointerInput,
 } from "@arcade/core";
 import type { IGame, PeerSnapshot, PlayerPublic, SpectateSignal } from "@arcade/shared";
 import { isSoundId, play } from "./audio";
@@ -60,9 +60,9 @@ export class GameSession {
    *  기본 동작을 삼키므로, 숫자를 안 받는 게임에서까지 켜 둘 이유가 없다. */
   private readonly typing = new KeyEntry((slug) => this.runner?.typeKey(slug));
   private typingOn = false;
-  /** 조준 입력. 글자와 같은 이유로 **게임이 요구할 때만** 켠다 — 켜져 있으면 판 위에서
-   *  움직이는 마우스를 매번 좇게 되고, 조준을 안 쓰는 게임에는 아무 뜻이 없는 일이다. */
-  private readonly aiming: PointerAim;
+  /** 포인터 입력(조준·발사). 글자와 같은 이유로 **게임이 요구할 때만** 켠다 — 켜져 있으면
+   *  판 위에서 움직이는 마우스를 매번 좇게 되고, 안 쓰는 게임에는 아무 뜻이 없는 일이다. */
+  private readonly aiming: PointerInput;
   private aimingOn = false;
   private readonly touch: TouchControls;
   private readonly input: CompositeInput;
@@ -90,7 +90,11 @@ export class GameSession {
     });
     // 조준도 판 위에서 받는다. 손가락 조작면과 달리 **마우스도 함께** 받으므로
     // TouchControls 안이 아니라 여기 따로 선다 — 저기는 손가락 전용 조작면의 집이다.
-    this.aiming = new PointerAim(options.mainCanvas, (nx, ny) => this.runner?.aim(nx, ny));
+    this.aiming = new PointerInput(
+      options.mainCanvas,
+      (nx, ny) => this.runner?.aim(nx, ny),
+      (nx, ny) => this.runner?.fire(nx, ny),
+    );
     this.input = new CompositeInput(this.keyboard, this.touch);
     this.views = new PeerViews({
       slots: SIDE_SLOTS,
@@ -153,7 +157,8 @@ export class GameSession {
     //    관전으로 걷힌 조작이 "다시 하기"에서 안 돌아온다.
     this.touch.setUsable(true);
     this.setTyping(typeof this.game?.typeKey === "function");
-    this.setAiming(typeof this.game?.aim === "function");
+    // 둘 중 **하나라도** 쓰면 켠다 — 조준 없이 톡톡 치기만 하는 게임도 있을 수 있다.
+    this.setAiming(typeof this.game?.aim === "function" || typeof this.game?.fire === "function");
     this.runner?.start(seed, epochPerformanceMs, this.views.selfContext());
     this.refresh();
     // 카운트다운 동안 깔려 있던 조작 안내를 걷는다 — 플레이 화면은 가리지 않는다.

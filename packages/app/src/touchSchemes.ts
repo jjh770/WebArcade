@@ -14,7 +14,7 @@
    ⚠️ keypad·aim은 앞의 셋과 종류가 다르다. 저 셋은 InputState(누르고 있는 방향)를
       만들지만 이 둘은 밀어 넣는다 — 글자 슬러그(IGame.typeKey)와 조준 좌표(IGame.aim).
       조작면이라는 점만 같아서 여기 함께 두고, 입력이 흐르는 길은 따로다
-      (touchControls의 onKey · GameSession의 PointerAim).
+      (touchControls의 onKey · GameSession의 PointerInput).
    ⚠️ aim은 조작면이 **판 그 자체**라 세로 예산을 안 먹는다(SURFACE_CLASS에 없다).
       canvas와 같은 자리지만 매핑이 없어 따로 선다 — 좌표를 방향으로 바꾸지 않고
       좌표인 채로 게임에 준다.

@@ -1,12 +1,12 @@
-/* 조준 좌표 계산(PointerAim).
+/* 조준 좌표 계산(PointerInput).
 
    리스너·포인터 캡처는 브라우저에서 확인한다. 여기서 잡는 건 **판 밖과 크기 0**이다.
    둘 다 조용히 어긋나는 종류다 — 판 밖은 조준점이 세계 밖으로 나가고, 크기 0은
    NaN이 게임까지 흘러들어 화면에서 조준점이 통째로 사라진다. */
 import { describe, expect, it } from "vitest";
-import { normalizeInBox, type AimBox } from "../packages/core/src/input/PointerAim";
+import { normalizeInBox, type PointerBox } from "../packages/core/src/input/PointerInput";
 
-const BOX: AimBox = { left: 100, top: 50, width: 400, height: 200 };
+const BOX: PointerBox = { left: 100, top: 50, width: 400, height: 200 };
 
 describe("normalizeInBox", () => {
   it("상자 안의 점을 0~1로 옮긴다", () => {

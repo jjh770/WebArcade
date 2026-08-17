@@ -7,7 +7,7 @@ export { CompositeInput, mergeInputs, type InputSource } from "./input/InputSour
 export { TouchInput, splitLeftRight, joystick8, type TouchMapper } from "./input/TouchInput";
 export { ButtonInput, type Direction, type DirectionButton } from "./input/ButtonInput";
 export { KeyEntry, keyToSlug } from "./input/KeyEntry";
-export { PointerAim, normalizeInBox, type AimBox } from "./input/PointerAim";
+export { PointerInput, normalizeInBox, type PointerBox } from "./input/PointerInput";
 export { NetClient } from "./net/NetClient";
 export { Canvas2DRenderer } from "./render/Canvas2DRenderer";
 export { StateMachine, type TransitionTable, type StateTransition } from "./StateMachine";

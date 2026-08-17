@@ -127,6 +127,12 @@ export class GameRunner {
     this.game.aim?.(nx, ny);
   }
 
+  /** 조준점 자리를 쏘았을 때 앱이 호출. aim과 마찬가지로 러너는 뜻을 모른다.
+   *  ⚠️ 부르는 쪽이 aim을 먼저 부른다(PointerInput의 계약) — 여기서 순서를 다시 세우지 않는다. */
+  fire(nx: number, ny: number): void {
+    this.game.fire?.(nx, ny);
+  }
+
   /** 남의 발사에 맞았을 때 앱이 호출. 게임이 아는 효과면 로컬에 적용한다.
    *  게임이 뭔지는 모른다 — IGame.applyEffect에 그대로 위임. */
   applyEffect(kind: string, durationMs: number): void {

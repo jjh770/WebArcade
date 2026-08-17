@@ -19,7 +19,9 @@ import type { GaugeAlarm, ScoreDirection, ScoreUnit } from "@arcade/shared";
 
 export const aimConfig = {
   id: "aim",
-  title: "에임 테스트",
+  // ⚠️ 여섯 번째 게임(에임 사격)과 **형제로 읽히게** 지은 이름이다. 그쪽은 뜨는 표적을
+  //    찍는 게임이고 이쪽은 움직이는 표적을 붙드는 게임이라, 앞말을 공유하고 뒷말로 가른다.
+  title: "에임 추적",
   description: "달아나는 표적에 조준을 얹고 버틴다. 오래 붙들수록 배수가 오른다",
 
   /** 순위 방향: 점수가 클수록 좋음. 네 게임 모두와 같아 서버는 그대로다. */
