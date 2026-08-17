@@ -14,7 +14,8 @@
     "@arcade/game-curve": "*",
     "@arcade/game-floor": "*",
     "@arcade/game-baseball": "*",
-    "@arcade/game-aim": "*"
+    "@arcade/game-aim": "*",
+    "@arcade/game-shoot": "*"
   },
   "devDependencies": {
     "vite": "^7.2.7"

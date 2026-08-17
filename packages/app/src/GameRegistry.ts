@@ -20,6 +20,7 @@ import { CurveGame, curveConfig } from "@arcade/game-curve";
 import { FloorGame, floorConfig } from "@arcade/game-floor";
 import { BaseballGame, baseballConfig } from "@arcade/game-baseball";
 import { AimGame, aimConfig } from "@arcade/game-aim";
+import { ShootGame, shootConfig } from "@arcade/game-shoot";
 
 export type GameEntry = {
   id: string;
@@ -110,6 +111,20 @@ export const GAME_REGISTRY = {
     touch: "aim",
     // 이 게임을 위해 새로 들여온 곡(2026-08-17). 몰아붙이지 않고 멀리 퍼지는 결이라
     // 45초 내내 한 점을 좇는 일과 부딪히지 않는다.
+    bgm: "observing_the_star",
+  },
+  shoot: {
+    id: shootConfig.id,
+    title: shootConfig.title,
+    description: shootConfig.description,
+    scoreDirection: shootConfig.scoreDirection,
+    scoreUnit: shootConfig.scoreUnit,
+    gaugeLabel: shootConfig.gaugeLabel,
+    gaugeAlarm: shootConfig.gaugeAlarm,
+    factory: () => new ShootGame(),
+    touch: "aim",
+    // 형제 게임과 **같은 곡**이다(2026-08-17 사용자 결정). 둘을 이어서 해도 곡이 안 갈리는데,
+    // 결이 같은 두 게임이라 그게 어색하지 않다.
     bgm: "observing_the_star",
   },
 } satisfies Record<string, GameEntry>;

@@ -14,6 +14,7 @@
     { "path": "../games/curve" },
     { "path": "../games/floor" },
     { "path": "../games/baseball" },
-    { "path": "../games/aim" }
+    { "path": "../games/aim" },
+    { "path": "../games/shoot" }
   ]
 }

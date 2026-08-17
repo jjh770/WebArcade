@@ -4,6 +4,8 @@
    출현표가 내 사격에 조금도 좌우되지 않아야 한다. 그게 깨지면 잘 쏘는 사람과 못 쏘는
    사람이 서로 다른 판을 보게 되고, 순위표와 관전이 동시에 무너진다. */
 import { describe, expect, it } from "vitest";
+import type { IRenderer } from "@arcade/shared";
+import { isSoundId } from "../packages/app/src/audio";
 import { shootConfig as C } from "../packages/games/shoot/src/config";
 import {
   bornTickFor, intervalFor, lifeFor, liveTargets, pointFor, targetAt, totalTargets,
@@ -184,6 +186,57 @@ describe("판 전체", () => {
     expect(isOver(C.timeLimitTicks)).toBe(true);
   });
 
+  it("총성은 매 발 나고 명중 확인음만 그 위에 얹힌다", () => {
+    const game = new ShootGame();
+    game.init(9);
+    const t = targetAt(9, 0);
+    for (let tick = 0; tick <= t.bornTick; tick++) game.update(tick);
+
+    game.fire(t.x / C.screenWidth, t.y / C.screenHeight);
+    expect([...(game.consumeSounds() ?? [])].sort()).toEqual(["pop", "shot"]);
+
+    // 헛방에는 따로 소리를 두지 않는다 — 총성만 나고 아무 반응이 없는 것이 곧 빗나감이다.
+    game.fire(0.02, 0.98);
+    expect(game.consumeSounds()).toEqual(["shot"]);
+    expect(game.consumeSounds()).toBeNull(); // 아무 일 없으면 null이다
+
+    for (const slug of ["shot", "pop"]) expect(isSoundId(slug)).toBe(true);
+  });
+
+  it("소리를 가져가든 안 가져가든 점수가 같다 — 소리는 판을 바꾸지 않는다", () => {
+    const score = (drain: boolean) => {
+      const game = new ShootGame();
+      game.init(21);
+      const done = new Set<number>();
+      for (let tick = 0; tick <= 900; tick++) {
+        game.update(tick);
+        for (const t of liveTargets(21, tick)) {
+          if (done.has(t.index)) continue;
+          done.add(t.index);
+          game.fire(t.x / C.screenWidth, t.y / C.screenHeight);
+        }
+        if (tick % 100 === 0) game.fire(0.02, 0.98); // 헛방도 섞는다
+        if (drain) game.consumeSounds();
+      }
+      return game.getScore();
+    };
+    expect(score(true)).toBe(score(false));
+  });
+
+  it("쏜 사실이 남들 화면용으로 한 번만 실려 나간다 — 연출 전용이다", () => {
+    const game = new ShootGame();
+    game.init(9);
+    const t = targetAt(9, 0);
+    for (let tick = 0; tick <= t.bornTick; tick++) game.update(tick);
+
+    expect(game.consumePeerEvent()).toBeNull();
+    game.fire(t.x / C.screenWidth, t.y / C.screenHeight);
+    expect(game.consumePeerEvent()).toBe("h");
+    expect(game.consumePeerEvent()).toBeNull(); // 한 번만
+    game.fire(0.02, 0.98);
+    expect(game.consumePeerEvent()).toBe("m");
+  });
+
   it("한 판을 굴려도 출현표가 변하지 않는다 — 월드는 게임 밖에 있다", () => {
     const snapshot = () => {
       const out: string[] = [];
@@ -201,4 +254,143 @@ describe("판 전체", () => {
     expect(perfect.getScore()).toBeGreaterThan(0);
     expect(lazy.getScore()).toBe(0);
   });
+
+  it("남이 쏜 신호는 점수도 표적도 바꾸지 않는다 — 판정이 아니다", () => {
+    const game = new ShootGame();
+    game.init(9);
+    for (let tick = 0; tick <= 200; tick++) game.update(tick);
+    const before = { score: game.getScore(), gauge: game.getGauge() };
+    game.applyPeerEvent("남", "h");
+    game.applyPeerEvent("남", "m");
+    game.applyPeerEvent("남", "모르는-것");
+    expect({ score: game.getScore(), gauge: game.getGauge() }).toEqual(before);
+  });
+});
+
+/* ---- 화면 --------------------------------------------------------------- */
+
+/** 판 위에서 읽어 내는 것. 색 값 자체는 게임 내부 상수라 밖에서 모른다 —
+ *  **무엇이 몇 개 그려졌고 상태에 따라 달라지는가**만 본다. */
+class ScreenProbe implements IRenderer {
+  readonly width = C.screenWidth;
+  readonly height = C.screenHeight;
+  circles: { x: number; y: number; r: number; color: string }[] = [];
+  texts: { text: string; x: number; y: number; color: string }[] = [];
+  /** 십자 조준점의 팔 길이(굵기 2인 선). 반동으로 늘어난다. */
+  crossArm = 0;
+
+  reset(): this {
+    this.circles = [];
+    this.texts = [];
+    this.crossArm = 0;
+    return this;
+  }
+  clear(): void {}
+  rect(): void {}
+  circle(x: number, y: number, r: number, color: string): void {
+    this.circles.push({ x, y, r, color });
+  }
+  text(text: string, x: number, y: number, color: string): void {
+    this.texts.push({ text, x, y, color });
+  }
+  line(x1: number, _y1: number, x2: number, _y2: number, _color: string, width?: number): void {
+    if (width === 2) this.crossArm = Math.max(this.crossArm, Math.abs(x2 - x1));
+  }
+}
+
+describe("화면이 말하는 것", () => {
+  /** tick까지 굴린 게임. */
+  function at(seed: number, tick: number): ShootGame {
+    const game = new ShootGame();
+    game.init(seed);
+    for (let t = 0; t <= tick; t++) game.update(t);
+    return game;
+  }
+
+  it("수명 고리가 조여든다 — 고리가 클수록 점수가 높다는 규칙이 눈에 보인다", () => {
+    const t = targetAt(9, 0);
+    const probe = new ScreenProbe();
+    // 표적 자리에 그려진 원 중 가장 큰 것 = 수명 고리.
+    const ringAt = (tick: number) => {
+      at(9, tick).render(probe.reset());
+      return Math.max(...probe.circles.filter((c) => Math.abs(c.x - t.x) < 1).map((c) => c.r));
+    };
+    const born = ringAt(t.bornTick);
+    const late = ringAt(t.bornTick + t.life - 1);
+    expect(born).toBeCloseTo(C.radius * 2.8, 0); // 표적보다 한참 크게 시작해
+    expect(late).toBeLessThan(C.radius * 1.05); // 표적 크기까지 조여든다
+  });
+
+  it("쏘면 조준점이 벌어졌다 돌아온다 — 눌린 게 눈에도 보인다", () => {
+    const game = at(9, 300);
+    const probe = new ScreenProbe();
+    game.render(probe.reset());
+    const resting = probe.crossArm;
+
+    game.fire(0.5, 0.5);
+    game.render(probe.reset());
+    const kicked = probe.crossArm;
+    expect(kicked).toBeGreaterThan(resting);
+
+    for (let tick = 301; tick <= 320; tick++) game.update(tick);
+    game.render(probe.reset());
+    expect(probe.crossArm).toBe(resting); // 제자리로 돌아온다
+  });
+
+  it("맞힘과 헛방이 그 자리에 숫자로 뜨고, 잠시 뒤 사라진다", () => {
+    const t = targetAt(9, 0);
+    const game = at(9, t.bornTick);
+    const probe = new ScreenProbe();
+
+    game.fire(t.x / C.screenWidth, t.y / C.screenHeight);
+    game.render(probe.reset());
+    const hit = probe.texts.find((x) => x.text.startsWith("+"));
+    expect(hit).toBeTruthy();
+    expect(hit!.x).toBeCloseTo(t.x, 0);
+
+    game.fire(0.02, 0.98);
+    game.render(probe.reset());
+    expect(probe.texts.some((x) => x.text === `-${C.missPenalty}`)).toBe(true);
+
+    for (let tick = t.bornTick; tick <= t.bornTick + 60; tick++) game.update(tick);
+    game.render(probe.reset());
+    expect(probe.texts).toEqual([]); // 낡은 것은 버린다
+  });
+
+  it("점수가 0이면 헛방에 '-30'을 띄우지 않는다 — 화면이 규칙에 대해 거짓말하지 않는다", () => {
+    const game = at(9, 300);
+    const probe = new ScreenProbe();
+    expect(game.getScore()).toBe(0);
+    game.fire(0.02, 0.98);
+    game.render(probe.reset());
+    expect(probe.texts.map((x) => x.text)).toContain("빗나감");
+  });
+
+  it("맞힌 표적은 내 화면에서 사라지지만 관전 화면에는 남는다 — 남의 사정은 모른다", () => {
+    const t = targetAt(9, 0);
+    const game = at(9, t.bornTick);
+    const probe = new ScreenProbe();
+
+    game.fire(t.x / C.screenWidth, t.y / C.screenHeight);
+    game.render(probe.reset());
+    expect(probe.circles.some((c) => Math.abs(c.x - t.x) < 1)).toBe(false);
+
+    game.renderSpectator(probe.reset(), { id: "남", a: 10, b: 10, label: "남" });
+    expect(probe.circles.some((c) => Math.abs(c.x - t.x) < 1)).toBe(true);
+  });
+
+  it("남이 쏜 순간에만 관전 화면에 섬광이 뜬다", () => {
+    const game = at(9, 300);
+    const probe = new ScreenProbe();
+    const spectate = () => {
+      game.renderSpectator(probe.reset(), { id: "남", a: 400, b: 700, label: "남" });
+      return probe.circles.filter((c) => Math.abs(c.x - 400) < 1 && Math.abs(c.y - 700) < 1).length;
+    };
+    expect(spectate()).toBe(0);
+    game.applyPeerEvent("남", "h");
+    expect(spectate()).toBe(1);
+    for (let tick = 301; tick <= 330; tick++) game.update(tick);
+    expect(spectate()).toBe(0); // 잠깐만 뜬다
+  });
+
 });
