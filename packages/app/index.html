@@ -282,12 +282,14 @@
           </div>
         </section>
 
-        <!-- 이용약관 · 개인정보. 푸터 링크가 "준비 중입니다" 토스트만 띄우던 자리다.
+        <!-- 개인정보 안내. 푸터 링크가 "준비 중입니다" 토스트만 띄우던 자리다.
+             ⚠️ 이름이 「이용약관」이 아닌 이유: 약관은 계약 문서를 가리키는 말인데 여기엔
+                조항도 동의 절차도 없다. 이 글이 하는 일은 **무엇이 남는지 밝히는 것**이다.
              ⚠️ 여기 적힌 것은 **코드가 실제로 하는 일**이다. 저장하는 것이 바뀌면
                 (보드 줄 수, localStorage 열쇠, 외부 요청) 이 글도 같이 고쳐야 한다. -->
-        <section id="screen-legal" class="screen page">
+        <section id="screen-privacy" class="screen page">
           <div class="card">
-            <h1>이용약관 · 개인정보</h1>
+            <h1>개인정보 안내</h1>
             <p class="hint">2026-08-17 기준. 법률 문서가 아니라, 이 사이트가 무엇을 남기고 무엇을 안 남기는지 그대로 적은 글입니다.</p>
             <div class="about-body">
               <h3>계정이 없습니다</h3>
@@ -304,15 +306,11 @@
               <h3>쿠키와 추적</h3>
               <p>쿠키를 쓰지 않습니다. 분석 도구도 광고도 없습니다. 페이지가 불러오는 것은 전부 이 사이트의 것이라 — 음악 파일까지 직접 담고 있어서 — 바깥으로 나가는 요청이 없습니다.</p>
 
-              <h3>기록을 지우고 싶다면</h3>
-              <p>순위표에 올라간 이름을 내리고 싶으면 저장소에 알려 주세요. 어느 게임의 어떤 이름인지만 있으면 됩니다.</p>
-              <p class="how"><a href="https://github.com/jjh770/WebArcade/issues" target="_blank" rel="noopener noreferrer">github.com/jjh770/WebArcade/issues</a></p>
-
               <h3>지키는 선</h3>
               <p>남을 불쾌하게 하는 이름은 예고 없이 내립니다. 기록을 조작해 순위표에 올리는 시도는 서버에서 막고 있습니다.</p>
               <p>이 사이트는 취미로 운영합니다. <b>예고 없이 멈추거나 기록이 사라질 수 있습니다</b> — 잃으면 곤란한 것을 여기 두지 마세요.</p>
             </div>
-            <button id="legal-back" class="secondary" style="width:100%">뒤로</button>
+            <button id="privacy-back" class="secondary" style="width:100%">뒤로</button>
           </div>
         </section>
 
@@ -421,7 +419,7 @@
         <a data-nav="about" href="#">소개</a>
         <a data-nav="ranking" href="#">순위</a>
         <a data-nav="notice" href="#">공지</a>
-        <button id="footer-legal" data-nav="legal">이용약관 · 개인정보</button>
+        <button id="footer-privacy" data-nav="privacy">개인정보 안내</button>
       </footer>
     <script type="module" src="/src/main.ts"></script>
   </body>

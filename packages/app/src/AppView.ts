@@ -45,7 +45,7 @@ const FOOTER_HINTS: Record<ScreenName, string> = {
   about: "",
   ranking: "",
   options: "",
-  legal: "",
+  privacy: "",
 };
 
 const SCREEN_NAMES = Object.keys(FOOTER_HINTS) as readonly ScreenName[];

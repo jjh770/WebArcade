@@ -377,7 +377,7 @@ body.playing #site-header, body.playing #site-footer { display: none; }
    ⚠️ **이 블록은 위 기본 규칙보다 아래에 있어야 한다.** 같은 자세함(specificity)이라
       순서로 이기는데, 위에 두면 `top: auto`가 져서 top·bottom이 동시에 걸리고 묶음이
       화면 높이만큼 늘어난다(실제로 그랬다 — 세로 463px짜리 상자가 됐다).
-   ⚠️ 푸터 위에 앉힌다. 14px만 주면 이용약관 링크 위에 겹친다. */
+   ⚠️ 푸터 위에 앉힌다. 14px만 주면 푸터 링크 줄 위에 겹친다. */
 @media (max-width: 600px) {
   #shell-buttons { top: auto;
     bottom: calc(var(--frame-bottom) + var(--sp-2) + env(safe-area-inset-bottom)); }
