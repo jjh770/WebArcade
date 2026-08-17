@@ -13,7 +13,8 @@
     "@arcade/game-jungnim": "*",
     "@arcade/game-curve": "*",
     "@arcade/game-floor": "*",
-    "@arcade/game-baseball": "*"
+    "@arcade/game-baseball": "*",
+    "@arcade/game-aim": "*"
   },
   "devDependencies": {
     "vite": "^7.2.7"

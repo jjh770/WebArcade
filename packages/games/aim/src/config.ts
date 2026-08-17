@@ -19,9 +19,7 @@ import type { GaugeAlarm, ScoreDirection, ScoreUnit } from "@arcade/shared";
 
 export const aimConfig = {
   id: "aim",
-  // ⚠️ 이름은 아직 잠정이다(후보: 조준경 · 표적 추적 · 락온). 화면에 나가는 건
-  //    GameRegistry에 올리는 4단계부터다.
-  title: "표적 추적",
+  title: "에임 테스트",
   description: "달아나는 표적에 조준을 얹고 버틴다. 오래 붙들수록 배수가 오른다",
 
   /** 순위 방향: 점수가 클수록 좋음. 네 게임 모두와 같아 서버는 그대로다. */

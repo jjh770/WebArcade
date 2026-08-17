@@ -39,6 +39,9 @@ export const TRACKS = {
   assault: "assault",
   escape_from_metal_city: "escape_from_metal_city",
   midnight_drive: "midnight_drive",
+  // ⚠️ 유일하게 congusbongus가 아닌 곡이다(yd, 역시 CC0). 파일 이름이 원본과 달라
+  //    보이는 이유는 나머지와 표기를 맞춘 것뿐이다(원본 ObservingTheStar.ogg).
+  observing_the_star: "observing_the_star",
 } as const;
 
 export type TrackId = keyof typeof TRACKS;

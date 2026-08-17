@@ -102,6 +102,18 @@ function wanderInput(view: View): InputState {
   };
 }
 
+/** 조준을 받는 게임(에임 테스트)에 흘려 넣는 흉내. 방향 넷과 마찬가지로 **게임을 아는
+ *  코드가 아니다** — 같은 두 사인파를 0~1 좌표로 옮겨 판 위를 훑을 뿐이고, 조준을 안
+ *  받는 게임은 이 메서드가 없어 저절로 아무 일도 안 일어난다.
+ *  ⚠️ 표적을 맞히려 들지 않는다. 미리보기가 어디를 겨눠야 하는지 알려면 그 게임의 규칙을
+ *     알아야 하는데, 여기는 그걸 몰라야 하는 자리다. 움직이는 조준점만으로 충분하다. */
+function wanderAim(view: View): void {
+  if (!view.game.aim) return;
+  const x = Math.sin(view.tick / WANDER_X_PERIOD + view.phase);
+  const y = Math.cos(view.tick / WANDER_Y_PERIOD + view.phase * 1.7);
+  view.game.aim((x + 1) / 2, (y + 1) / 2);
+}
+
 const thumbs: View[] = [];
 let background: View | null = null;
 let thumbsOn = false;
@@ -207,6 +219,7 @@ function loop(now: number): void {
 /** 한 스텝. 죽었으면 그 자리에서 새 시드로 되살린다 — 사망 화면을 보여주지 않으려는
  *  것이다. 작은 그림에서는 "사망" 글자가 읽히지도 않고, 장식은 움직임만 보여주면 된다. */
 function step(view: View): void {
+  wanderAim(view);
   view.game.update(view.tick++, wanderInput(view));
   if (!view.game.isPlayerDead()) return;
   view.seed = (view.seed * 1664525 + 1013904223) >>> 0;

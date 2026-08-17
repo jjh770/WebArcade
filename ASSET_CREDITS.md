@@ -9,8 +9,9 @@ game visuals are drawn on a canvas, and the UI uses system fonts only.
 
 ## Music
 
-The following tracks were created by **congusbongus** and released under
-**CC0 1.0** (public domain dedication) on OpenGameArt.
+Every track is released under **CC0 1.0** (public domain dedication) on OpenGameArt.
+
+By **congusbongus** (https://opengameart.org/users/congusbongus):
 
 | Track | File | Source |
 |---|---|---|
@@ -20,9 +21,18 @@ The following tracks were created by **congusbongus** and released under
 | Blue Intermission | `blue_intermission` | https://opengameart.org/content/blue-intermission |
 | Assault | `assault` | https://opengameart.org/content/assault |
 
-- Artist profile: https://opengameart.org/users/congusbongus
+By **yd** (https://opengameart.org/users/yd):
+
+| Track | File | Source |
+|---|---|---|
+| Another space background track | `observing_the_star` | https://opengameart.org/content/another-space-background-track |
+
 - License: CC0 1.0 Universal — https://creativecommons.org/publicdomain/zero/1.0/
 - Files live in `packages/app/public/bgm/`.
+- The `observing_the_star` file is renamed from the author's `ObservingTheStar.ogg`
+  only to match the naming of the other tracks; the audio is untouched. The
+  author's archive also contains an LMMS project file, which this repository does
+  not ship.
 - **Each track ships in two formats.** The `.ogg` files are the originals as
   downloaded. The `.m4a` files are AAC transcodes made by
   `scripts/encode-bgm.mjs` — the audio is otherwise unaltered (same length, no

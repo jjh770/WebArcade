@@ -23,6 +23,7 @@ export const SCORE_UNIT = {
   curve: "ticks",
   floor: "ticks",
   baseball: "points",
+  aim: "points",
 };
 
 /** 순위표가 있는 게임 전부. `rm all`이 이 목록을 훑는다. */

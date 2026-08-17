@@ -19,6 +19,7 @@ import { JungnimGame, jungnimConfig } from "@arcade/game-jungnim";
 import { CurveGame, curveConfig } from "@arcade/game-curve";
 import { FloorGame, floorConfig } from "@arcade/game-floor";
 import { BaseballGame, baseballConfig } from "@arcade/game-baseball";
+import { AimGame, aimConfig } from "@arcade/game-aim";
 
 export type GameEntry = {
   id: string;
@@ -94,6 +95,22 @@ export const GAME_REGISTRY = {
     touch: "keypad",
     // 넷 중 유일하게 앉아서 생각하는 게임 — 몰아붙이지 않는 곡.
     bgm: "blue_intermission",
+  },
+  aim: {
+    id: aimConfig.id,
+    title: aimConfig.title,
+    description: aimConfig.description,
+    scoreDirection: aimConfig.scoreDirection,
+    scoreUnit: aimConfig.scoreUnit,
+    gaugeLabel: aimConfig.gaugeLabel,
+    gaugeAlarm: aimConfig.gaugeAlarm,
+    factory: () => new AimGame(),
+    // 판을 짚은 자리가 곧 조준점이다. 위젯도 버튼도 없는 유일한 방식 —
+    // 조준을 위젯으로 옮기면 겨누는 손과 보는 눈이 갈라진다.
+    touch: "aim",
+    // 이 게임을 위해 새로 들여온 곡(2026-08-17). 몰아붙이지 않고 멀리 퍼지는 결이라
+    // 45초 내내 한 점을 좇는 일과 부딪히지 않는다.
+    bgm: "observing_the_star",
   },
 } satisfies Record<string, GameEntry>;
 
