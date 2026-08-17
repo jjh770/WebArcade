@@ -15,6 +15,7 @@ import {
   GameRunner,
   InputManager,
   KeyEntry,
+  PointerAim,
 } from "@arcade/core";
 import type { IGame, PeerSnapshot, PlayerPublic, SpectateSignal } from "@arcade/shared";
 import { isSoundId, play } from "./audio";
@@ -59,6 +60,10 @@ export class GameSession {
    *  기본 동작을 삼키므로, 숫자를 안 받는 게임에서까지 켜 둘 이유가 없다. */
   private readonly typing = new KeyEntry((slug) => this.runner?.typeKey(slug));
   private typingOn = false;
+  /** 조준 입력. 글자와 같은 이유로 **게임이 요구할 때만** 켠다 — 켜져 있으면 판 위에서
+   *  움직이는 마우스를 매번 좇게 되고, 조준을 안 쓰는 게임에는 아무 뜻이 없는 일이다. */
+  private readonly aiming: PointerAim;
+  private aimingOn = false;
   private readonly touch: TouchControls;
   private readonly input: CompositeInput;
   private readonly views: PeerViews;
@@ -83,6 +88,9 @@ export class GameSession {
       // 손가락이 낸 슬러그도 키보드와 **같은 문으로** 들어간다 — 게임은 출처를 모른다.
       onKey: (slug) => this.runner?.typeKey(slug),
     });
+    // 조준도 판 위에서 받는다. 손가락 조작면과 달리 **마우스도 함께** 받으므로
+    // TouchControls 안이 아니라 여기 따로 선다 — 저기는 손가락 전용 조작면의 집이다.
+    this.aiming = new PointerAim(options.mainCanvas, (nx, ny) => this.runner?.aim(nx, ny));
     this.input = new CompositeInput(this.keyboard, this.touch);
     this.views = new PeerViews({
       slots: SIDE_SLOTS,
@@ -104,6 +112,9 @@ export class GameSession {
     });
     // 안내 오버레이도 캔버스를 따라간다. 떠 있지 않을 때 맞춰 둬도 해가 없다.
     this.touch.syncHintBox();
+    // 판이 움직였으니 조준이 들고 있던 자리도 무효다. 안 알리면 창을 줄인 뒤부터
+    // 조준점이 마우스와 어긋난 채로 따라온다.
+    this.aiming.syncBox();
   }
 
   private fitRenderer(renderer: Canvas2DRenderer, canvas: HTMLCanvasElement): void {
@@ -142,6 +153,7 @@ export class GameSession {
     //    관전으로 걷힌 조작이 "다시 하기"에서 안 돌아온다.
     this.touch.setUsable(true);
     this.setTyping(typeof this.game?.typeKey === "function");
+    this.setAiming(typeof this.game?.aim === "function");
     this.runner?.start(seed, epochPerformanceMs, this.views.selfContext());
     this.refresh();
     // 카운트다운 동안 깔려 있던 조작 안내를 걷는다 — 플레이 화면은 가리지 않는다.
@@ -155,6 +167,8 @@ export class GameSession {
     // 판이 끝나면 키보드도 놓는다 — 결과 화면에서 Enter를 눌러 버튼을 누르는 길을
     // 막으면 안 되고, 죽은 뒤의 숫자 입력은 게임이 이미 무시한다.
     this.setTyping(false);
+    // 조준도 놓는다 — 관전 중에 내 마우스가 남의 판을 겨눌 일은 없다.
+    this.setAiming(false);
     this.touch.hideHint();
     // 라운드가 끝나면 조작면도 걷는다. CSS가 body.playing으로 이미 감추지만,
     // 세로 예산 클래스는 남아 다음 라운드까지 판을 괜히 작게 잡는다.
@@ -173,6 +187,15 @@ export class GameSession {
     this.typingOn = on;
     if (on) this.typing.start();
     else this.typing.stop();
+  }
+
+  /** 조준 입력을 켜고 끈다. 켤 때 판을 다시 재게 한다 — 켜지는 시점은 판이 막
+   *  내려앉은 직후라, 지난 라운드에 재 둔 자리가 남아 있으면 첫 조준이 어긋난다. */
+  private setAiming(on: boolean): void {
+    if (on === this.aimingOn) return;
+    this.aimingOn = on;
+    if (on) this.aiming.start();
+    else this.aiming.stop();
   }
 
   getScore(): number | null {

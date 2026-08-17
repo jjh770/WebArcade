@@ -21,6 +21,8 @@ import { type TouchScheme } from "./touchSchemes";
  *  조작 요소 자체가 화면에 보이므로 오버레이를 쓰지 않는다. */
 const CAPTIONS: Partial<Record<TouchScheme, string>> = {
   halves: "누르고 있는 동안 꺾입니다",
+  // 조준도 판이 곧 조작면이라 눈에 보이는 표시가 없다 — 알려주지 않으면 아무도 모른다.
+  aim: "판을 짚은 자리를 겨눕니다",
 };
 
 /** 터치 조작이 있는 게임인가 + 손가락으로 누를 수 있는 기기인가.

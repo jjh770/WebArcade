@@ -119,6 +119,14 @@ export class GameRunner {
     this.game.typeKey?.(key);
   }
 
+  /** 조준점이 움직였을 때 앱이 호출(마우스든 손가락이든). 좌표는 판 기준 0~1이고,
+   *  러너는 그게 무엇을 겨누는지 모른다 — IGame.aim에 그대로 위임한다.
+   *  ⚠️ typeKey와 같은 이유로 고정 스텝 밖에서 곧장 넘긴다. 다음 스텝까지 모아 두면
+   *  조준점이 한 tick씩 늦게 따라오는데, 그건 겨누는 사람 손에 바로 잡힌다. */
+  aim(nx: number, ny: number): void {
+    this.game.aim?.(nx, ny);
+  }
+
   /** 남의 발사에 맞았을 때 앱이 호출. 게임이 아는 효과면 로컬에 적용한다.
    *  게임이 뭔지는 모른다 — IGame.applyEffect에 그대로 위임. */
   applyEffect(kind: string, durationMs: number): void {
