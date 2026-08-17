@@ -7,6 +7,7 @@
     { "path": "./packages/games/curve" },
     { "path": "./packages/games/floor" },
     { "path": "./packages/games/baseball" },
+    { "path": "./packages/games/aim" },
     { "path": "./packages/edge" },
     { "path": "./packages/app" }
   ]
