@@ -29,7 +29,8 @@ import { DEFAULT_VOLUME, loadSfxMuted, loadVolume, saveSfxMuted, saveVolume } fr
 export type SoundId =
   | "click" | "count" | "go" | "death" | "result"
   | "pickup" | "graze" | "fire" | "hit" | "crack"
-  | "type" | "solve" | "miss" | "out";
+  | "type" | "solve" | "miss" | "out"
+  | "lock" | "slip";
 
 type Tone = {
   /** 파형. square는 각진 8비트 소리, triangle은 같은 음정이라도 덜 날카롭다. */
@@ -81,6 +82,12 @@ const SOUNDS: Record<SoundId, Tone> = {
   miss: { wave: "square", freq: [494, 494], step: 0.05, gain: 0.3 },
   // 아웃(하나도 안 맞음). 낮게 떨어지는 두 음 — 같은 실패라도 miss보다 나쁘다.
   out: { wave: "square", freq: [330, 247], step: 0.07, gain: 0.32 },
+  // 배수가 한 단계 올랐다(에임 추적). 짧게 올라가는 두 음 — 판당 몇 번씩 나므로
+  // solve보다 가볍다. 붙들고 있는 걸 눈이 아니라 귀로 알게 해 주는 소리다.
+  lock: { wave: "triangle", freq: [698, 1047], step: 0.05, gain: 0.42 },
+  // 배수가 무너졌다(에임 추적). 떨어지는 두 음. **유예를 넘겨 놓쳤을 때만** 난다 —
+  // 잠깐 놓친 것마다 울리면 소리가 판을 덮는다.
+  slip: { wave: "triangle", freq: [587, 392], step: 0.06, gain: 0.3 },
 };
 
 /** 이 이름의 소리가 표에 있는가. 게임이 낸 슬러그를 거르는 데 쓴다 —

@@ -4,6 +4,8 @@
    서 있는 약속들이다: 같은 시드면 같은 표적, 표적은 판 안에 머문다, 붙들면 배수가
    오르고 놓치면 무너진다, 그리고 **놓친 유예 동안 점수는 안 오른다.** */
 import { describe, expect, it } from "vitest";
+import type { IRenderer } from "@arcade/shared";
+import { isSoundId } from "../packages/app/src/audio";
 import { aimConfig as C } from "../packages/games/aim/src/config";
 import { legAt, legTicks, radiusAt, targetAt } from "../packages/games/aim/src/targetPath";
 import { INITIAL, comboGauge, comboOf, isHit, isOver, step } from "../packages/games/aim/src/rules";
@@ -166,5 +168,162 @@ describe("판의 끝", () => {
     game.init(1);
     game.aim(0.25, 0.75);
     expect(game.getPosition()).toEqual({ a: C.screenWidth * 0.25, b: C.screenHeight * 0.75 });
+  });
+});
+
+/* ---- 화면과 소리 --------------------------------------------------------- */
+
+/** 판 위에서 읽어 내는 것: 십자 조준점의 색과 남은 시간 막대의 길이.
+ *  색 값 자체는 게임 내부 상수라 밖에서 모른다 — **세 상태가 서로 다른 색인가**만 본다. */
+class ScreenProbe implements IRenderer {
+  readonly width = C.screenWidth;
+  readonly height = C.screenHeight;
+  /** 격자가 아닌 선의 색 = 십자 조준점. */
+  crosshair: string | null = null;
+  /** 남은 시간 막대의 폭(막대는 높이 7인 rect 둘 중 나중 것). */
+  timeBar = -1;
+  private bars = 0;
+
+  reset(): this {
+    this.crosshair = null;
+    this.timeBar = -1;
+    this.bars = 0;
+    return this;
+  }
+  clear(): void {}
+  circle(): void {}
+  text(): void {}
+  rect(_x: number, _y: number, w: number, h: number): void {
+    if (h !== 7) return;
+    this.bars++;
+    if (this.bars === 2) this.timeBar = w; // 첫째는 바탕, 둘째가 남은 시간
+  }
+  line(_x1: number, _y1: number, _x2: number, _y2: number, color: string, width?: number): void {
+    if (width === 2) this.crosshair = color; // 격자는 굵기 1이다
+  }
+}
+
+/** 표적을 정확히 겨눈 채 ticks만큼 굴린다. 놓치게 하려면 hold=false. */
+function play(game: AimGame, seed: number, from: number, ticks: number, hold: boolean): number {
+  let tick = from;
+  for (let i = 0; i < ticks; i++, tick++) {
+    const t = targetAt(seed, tick);
+    // 놓칠 때는 판 반대쪽 구석 — 표적이 어디 있든 확실히 밖이다.
+    if (hold) game.aim(t.x / C.screenWidth, t.y / C.screenHeight);
+    else game.aim(t.x > C.screenWidth / 2 ? 0 : 1, t.y > C.screenHeight / 2 ? 0 : 1);
+    game.update(tick);
+  }
+  return tick;
+}
+
+describe("소리", () => {
+  it("배수가 오르는 순간에만 lock이 난다 — 매 tick 나지 않는다", () => {
+    const game = new AimGame();
+    game.init(3);
+    let locks = 0;
+    let tick = 0;
+    for (let i = 0; i < C.comboStepTicks * 3 + 10; i++, tick++) {
+      const t = targetAt(3, tick);
+      game.aim(t.x / C.screenWidth, t.y / C.screenHeight);
+      game.update(tick);
+      if ((game.consumeSounds() ?? []).includes("lock")) locks++;
+    }
+    // 1배에서 시작해 상한까지 = 오르는 순간은 maxCombo - 1번뿐이다.
+    expect(locks).toBe(C.maxCombo - 1);
+  });
+
+  it("유예 안에서 잠깐 놓친 것에는 소리가 없고, 넘겨야 slip이 난다", () => {
+    const game = new AimGame();
+    game.init(3);
+    let tick = play(game, 3, 0, C.comboStepTicks + 5, true); // 배수 2까지 올린다
+    game.consumeSounds();
+
+    tick = play(game, 3, tick, C.comboGraceTicks, false); // 유예 안까지만 놓친다
+    expect(game.consumeSounds()).toBeNull();
+
+    play(game, 3, tick, 1, false); // 한 tick 더 — 유예를 넘긴다
+    expect(game.consumeSounds()).toEqual(["slip"]);
+  });
+
+  it("소리를 가져가든 안 가져가든 점수가 같다 — 소리는 판을 바꾸지 않는다", () => {
+    const score = (drain: boolean) => {
+      const game = new AimGame();
+      game.init(808);
+      for (let tick = 0; tick <= 900; tick++) {
+        const t = targetAt(808, tick);
+        // 절반은 겨누고 절반은 놓친다 — 배수가 올랐다 무너지길 반복하게.
+        if (tick % 200 < 150) game.aim(t.x / C.screenWidth, t.y / C.screenHeight);
+        else game.aim(0, 0);
+        game.update(tick);
+        if (drain) game.consumeSounds();
+      }
+      return game.getScore();
+    };
+    expect(score(true)).toBe(score(false));
+  });
+
+  it("끝난 판에서는 소리가 안 난다", () => {
+    const game = new AimGame();
+    game.init(3);
+    play(game, 3, 0, C.timeLimitTicks + 1, true);
+    game.consumeSounds();
+    play(game, 3, C.timeLimitTicks + 1, 120, true);
+    expect(game.consumeSounds()).toBeNull();
+  });
+
+  it("게임이 내는 슬러그는 앱의 소리 표에 있다 — 이름이 어긋나면 조용히 안 난다", () => {
+    for (const slug of ["lock", "slip"]) expect(isSoundId(slug)).toBe(true);
+  });
+});
+
+describe("화면이 말하는 것", () => {
+  it("붙듦 · 유예 · 놓침이 서로 다른 색으로 나온다", () => {
+    const game = new AimGame();
+    const probe = new ScreenProbe();
+    game.init(3);
+
+    let tick = play(game, 3, 0, C.comboStepTicks + 5, true);
+    game.render(probe.reset());
+    const holding = probe.crosshair;
+
+    tick = play(game, 3, tick, 2, false); // 방금 놓쳤다 — 배수는 아직 살아 있다
+    game.render(probe.reset());
+    const grace = probe.crosshair;
+
+    play(game, 3, tick, C.comboGraceTicks + 2, false); // 유예를 넘겼다
+    game.render(probe.reset());
+    const lost = probe.crosshair;
+
+    expect(holding).toBeTruthy();
+    expect(new Set([holding, grace, lost]).size).toBe(3);
+  });
+
+  it("남은 시간 막대가 줄어든다 — HUD 게이지는 시간이 아니라 집중을 보여 주므로", () => {
+    const game = new AimGame();
+    const probe = new ScreenProbe();
+    game.init(3);
+
+    game.render(probe.reset());
+    const atStart = probe.timeBar;
+
+    play(game, 3, 0, C.timeLimitTicks / 2, true);
+    game.render(probe.reset());
+    const half = probe.timeBar;
+
+    expect(atStart).toBeCloseTo(C.screenWidth, 6);
+    expect(half).toBeCloseTo(C.screenWidth / 2, 0);
+  });
+
+  it("관전 화면도 같은 표적을 그리고 남의 조준점을 얹는다", () => {
+    const game = new AimGame();
+    const probe = new ScreenProbe();
+    game.init(3);
+    play(game, 3, 0, 100, true);
+
+    const spot = targetAt(3, 100);
+    game.renderSpectator(probe.reset(), { id: "x", a: spot.x, b: spot.y, label: "남" });
+    const onTarget = probe.crosshair;
+    game.renderSpectator(probe.reset(), { id: "x", a: 0, b: 0, label: "남" });
+    expect(onTarget).not.toBe(probe.crosshair); // 남이 맞았는지 아닌지가 보인다
   });
 });
