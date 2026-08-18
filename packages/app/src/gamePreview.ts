@@ -56,9 +56,11 @@ const MAX_STEPS = 3;
 
 /** 배경으로는 안 쓰는 게임. 목록의 썸네일에서는 그대로 나온다 — 거기서는 **고르려는
  *  게임**을 보여줘야 하므로 뺄 수 없다.
- *  숫자 야구를 뺀 이유: 조작이 숫자 입력이라 자동 조작(방향)이 아무것도 못 한다.
- *  그래서 배경에 깔리면 거의 멈춘 그림이 된다 — 흐르는 배경으로는 볼 게 없다.
- *  ⚠️ 게임을 추가할 때 판단할 것: 방향 조작으로 화면이 움직이는 게임인가. */
+ *  숫자 야구를 뺀 이유: 조작이 숫자 입력이라 자동 조작이 아무것도 못 한다. 그래서
+ *  배경에 깔리면 거의 멈춘 그림이 된다 — 흐르는 배경으로는 볼 게 없다.
+ *  ⚠️ 게임을 추가할 때 판단할 것: **자동 조작으로 화면이 움직이는가.** 방향만 묻지 않는다 —
+ *     조준(wanderAim)과 발사(wanderFire)도 흘려 넣으므로, 에임 추적·에임 사격은 배경에서도
+ *     제대로 논다. 여기 넣을 것은 그 셋 중 어느 것도 안 먹는 게임뿐이다. */
 const NOT_BACKGROUND: ReadonlySet<string> = new Set(["baseball"]);
 
 /** 배경에 쓸 게임은 **들어올 때마다 새로 뽑는다.** 늘 같은 게임이면 두 번째 방문부터는
@@ -102,16 +104,36 @@ function wanderInput(view: View): InputState {
   };
 }
 
-/** 조준을 받는 게임(에임 추적·에임 사격)에 흘려 넣는 흉내. 방향 넷과 마찬가지로 **게임을 아는
- *  코드가 아니다** — 같은 두 사인파를 0~1 좌표로 옮겨 판 위를 훑을 뿐이고, 조준을 안
- *  받는 게임은 이 메서드가 없어 저절로 아무 일도 안 일어난다.
- *  ⚠️ 표적을 맞히려 들지 않는다. 미리보기가 어디를 겨눠야 하는지 알려면 그 게임의 규칙을
- *     알아야 하는데, 여기는 그걸 몰라야 하는 자리다. 움직이는 조준점만으로 충분하다. */
-function wanderAim(view: View): void {
-  if (!view.game.aim) return;
-  const x = Math.sin(view.tick / WANDER_X_PERIOD + view.phase);
-  const y = Math.cos(view.tick / WANDER_Y_PERIOD + view.phase * 1.7);
-  view.game.aim((x + 1) / 2, (y + 1) / 2);
+/** 조준을 받는 게임(에임 추적·에임 사격)에 흘려 넣는 흉내. 겨눈 자리를 돌려준다(없으면 null).
+ *  ⚠️ **어디를 겨눌지는 게임이 말한다**(`demoAim`). 처음에는 방향 넷처럼 사인파로 훑게 뒀는데,
+ *     조준 게임에서는 그게 안 통했다 — 방향은 아무렇게나 움직여도 "누가 하고 있네"로 보이지만
+ *     조준은 빗나가는 게 그대로 보여서, 배경이 **40발을 쏘고 한 발도 못 맞히는** 화면이 됐다.
+ *     그렇다고 미리보기가 규칙을 알 수는 없으니 물어보는 쪽으로 뒤집었다.
+ *  ⚠️ 그래도 **완벽하게 겨누지는 않는다.** 사인파로 몇 px 흔들어 사람 손처럼 보이게 한다 —
+ *     칼같이 붙어 다니면 사람이 아니라 자동조준으로 보인다. */
+function wanderAim(view: View): { nx: number; ny: number } | null {
+  if (!view.game.aim) return null;
+  const spot = view.game.demoAim?.();
+  if (!spot) return null;
+  const sway = DEMO_SWAY / LOGICAL_WIDTH;
+  const nx = spot.nx + Math.sin(view.tick / WANDER_X_PERIOD + view.phase) * sway;
+  const ny = spot.ny + Math.cos(view.tick / WANDER_Y_PERIOD + view.phase * 1.7) * sway;
+  view.game.aim(nx, ny);
+  return { nx, ny };
+}
+
+/** 미리보기가 방아쇠를 당기는 주기(tick). 표적을 겨누고 있으므로 대개 맞지만, 촘촘하면
+ *  쉴 틈 없이 쏘는 화면이 되고 뜸하면 총 쏘는 게임인 줄 모른다. */
+const FIRE_PERIOD = 23;
+/** 겨눈 자리에서 손이 떠는 폭(논리 px). 0이면 자동조준처럼 보인다. */
+const DEMO_SWAY = 14;
+
+/** 발사를 받는 게임(에임 사격)에 흘려 넣는 흉내. **겨누고 있는 자리를** 정해진 박자로 쏜다.
+ *  ⚠️ 이게 있어야 판이 산다. 없으면 표적이 떴다 지기만 하고 아무도 안 쏘는 화면이 되는데,
+ *     하필 **총 쏘는 게임**이라 그건 고장 난 것처럼 보인다. */
+function wanderFire(view: View, at: { nx: number; ny: number } | null): void {
+  if (!view.game.fire || !at || view.tick % FIRE_PERIOD !== 0) return;
+  view.game.fire(at.nx, at.ny);
 }
 
 const thumbs: View[] = [];
@@ -219,7 +241,8 @@ function loop(now: number): void {
 /** 한 스텝. 죽었으면 그 자리에서 새 시드로 되살린다 — 사망 화면을 보여주지 않으려는
  *  것이다. 작은 그림에서는 "사망" 글자가 읽히지도 않고, 장식은 움직임만 보여주면 된다. */
 function step(view: View): void {
-  wanderAim(view);
+  // 조준을 옮긴 **뒤**에 쏜다 — 판에서도 그 순서다(PointerInput).
+  wanderFire(view, wanderAim(view));
   view.game.update(view.tick++, wanderInput(view));
   if (!view.game.isPlayerDead()) return;
   view.seed = (view.seed * 1664525 + 1013904223) >>> 0;

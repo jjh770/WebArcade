@@ -302,6 +302,32 @@ describe("반동 — 연출이 아니라 규칙이다", () => {
     }
   });
 
+  it("미리보기가 겨누라는 자리를 쏘면 맞는다 — 시야가 튀어 있어도", () => {
+    // ⚠️ `demoAim`은 **화면 좌표**를 돌려줘야 한다. 판 좌표를 그대로 주면 시야가 튄 동안
+    //    미리보기가 헛방만 쏘고, 배경이 탄흔으로 뒤덮인다(그렇게 만들었다가 고쳤다).
+    const t = targetAt(9, 0);
+    const game = at(9, t.bornTick);
+    game.fire(0.05, 0.05); // 구석을 쏴서 시야를 튀게 해 둔다
+    game.fire(0.05, 0.05);
+    const base = game.getScore();
+
+    const spot = game.demoAim()!;
+    expect(spot).toBeTruthy();
+    // 판 좌표와 다르다 = 시야 오프셋이 실제로 반영됐다.
+    expect(Math.abs(spot.nx * C.screenWidth - t.x) + Math.abs(spot.ny * C.screenHeight - t.y))
+      .toBeGreaterThan(1);
+
+    game.fire(spot.nx, spot.ny);
+    expect(game.getScore()).toBeGreaterThan(base);
+  });
+
+  it("겨눌 표적이 없으면 미리보기에 null을 준다", () => {
+    const game = at(9, 0);
+    const t = targetAt(9, 0);
+    game.fire(t.x / C.screenWidth, t.y / C.screenHeight); // 하나뿐인 표적을 맞혀 없앤다
+    expect(game.demoAim()).toBeNull();
+  });
+
   it("궤적이 고정이다 — 외워서 끌어내릴 수 있다", () => {
     // 같은 순서로 쏘면 언제나 같은 자리로 밀린다. 난수가 섞이면 이게 깨진다.
     const run = () => {

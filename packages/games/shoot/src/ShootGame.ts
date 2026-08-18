@@ -351,6 +351,22 @@ export class ShootGame implements IGame {
     if (kick > 1) r.circle(x, y, 2, AIM);
   }
 
+  /** 미리보기가 겨눌 자리 = 지금 떠 있는 표적 중 **가장 먼저 사라질 것**. 없으면 null
+   *  (표적 사이의 빈 순간에는 겨눌 것이 없다).
+   *  ⚠️ **화면 좌표로 돌려준다.** 시야가 튀어 있으면 판 좌표와 다르고, 받는 쪽(aim·fire)이
+   *     화면 좌표를 받으므로 여기서 맞춰 주는 게 맞다. */
+  demoAim(): { nx: number; ny: number } | null {
+    let soonest: Target | null = null;
+    for (const target of this.standing()) {
+      if (!soonest || target.bornTick + target.life < soonest.bornTick + soonest.life) soonest = target;
+    }
+    if (!soonest) return null;
+    return {
+      nx: this.toScreenX(soonest.x) / C.screenWidth,
+      ny: this.toScreenY(soonest.y) / C.screenHeight,
+    };
+  }
+
   isPlayerDead(): boolean {
     return isOver(this.worldTick);
   }

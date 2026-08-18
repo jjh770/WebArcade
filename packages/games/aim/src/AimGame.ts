@@ -182,6 +182,12 @@ export class AimGame implements IGame {
     if (combo > 1) r.text(`×${combo}`, x + arm + 6, y + 6, color, 20);
   }
 
+  /** 미리보기가 겨눌 자리 = 지금 표적. 이 게임엔 표적이 늘 하나 있으므로 null이 없다. */
+  demoAim(): { nx: number; ny: number } {
+    const spot = targetAt(this.seed, this.worldTick);
+    return { nx: spot.x / C.screenWidth, ny: spot.y / C.screenHeight };
+  }
+
   isPlayerDead(): boolean {
     return isOver(this.worldTick);
   }

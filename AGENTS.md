@@ -57,6 +57,10 @@
 ## 3. 아키텍처 준수 사항
 
 - 새 게임: `games/<name>/`에 `IGame` 구현 + `config.ts`. `GameRegistry`에 등록. 그 외 파일 건드리지 않기.
+  기존 조작·기존 기록 방식을 쓰면 정말 그 둘뿐이다. 새 입력이나 새 기록 단위가 필요하면
+  그 새로움만큼 바깥이 열린다(예: 숫자 야구는 `typeKey`, 에임 사격은 `fire`).
+  ⚠️ 기록 단위 표는 세 곳에 흩어져 있고 어긋나면 `tests/GameTables.test.ts`가 깨진다 —
+  게임 config의 `scoreUnit` · `scripts/scoreUnits.mjs` · `packages/edge/src/timedGames.ts`.
 - 렌더러 교체 가능성 유지: 게임은 `IRenderer`에만 의존하고 Canvas 2D API를 직접 호출하지 않는다.
 - 오브젝트 풀: 대량 생성/소멸 객체(화살 등)는 `new`를 매 프레임 호출하지 않고 풀에서 재사용.
   풀의 acquire/release 순서도 tick 기반이어야 결정론이 유지됨.
