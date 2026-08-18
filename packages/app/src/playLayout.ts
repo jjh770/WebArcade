@@ -34,6 +34,9 @@ export function layoutPlayArea(aspect: number): void {
   const narrow = window.innerWidth < NARROW_VIEWPORT;
   const play = byId("play");
   play.classList.toggle("narrow", narrow);
+  // 관전창이 하나도 없으면(혼자 플레이 등) 칼럼이 아예 안 그려지므로 폭도 안 뺀다.
+  // 그래야 판이 남는 공간을 전부 쓰고 **가운데**에 선다.
+  const hasSides = play.classList.contains("has-sides");
 
   // (창 크기가 바뀔 때만 재는 것이라 매 프레임 측정이 아니다.)
   const style = getComputedStyle(play);
@@ -42,14 +45,14 @@ export function layoutPlayArea(aspect: number): void {
   const gap = parseFloat(style.columnGap) || 0;
 
   // 접히면 칼럼이 display:none → flex gap도 사라지므로 계산에서 함께 뺀다.
-  const sideWidth = narrow
+  const sideWidth = narrow || !hasSides
     ? 0
     : clamp(window.innerWidth * SIDE_WIDTH_RATIO, SIDE_WIDTH_MIN, SIDE_WIDTH_MAX);
   const sideViews = byId("side-views");
   sideViews.style.setProperty("--side-w", `${Math.floor(sideWidth)}px`);
   sideViews.style.setProperty("--side-h", `${Math.floor(sideWidth / aspect)}px`);
 
-  const availableWidth = window.innerWidth - padX - sideWidth - (narrow ? 0 : gap);
+  const availableWidth = window.innerWidth - padX - sideWidth - (sideWidth > 0 ? gap : 0);
   const availableHeight = window.innerHeight - padY;
   let width = Math.max(1, availableWidth);
   let height = width / aspect;

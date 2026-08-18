@@ -180,6 +180,12 @@
             <h2>방 코드</h2>
             <div id="ready-code">----</div>
             <ul class="players" id="ready-players"></ul>
+            <!-- 곁창(실시간 관전) 켜고 끄기. **각자의 설정이라 방장이 정하지 않는다** —
+                 끄면 남의 화면이 안 뜨는 대신 그 자리가 판으로 간다. 죽은 뒤 남의 화면으로
+                 넘어가는 것은 이 설정과 무관하다(그건 곁창이 아니라 내 판 자리다). -->
+            <button id="sideviews-toggle" class="secondary" style="width:100%"
+                    aria-pressed="true">실시간 관전 : 켬</button>
+            <p class="how" id="sideviews-hint">남들 화면이 오른쪽에 뜹니다.</p>
             <div class="stack">
               <button id="start-btn" style="width:100%">시작</button>
               <button id="leave-btn" class="secondary" style="width:100%">나가기</button>

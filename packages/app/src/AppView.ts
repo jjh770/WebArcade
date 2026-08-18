@@ -299,9 +299,17 @@ export function setCountdown(number: number): void {
   );
 }
 
-export function setSideSlot(index: number, visible: boolean, label: string): void {
+export function setSideSlot(index: number, visible: boolean, label: string): boolean {
   byId(`slot-${index}`).classList.toggle("on", visible);
   if (visible) byId(`label-${index}`).textContent = label;
+  // 관전창이 **하나라도** 떠 있는가. 없으면 칼럼째 걷어 판이 가운데로 오고 커진다 —
+  // 혼자 플레이에서는 이 값이 끝까지 false다.
+  // ⚠️ 판 크기는 여기서 안 건드린다(레이아웃은 main 몫). 바뀌었다는 사실만 돌려준다.
+  const play = byId("play");
+  const any = document.querySelectorAll(".side-slot.on").length > 0;
+  const had = play.classList.contains("has-sides");
+  play.classList.toggle("has-sides", any);
+  return had !== any;
 }
 
 function badge(text: string, className: string): HTMLElement {

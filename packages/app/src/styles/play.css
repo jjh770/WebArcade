@@ -297,8 +297,12 @@ body.playing #keypad:not([hidden]) { display: grid; }
    --side-w/--side-h는 AppView.layoutPlayArea가 뷰포트에 비례해 넣는다(아래는 폴백값).
    좁은 화면(.narrow)에선 칼럼째 사라져 메인이 공간을 전부 가져간다. */
 /* align-self로 메인(세로 중앙)과 따로 논다 — 관전창은 위에서부터 아래로 채운다. */
-#side-views { display: flex; flex-direction: column; align-self: flex-start;
+/* ⚠️ **기본은 없는 것이다.** 관전창이 하나라도 떠야 칼럼이 생긴다(`has-sides`).
+   전에는 늘 자리를 차지해서, 혼자 플레이할 때도 빈 칼럼이 200px을 먹고 판이 그만큼
+   작아진 채 왼쪽으로 밀려 있었다 — 관전이 없는 판에서 관전 자리를 비워 두던 셈이다. */
+#side-views { display: none; flex-direction: column; align-self: flex-start;
   --side-w: 200px; --side-h: 150px; }
+#play.has-sides #side-views { display: flex; }
 #play.narrow #side-views { display: none; }
 .side-slot { position: relative; height: 0; opacity: 0; margin-bottom: 0; overflow: hidden;
   transition: height .32s var(--ease-out), opacity .25s ease, margin-bottom .32s ease; }

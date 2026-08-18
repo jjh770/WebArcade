@@ -13,6 +13,7 @@ const NICK_KEY = "arcade:nickname";
 const OLD_MUTE_KEY = "arcade:muted";
 const SFX_KEY = "arcade:muted:sfx";
 const MUSIC_KEY = "arcade:muted:music";
+const SIDE_VIEWS_KEY = "arcade:sideviews";
 
 /** 마지막에 쓴 닉네임. 없거나 읽기 실패면 빈 문자열. */
 export function loadNickname(): string {
@@ -67,6 +68,27 @@ export function loadMusicMuted(): boolean {
 
 export function saveMusicMuted(muted: boolean): void {
   saveFlag(MUSIC_KEY, muted);
+}
+
+/** 판이 도는 동안 남의 화면을 곁창으로 볼 것인가. **기본은 켜짐**이다 —
+ *  저장된 값이 없을 때 꺼 두면 처음 온 사람은 관전이라는 게 있는 줄도 모른다.
+ *  ⚠️ 이건 **각자의 설정**이지 방의 규칙이 아니다(2026-08-18 사용자 결정). 끄면 곁창이
+ *     차지하던 자리가 판으로 가서 판이 커진다 — 그 이득을 알고 고른 선택이다.
+ *  ⚠️ 죽은 뒤 남의 화면으로 넘어가는 것은 이 설정과 **무관하다.** 저건 곁창이 아니라
+ *     내 판 자리에서 일어나는 일이고, 끄든 켜든 그대로 넘어간다. */
+export function loadSideViews(): boolean {
+  // ⚠️ loadFlag를 안 쓴다. 저건 값이 없으면 **옛 음소거 열쇠**를 대신 읽고(승계) 기본이
+  //    꺼짐인데, 여기서는 둘 다 틀리다 — 소리와 아무 상관이 없고 기본은 켜짐이다.
+  try {
+    const saved = localStorage.getItem(SIDE_VIEWS_KEY);
+    return saved === null ? true : saved === "1";
+  } catch {
+    return true;
+  }
+}
+
+export function saveSideViews(on: boolean): void {
+  saveFlag(SIDE_VIEWS_KEY, on);
 }
 
 /* ---- 음량 ----------------------------------------------------------------

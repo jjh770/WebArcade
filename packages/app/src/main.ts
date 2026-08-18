@@ -56,7 +56,7 @@ import { updateHud } from "./hud";
 import { startPeerReport } from "./peerReport";
 import { bindNav, syncHash } from "./navigation";
 import { createServerRouter } from "./serverRoutes";
-import { loadNickname, saveNickname } from "./prefs";
+import { loadNickname, loadSideViews, saveNickname, saveSideViews } from "./prefs";
 import { createRankingScreen } from "./rankingScreen";
 import { createSoloPlay } from "./soloPlay";
 
@@ -98,7 +98,10 @@ const session = new GameSession({
   logicalWidth: LOGICAL_WIDTH,
   logicalHeight: LOGICAL_HEIGHT,
   onLocalDeath,
-  onSideSlot: setSideSlot,
+  // 관전창이 생기거나 마지막 하나가 사라지면 **판이 쓸 가로가 달라진다** — 다시 잰다.
+  onSideSlot: (index, visible, label) => {
+    if (setSideSlot(index, visible, label)) relayout();
+  },
   onHud: showHud,
   // 조작 영역이 생기거나 사라지면 판이 쓸 세로가 달라진다 — 판 크기를 다시 잡는다.
   onControlsChange: () => relayout(),
@@ -370,6 +373,31 @@ byId("lobby-back").addEventListener("click", () => transition("back_games"));
 byId("start-btn").addEventListener("click", () => {
   if (ensureNetwork()) net.send({ type: "start_game" });
 });
+/* ---- 실시간 관전(곁창) 켜고 끄기 --------------------------------------------
+   **각자의 설정이다.** 방장이 정하지 않고 서버도 모른다 — 곁창은 내 화면의 일이라,
+   누가 켜고 누가 껐든 판정에 아무 영향이 없다.
+   ⚠️ 끄면 곁창이 차지하던 폭이 판으로 간다(판이 커진다). 그 이득을 알고 고른 설정이다.
+   ⚠️ **죽은 뒤 남의 화면으로 넘어가는 것은 이 설정과 무관하다.** 저건 곁창이 아니라
+      내 판 자리에서 일어나는 일이라 끄든 켜든 그대로 넘어간다. */
+let sideViewsOn = loadSideViews();
+
+function renderSideViewsToggle(): void {
+  const button = byId("sideviews-toggle");
+  button.textContent = `실시간 관전 : ${sideViewsOn ? "켬" : "끔"}`;
+  button.setAttribute("aria-pressed", String(sideViewsOn));
+  byId("sideviews-hint").textContent = sideViewsOn
+    ? "남들 화면이 오른쪽에 뜹니다."
+    : "곁창이 없는 대신 판이 커집니다. 죽으면 남의 화면으로 넘어가는 건 그대로입니다.";
+  session.setSideViews(sideViewsOn);
+}
+
+byId("sideviews-toggle").addEventListener("click", () => {
+  sideViewsOn = !sideViewsOn;
+  saveSideViews(sideViewsOn);
+  renderSideViewsToggle();
+});
+renderSideViewsToggle();
+
 byId("leave-btn").addEventListener("click", leaveRoom);
 byId("result-leave-btn").addEventListener("click", leaveRoom);
 

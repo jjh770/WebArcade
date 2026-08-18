@@ -35,6 +35,8 @@ export type PeerViewsOptions = {
 
 export class PeerViews {
   private readonly peers = new Map<string, Peer>();
+  /** 곁창(우측 관전창)을 띄울 것인가. 각자의 설정이라 방과 무관하다(prefs.loadSideViews). */
+  private sideViewsOn = true;
   private roster: readonly PlayerPublic[] = [];
   private myId: string | null = null;
   private spectateId: string | null = null;
@@ -157,6 +159,14 @@ export class PeerViews {
     }
     const views: GameView[] = [{ renderer: main, target: mainTarget }];
 
+    // 곁창을 껐으면 여기서 끝이다. 슬롯을 전부 내려 보고해야 판이 그 폭까지 가져간다
+    // (칼럼이 사라지는 조건은 "켜진 슬롯이 하나도 없다" — AppView.setSideSlot).
+    if (!this.sideViewsOn) {
+      this.sideShown = [];
+      for (let index = 0; index < this.options.slots; index++) this.options.onSideSlot(index, false, "");
+      return views;
+    }
+
     const excluded = this.viewMode === "spectating" ? this.spectateId : null;
     const aliveOthers = [...this.peers.entries()]
       .filter(([id, peer]) => peer.alive && id !== excluded)
@@ -179,6 +189,12 @@ export class PeerViews {
       this.options.onSideSlot(index, id !== undefined, id ? this.peers.get(id)?.nickname ?? "" : "");
     }
     return views;
+  }
+
+  /** 곁창을 켜고 끈다. **끄면 곁창만 사라지고 판정·관전 순환은 그대로다** —
+   *  죽은 뒤 남의 화면으로 넘어가는 것은 내 판 자리에서 일어나는 일이라 영향이 없다. */
+  setSideViews(on: boolean): void {
+    this.sideViewsOn = on;
   }
 
   /** 순환 순서 = 로스터(입장) 순으로 고정된 살아있는 남들. 순서가 고정돼야 ←/→가 예측 가능하다. */
