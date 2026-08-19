@@ -156,6 +156,20 @@
           <div class="card">
             <h1 id="lobby-title">로비</h1>
             <h2 id="lobby-hello"></h2>
+            <!-- 마우스 감도. **각자의 설정이라 방장이 정하지 않는다**(곁창과 같다).
+                 시선 돌리기를 쓰는 게임에서, 마우스가 달린 기기에서만 뜬다 — 손가락은
+                 짚은 자리가 곧 조준점이라 감도라는 게 없다.
+                 ⚠️ 대기실이 아니라 여기 둔 이유: 혼자 플레이에는 대기실이 없다. 로비는
+                    혼자든 여럿이든 판 앞에서 반드시 지나는 유일한 화면이다. -->
+            <div class="opt-row" id="lobby-sens" hidden>
+              <div class="opt-text">
+                <b>마우스 감도</b>
+                <span>조준점은 화면 한가운데에 고정입니다. 낮추면 손이 더 움직이는 대신 조준이 곱게 잡힙니다.</span>
+              </div>
+              <input type="range" id="lobby-sens-range" min="50" max="250" step="10" value="100"
+                     aria-label="마우스 감도">
+              <output id="lobby-sens-out" class="opt-val">1.0×</output>
+            </div>
             <!-- 두 갈래. 연습은 서버 없이도 되고, 방 만들기는 서버가 필요하다.
                  (「빠른 대전 찾기」를 비활성 버튼으로 걸어 뒀었는데 걷었다 — 없는 기능을
                  자리까지 차지하며 광고하는 꼴이었다. 매치메이킹이 생기면 그때 다시 넣는다.) -->

@@ -14,6 +14,7 @@ const OLD_MUTE_KEY = "arcade:muted";
 const SFX_KEY = "arcade:muted:sfx";
 const MUSIC_KEY = "arcade:muted:music";
 const SIDE_VIEWS_KEY = "arcade:sideviews";
+const LOOK_SPEED_KEY = "arcade:lookspeed";
 
 /** 마지막에 쓴 닉네임. 없거나 읽기 실패면 빈 문자열. */
 export function loadNickname(): string {
@@ -89,6 +90,46 @@ export function loadSideViews(): boolean {
 
 export function saveSideViews(on: boolean): void {
   saveFlag(SIDE_VIEWS_KEY, on);
+}
+
+/* ---- 마우스 감도 ----------------------------------------------------------
+   시선을 돌리는 게임(에임 사격)에서 마우스가 판을 훑는 빠르기. 1이면 마우스가 판 폭만큼
+   움직일 때 시선도 판을 한 번 훑는다.
+
+   ⚠️ **각자의 설정이지 방의 규칙이 아니다**(곁창과 같다). 조준은 내 화면의 일이고 공통
+      월드는 시드가 정한 대로 흐르므로, 누가 얼마로 두든 판정에 아무 영향이 없다.
+   ⚠️ 손가락에는 뜻이 없다 — 폰은 절대 조준이라 「짚은 자리가 곧 조준점」이다. */
+
+/** 손대지 않았을 때의 감도. 지금까지 모두가 쓰던 값이 여기다. */
+export const DEFAULT_LOOK_SPEED = 1;
+/** 고를 수 있는 범위. 아래로는 판 한 번 훑는 데 마우스를 두 번 밀어야 하고, 위로는
+ *  손목을 살짝 튕겨도 판 끝까지 간다 — 그 밖은 쓸 수 있는 설정이 아니다. */
+export const LOOK_SPEED_MIN = 0.5;
+export const LOOK_SPEED_MAX = 2.5;
+
+/** 저장해 둔 감도. 없거나 깨졌거나 범위 밖이면 기본값 — 손으로 고친 localStorage에
+ *  50이 적혀 있어도 마우스를 조금 움직였다고 판이 통째로 날아가면 안 된다. */
+export function loadLookSpeed(): number {
+  try {
+    const raw = localStorage.getItem(LOOK_SPEED_KEY);
+    if (raw === null) return DEFAULT_LOOK_SPEED;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return DEFAULT_LOOK_SPEED;
+    return Math.min(LOOK_SPEED_MAX, Math.max(LOOK_SPEED_MIN, value));
+  } catch {
+    return DEFAULT_LOOK_SPEED;
+  }
+}
+
+export function saveLookSpeed(value: number): void {
+  try {
+    localStorage.setItem(
+      LOOK_SPEED_KEY,
+      String(Math.min(LOOK_SPEED_MAX, Math.max(LOOK_SPEED_MIN, value))),
+    );
+  } catch {
+    /* 저장 실패해도 이번 세션엔 영향 없다. */
+  }
 }
 
 /* ---- 음량 ----------------------------------------------------------------

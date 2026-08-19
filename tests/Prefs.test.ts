@@ -7,12 +7,17 @@
    여기서 못 박는 것은 그 승계다. 새 열쇠가 없으면 옛 열쇠를 본다. */
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  DEFAULT_LOOK_SPEED,
   DEFAULT_VOLUME,
+  LOOK_SPEED_MAX,
+  LOOK_SPEED_MIN,
+  loadLookSpeed,
   loadMusicMuted,
   loadSfxMuted,
   loadVolume,
   saveMusicMuted,
   saveSfxMuted,
+  saveLookSpeed,
   saveVolume,
 } from "../packages/app/src/prefs";
 
@@ -106,5 +111,30 @@ describe("옛 설정 승계", () => {
     saveMusicMuted(false); // 음악만 다시 켰다
     expect(loadMusicMuted()).toBe(false);
     expect(loadSfxMuted()).toBe(true); // 효과음은 아직 옛 값을 따른다
+  });
+});
+
+describe("마우스 감도 저장", () => {
+  beforeEach(() => useStorage());
+
+  it("손대지 않았으면 기본값 — 지금까지 모두가 쓰던 감도다", () => {
+    expect(loadLookSpeed()).toBe(DEFAULT_LOOK_SPEED);
+  });
+
+  it("정한 값을 그대로 기억한다", () => {
+    saveLookSpeed(1.6);
+    expect(loadLookSpeed()).toBe(1.6);
+  });
+
+  it("범위 밖은 잘라 낸다 — 손으로 고친 값에 판이 통째로 날아가면 안 된다", () => {
+    saveLookSpeed(50);
+    expect(loadLookSpeed()).toBe(LOOK_SPEED_MAX);
+    saveLookSpeed(0);
+    expect(loadLookSpeed()).toBe(LOOK_SPEED_MIN);
+  });
+
+  it("깨진 값은 기본값으로 돌린다", () => {
+    useStorage({ "arcade:lookspeed": "빠르게" });
+    expect(loadLookSpeed()).toBe(DEFAULT_LOOK_SPEED);
   });
 });
