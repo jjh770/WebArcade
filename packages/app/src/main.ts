@@ -56,7 +56,14 @@ import { updateHud } from "./hud";
 import { startPeerReport } from "./peerReport";
 import { bindNav, syncHash } from "./navigation";
 import { createServerRouter } from "./serverRoutes";
-import { loadNickname, loadSideViews, saveNickname, saveSideViews } from "./prefs";
+import {
+  loadLookSpeed,
+  loadNickname,
+  loadSideViews,
+  saveLookSpeed,
+  saveNickname,
+  saveSideViews,
+} from "./prefs";
 import { createRankingScreen } from "./rankingScreen";
 import { createSoloPlay } from "./soloPlay";
 
@@ -179,7 +186,12 @@ const ranking = createRankingScreen({
 });
 
 function startSolo(): void {
-  if (selectedGameId) void solo.start(selectedGameId);
+  if (!selectedGameId) return;
+  // ⚠️ **여기가 포인터를 잠글 수 있는 유일한 자리다.** 잠금은 사용자 동작 안에서만
+  //    허락되는데, 판이 실제로 시작되는 시점은 카운트다운 타이머라 동작이 아니다.
+  //    이 클릭에서 미리 잠가 두면 판이 시작될 때 이미 겨눌 수 있다(추가 클릭 없음).
+  session.prepareLook(selectedGameId);
+  void solo.start(selectedGameId);
 }
 
 function ensureNetwork(): boolean {
@@ -343,6 +355,8 @@ byId("gamelist-back").addEventListener("click", () => transition("back_main"));
 function selectGame(id: GameId): void {
   selectedGameId = id;
   renderLobby(id);
+  // 감도는 시선을 돌리는 게임에서만, 그리고 마우스가 달린 기기에서만 뜻이 있다.
+  byId("lobby-sens").hidden = !session.usesLook(id) || !hasMouse();
   transition("select_game");
   solo.prefetch(id); // 여기서 다음 행동은 대개 "혼자 플레이"다 — 티켓을 미리 받아 둔다.
 }
@@ -371,7 +385,11 @@ byId("join-btn").addEventListener("click", () => {
 });
 byId("lobby-back").addEventListener("click", () => transition("back_games"));
 byId("start-btn").addEventListener("click", () => {
-  if (ensureNetwork()) net.send({ type: "start_game" });
+  if (!ensureNetwork()) return;
+  // 방장의 클릭도 사용자 동작이다 — 여기서 미리 잠근다(위 startSolo 주석 참조).
+  // ⚠️ 다른 참가자에게는 이런 클릭이 없다. 그 사람들은 판 위 첫 클릭으로 잠근다.
+  if (selectedGameId) session.prepareLook(selectedGameId);
+  net.send({ type: "start_game" });
 });
 /* ---- 실시간 관전(곁창) 켜고 끄기 --------------------------------------------
    **각자의 설정이다.** 방장이 정하지 않고 서버도 모른다 — 곁창은 내 화면의 일이라,
@@ -397,6 +415,32 @@ byId("sideviews-toggle").addEventListener("click", () => {
   renderSideViewsToggle();
 });
 renderSideViewsToggle();
+
+/* ---- 마우스 감도 ---------------------------------------------------------
+   **각자의 설정이다.** 곁창과 같은 이유로 방장이 정하지 않고 서버도 모른다 — 조준은 내
+   화면의 일이고, 공통 월드는 시드가 정한 대로 남과 똑같이 흐른다.
+   ⚠️ 대기실이 아니라 로비에 둔다. 혼자 플레이에는 대기실이 없어서, 거기 두면 정작 감도를
+      맞춰 보고 싶은 연습 판에서 손댈 곳이 없어진다. */
+
+/** 마우스가 달린 기기인가. 폰에 이 손잡이를 띄우면 아무 일도 안 하는 것을 보여 주는 꼴이다. */
+function hasMouse(): boolean {
+  return typeof matchMedia !== "function" || matchMedia("(any-pointer: fine)").matches;
+}
+
+let lookSpeed = loadLookSpeed();
+
+function renderLookSpeed(): void {
+  byId<HTMLInputElement>("lobby-sens-range").value = String(Math.round(lookSpeed * 100));
+  byId("lobby-sens-out").textContent = `${lookSpeed.toFixed(1)}×`;
+  session.setLookSpeed(lookSpeed);
+}
+
+byId<HTMLInputElement>("lobby-sens-range").addEventListener("input", (event) => {
+  lookSpeed = Number((event.target as HTMLInputElement).value) / 100;
+  saveLookSpeed(lookSpeed);
+  renderLookSpeed();
+});
+renderLookSpeed();
 
 byId("leave-btn").addEventListener("click", leaveRoom);
 byId("result-leave-btn").addEventListener("click", leaveRoom);

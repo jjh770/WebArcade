@@ -328,6 +328,122 @@ describe("반동 — 연출이 아니라 규칙이다", () => {
     expect(game.demoAim()).toBeNull();
   });
 
+  it("시선을 돌리면 조준점은 가운데 붙박이고 판이 움직인다", () => {
+    // 2026-08-18 사용자 요청으로 PC는 FPS 방식이 됐다 — 마우스가 조준점이 아니라 시선을 돌린다.
+    const t = targetAt(9, 0);
+    const game = at(9, t.bornTick + 3);
+    const probe = new ScreenProbe();
+    const drawn = () => {
+      game.render(probe.reset());
+      const rim = probe.circles.find((c) => Math.abs(c.r - C.radius) < 0.01)!;
+      return { 표적: rim, 조준점: probe.crossCenter };
+    };
+    const before = drawn();
+
+    game.look(0.1, 0); // 오른쪽으로 돌린다
+    const after = drawn();
+
+    // 조준점은 화면 한가운데에 붙박여 있다.
+    expect(after.조준점).toBeCloseTo(C.screenWidth / 2, 6);
+    // 판은 반대로 밀린다(오른쪽을 보면 세상은 왼쪽으로).
+    expect(after.표적.x).toBeLessThan(before.표적.x - C.screenWidth * 0.05);
+  });
+
+  it("시선을 돌리면 시점이 뒤로 물러난다 — 판이 한눈에 더 많이 들어온다", () => {
+    // 2026-08-18 사용자: "지금 너무 가까워서 표적을 따라가기가 벅차". 조준점이 화면
+    // 한가운데에 못 박혀 있으니 판 구석을 겨누면 판의 절반이 화면 밖으로 나갔다.
+    const game = at(9, 300);
+    const probe = new ScreenProbe();
+    // 사격장 바닥의 가장 바깥 고리 = 판이 얼마나 크게 그려졌나. 표적과 달리 늘 그려진다.
+    const 판크기 = () => {
+      game.render(probe.reset());
+      return Math.max(...probe.circles.map((c) => c.r));
+    };
+    const 처음 = 판크기();
+
+    game.look(0.001, 0); // 시선을 돌린 순간부터 물러나기 시작한다
+    for (let tick = 301; tick <= 360; tick++) game.update(tick);
+    expect(판크기() / 처음).toBeCloseTo(C.viewZoom, 3);
+  });
+
+  it("물러나도 보이는 표적을 누르면 맞는다 — 배율이 판정까지 지난다", () => {
+    // ⚠️ 배율을 그리기에만 태우면 「보이는 걸 누르면 맞는다」가 그 자리에서 깨진다.
+    const t = targetAt(9, 0);
+    const game = at(9, t.bornTick);
+    const probe = new ScreenProbe();
+    game.look(0.2, 0.15); // 시선을 돌려 물러나게 한다
+    for (let tick = t.bornTick + 1; tick <= t.bornTick + 60; tick++) game.update(tick);
+    game.fire(0.02, 0.02); // 표적이 없는 자리 — 반동까지 얹어 둔다
+    const base = game.getScore();
+
+    game.render(probe.reset());
+    const rim = probe.circles.find((c) => Math.abs(c.r - C.radius * C.viewZoom) < 0.01)!;
+    expect(rim).toBeTruthy(); // 물러난 만큼 작게 그려져 있다
+    game.fire(rim.x / C.screenWidth, rim.y / C.screenHeight);
+    expect(game.getScore()).toBeGreaterThan(base);
+  });
+
+  it("손가락이 닿으면 판이 다시 화면에 꼭 맞는다 — 절대 조준은 물러나면 안 된다", () => {
+    // 폰은 가리킨 자리가 곧 판의 그 자리다. 물러난 채로 두면 손끝과 판이 어긋난다.
+    const game = at(9, 300);
+    const probe = new ScreenProbe();
+    const 판크기 = () => {
+      game.render(probe.reset());
+      return Math.max(...probe.circles.map((c) => c.r));
+    };
+    const 처음 = 판크기();
+
+    game.look(0.3, 0.2);
+    for (let tick = 301; tick <= 360; tick++) game.update(tick);
+    expect(판크기() / 처음).toBeCloseTo(C.viewZoom, 3);
+
+    game.aim(0.5, 0.5);
+    for (let tick = 361; tick <= 420; tick++) game.update(tick);
+    expect(판크기()).toBeCloseTo(처음, 3);
+    // 돌려 뒀던 시선도 판 한가운데로 돌아온다.
+    expect(game.getPosition().a).toBeCloseTo(C.screenWidth / 2, 6);
+    expect(game.getPosition().b).toBeCloseTo(C.screenHeight / 2, 6);
+  });
+
+  it("돌려도 겨누는 자리는 판 안에 남는다", () => {
+    const game = at(9, 300);
+    for (let i = 0; i < 20; i++) game.look(1, 1); // 끝까지 돌린다
+    const far = game.getPosition();
+    expect(far.a).toBeGreaterThanOrEqual(0);
+    expect(far.a).toBeLessThanOrEqual(C.screenWidth);
+    expect(far.b).toBeGreaterThanOrEqual(0);
+    expect(far.b).toBeLessThanOrEqual(C.screenHeight);
+
+    for (let i = 0; i < 40; i++) game.look(-1, -1); // 반대쪽 끝까지
+    const near = game.getPosition();
+    expect(near.a).toBeGreaterThanOrEqual(0);
+    expect(near.b).toBeGreaterThanOrEqual(0);
+  });
+
+  it("돌려 둔 시선은 안 풀리고 반동만 잦아든다", () => {
+    // ⚠️ 둘을 한 값에 합쳐 두면 반동 상한(68px)이 시선까지 잘라 판을 못 돈다.
+    const game = at(9, 300);
+    game.look(0.25, 0);
+    const turned = game.getPosition().a;
+    expect(Math.abs(turned - C.screenWidth / 2)).toBeGreaterThan(C.recoilMax);
+
+    game.fire(0.5, 0.5); // 반동을 얹는다
+    for (let tick = 301; tick <= 460; tick++) game.update(tick); // 충분히 기다린다
+    // 반동은 사라지고 돌려 둔 시선만 남는다.
+    expect(game.getPosition().a).toBeCloseTo(turned, 0);
+  });
+
+  it("조준이 붙기 전에는 안내가 뜨고, 붙으면 걷힌다", () => {
+    const probe = new ScreenProbe();
+    const fresh = at(9, 60);
+    fresh.render(probe.reset());
+    expect(probe.texts.some((t) => t.text.includes("클릭"))).toBe(true);
+
+    fresh.look(0.01, 0);
+    fresh.render(probe.reset());
+    expect(probe.texts.some((t) => t.text.includes("클릭"))).toBe(false);
+  });
+
   it("궤적이 고정이다 — 외워서 끌어내릴 수 있다", () => {
     // 같은 순서로 쏘면 언제나 같은 자리로 밀린다. 난수가 섞이면 이게 깨진다.
     const run = () => {

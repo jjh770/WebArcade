@@ -94,6 +94,7 @@ export class GameSession {
       options.mainCanvas,
       (nx, ny) => this.runner?.aim(nx, ny),
       (nx, ny) => this.runner?.fire(nx, ny),
+      (dnx, dny) => this.runner?.look(dnx, dny),
     );
     this.input = new CompositeInput(this.keyboard, this.touch);
     this.views = new PeerViews({
@@ -133,6 +134,33 @@ export class GameSession {
     this.views.setRoster(players, myId);
   }
 
+  /** 판을 시작하는 **클릭 안에서** 부른다. 그 게임이 시선 돌리기를 쓰면 포인터를 미리
+   *  잠가, 판이 시작될 때 이미 겨눌 수 있게 한다(추가 클릭 없음).
+   *  ⚠️ 잠금은 사용자 동작 안에서만 요청할 수 있어서 **여기 말고는 부를 자리가 없다** —
+   *     카운트다운이 끝나는 시점은 타이머라 동작이 아니다.
+   *  ⚠️ 실패해도 조용히 넘어간다. 판 위 첫 클릭으로 잠그는 길이 그대로 남아 있다. */
+  prepareLook(gameId: string): void {
+    if (!isGameId(gameId)) return;
+    this.ensureRunner(gameId); // 게임 인스턴스가 있어야 look 구현 여부를 안다
+    const wantsLook = typeof this.game?.look === "function";
+    this.aiming.setLook(wantsLook);
+    if (wantsLook) this.aiming.lockNow();
+  }
+
+  /** 이 게임이 시선 돌리기(마우스 잠금)를 쓰는가. 감도 설정을 보여 줄지 정하는 데 쓴다 —
+   *  안 쓰는 게임에 감도 손잡이를 띄우면 아무 일도 안 하는 것을 만지게 된다. */
+  usesLook(gameId: string): boolean {
+    if (!isGameId(gameId)) return false;
+    this.ensureRunner(gameId);
+    return typeof this.game?.look === "function";
+  }
+
+  /** 마우스 감도(시선 돌리기). 각자의 설정이라 방과 무관하다.
+   *  ⚠️ 판이 도는 중에 바뀌어도 된다 — 조준은 내 화면의 일이라 월드를 안 건드린다. */
+  setLookSpeed(multiplier: number): void {
+    this.aiming.setLookSpeed(multiplier);
+  }
+
   /** 곁창(우측 관전창)을 켜고 끈다. 각자의 설정이라 방과 무관하다. */
   setSideViews(on: boolean): void {
     this.views.setSideViews(on);
@@ -162,8 +190,15 @@ export class GameSession {
     //    관전으로 걷힌 조작이 "다시 하기"에서 안 돌아온다.
     this.touch.setUsable(true);
     this.setTyping(typeof this.game?.typeKey === "function");
-    // 둘 중 **하나라도** 쓰면 켠다 — 조준 없이 톡톡 치기만 하는 게임도 있을 수 있다.
-    this.setAiming(typeof this.game?.aim === "function" || typeof this.game?.fire === "function");
+    // 셋 중 **하나라도** 쓰면 켠다 — 조준 없이 톡톡 치기만 하는 게임도 있을 수 있다.
+    this.setAiming(
+      typeof this.game?.aim === "function" ||
+        typeof this.game?.fire === "function" ||
+        typeof this.game?.look === "function",
+    );
+    // 시선 돌리기(FPS 방식)는 **게임이 look을 구현할 때만**, 그리고 **마우스에만** 걸린다.
+    // 손가락은 이 값과 무관하게 늘 절대 조준이다(PointerInput.setLook 주석 참조).
+    this.aiming.setLook(typeof this.game?.look === "function");
     this.runner?.start(seed, epochPerformanceMs, this.views.selfContext());
     this.refresh();
     // 카운트다운 동안 깔려 있던 조작 안내를 걷는다 — 플레이 화면은 가리지 않는다.

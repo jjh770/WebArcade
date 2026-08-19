@@ -61,6 +61,20 @@ export function normalizeInBox(
   };
 }
 
+/** 마우스가 움직인 픽셀을 **판 크기 대비 비율**로 바꾼다. 판이 클수록 같은 손놀림이
+ *  적게 도는데, 그래야 화면 크기와 무관하게 감도가 같다.
+ *  `speed`는 각자 정한 감도(1이 기본) — 여기서 곱하는 이유는, 게임에 닿기 전에
+ *  끝나야 **감도가 판정에 스미지 않기** 때문이다. 게임은 돌아간 양만 알면 된다. */
+export function lookDelta(
+  box: PointerBox,
+  dx: number,
+  dy: number,
+  speed: number,
+): { dnx: number; dny: number } | null {
+  if (box.width <= 0 || box.height <= 0) return null;
+  return { dnx: (dx * speed) / box.width, dny: (dy * speed) / box.height };
+}
+
 export class PointerInput {
   private listening = false;
   /** 판의 자리·크기. pointermove마다 다시 재면 초당 수십 번 레이아웃을 읽는다
@@ -69,6 +83,11 @@ export class PointerInput {
   /** 판을 짚고 있는 손가락. 마우스는 여기 안 들어간다 — 누르지 않아도 조준하므로. */
   private finger: number | null = null;
 
+  /** 마우스가 **시선을 돌리는** 방식인가(FPS). 손가락에는 적용되지 않는다. */
+  private lookMode = false;
+  /** 시선 돌리기 감도. 각자 정한다 — 로컬 입력이라 판정과 무관하다(머리말 참조). */
+  private lookSpeed = 1;
+
   constructor(
     private readonly element: HTMLElement,
     /** 조준점이 움직일 때마다 호출. 보통 GameRunner.aim을 건다. */
@@ -76,7 +95,33 @@ export class PointerInput {
     /** 그 자리를 누른 순간 호출(마우스 왼쪽 클릭 · 손가락 톡). 보통 GameRunner.fire를 건다.
      *  쏘는 게임이 아니면 안 넘기면 된다 — 리스너는 어차피 같은 것을 쓴다. */
     private readonly onFire?: (nx: number, ny: number) => void,
+    /** 마우스가 움직인 **만큼**(판 크기 대비 비율) 호출. 보통 GameRunner.look을 건다.
+     *  setLook(true)일 때만 불린다. */
+    private readonly onLook?: (dnx: number, dny: number) => void,
   ) {}
+
+  /** 마우스를 「시선 돌리기」로 쓸 것인가. 게임이 look을 구현할 때만 켠다.
+   *  ⚠️ **손가락은 이 값과 무관하게 늘 절대 조준이다.** 폰에는 포인터 잠금이 없어
+   *     끌어서 돌리려면 발사 버튼이 따로 필요한데, 그건 「짚은 자리를 쏜다」를 뒤집는다. */
+  setLook(on: boolean): void {
+    this.lookMode = on;
+    if (!on) this.releaseLock();
+  }
+
+  /** 마우스 감도. 0 이하는 조준을 통째로 얼려 버리므로 받지 않는다(설정 화면이
+   *  막아 주지만, 여기서도 막아야 손으로 고친 값이 판을 못 돌게 만들지 못한다). */
+  setLookSpeed(multiplier: number): void {
+    if (multiplier > 0) this.lookSpeed = multiplier;
+  }
+
+  /** 지금 시선 돌리기가 실제로 먹히는 상태인가(= 포인터가 잠겨 있나). */
+  private get locked(): boolean {
+    return typeof document !== "undefined" && document.pointerLockElement === this.element;
+  }
+
+  private releaseLock(): void {
+    if (this.locked) document.exitPointerLock?.();
+  }
 
   start(): void {
     if (this.listening) return;
@@ -98,6 +143,7 @@ export class PointerInput {
     window.removeEventListener("pointermove", this.onMove);
     window.removeEventListener("pointerup", this.onUp);
     window.removeEventListener("pointercancel", this.onUp);
+    this.releaseLock(); // 판이 끝났는데 커서가 잠긴 채로 남으면 결과 화면을 못 누른다.
     this.finger = null;
     this.box = null;
   }
@@ -141,6 +187,22 @@ export class PointerInput {
       //    삼으면 판 위에서 브라우저 기능이 통째로 막힌다.
       if (event.button !== 0) return;
       event.preventDefault(); // 드래그로 판을 선택하는 것을 막는다.
+      if (this.lookMode) {
+        // ⚠️ **잠기기 전 첫 클릭은 쏘지 않는다.** 포인터를 잠그는 클릭이다 — 잠금은
+        //    사용자 동작 안에서만 요청할 수 있고(브라우저 규칙), 그 클릭까지 발사로 치면
+        //    화면을 보기도 전에 한 발이 나가 헛방 감점을 먹는다.
+        //    대신 **누른 자리로 조준은 옮겨 준다** — 잠금이 안 되는 환경에서도 그 클릭이
+        //    헛일이 되지 않게(아래 onMove의 되돌아가기와 짝이다).
+        if (!this.locked) {
+          this.aimAt(event);
+          this.lock();
+          return;
+        }
+        // 잠겨 있으면 조준점은 늘 화면 한가운데다 — 게임이 그렇게 알고 있으므로
+        // 좌표를 새로 잴 필요가 없다. 지금 겨누는 자리를 그대로 쏜다.
+        this.onFire?.(0.5, 0.5);
+        return;
+      }
       this.aimAndFire(event);
       return;
     }
@@ -160,6 +222,13 @@ export class PointerInput {
 
   private onMove = (event: PointerEvent): void => {
     if (event.pointerType === "mouse") {
+      // ⚠️ **잠겨 있을 때만 시선 돌리기다.** 안 잠겼으면 예전처럼 절대 조준으로 굴린다 —
+      //    잠금이 거부되는 브라우저나 Esc로 푼 직후에 **마우스가 통째로 죽는 것**을 막는
+      //    되돌아가기다(그 상태를 실제로 만들어 보고 넣었다). 다시 클릭하면 잠긴다.
+      if (this.lookMode && this.locked) {
+        this.lookBy(event);
+        return;
+      }
       this.aimAt(event);
       return;
     }
@@ -167,6 +236,42 @@ export class PointerInput {
     event.preventDefault();
     this.aimAt(event);
   };
+
+  /** **지금 잠근다.** 판을 시작하는 클릭(「혼자 플레이」·「시작」·「다시 하기」) 안에서 부른다 —
+   *  포인터 잠금은 사용자 동작 안에서만 요청할 수 있고, 그 클릭도 엄연한 사용자 동작이다.
+   *  성공하면 판이 시작될 때 이미 잠겨 있어 **따로 클릭할 일이 없다.**
+   *  ⚠️ 실패할 수 있다 — 그 순간 캔버스가 아직 안 떠 있거나, 브라우저가 거부하거나(iframe),
+   *     Esc로 풀린 직후일 수 있다. 그래서 **판 위 첫 클릭으로 잠그는 길을 남겨 둔다.** */
+  lockNow(): void {
+    if (this.lookMode && !this.locked) this.lock();
+  }
+
+  /** 포인터 잠금 요청. 실패해도(브라우저 거부·iframe 제약) 게임은 굴러가야 하므로 삼킨다. */
+  private lock(): void {
+    try {
+      const result = (this.element as HTMLElement & {
+        requestPointerLock?: () => Promise<void> | void;
+      }).requestPointerLock?.();
+      if (result && typeof (result as Promise<void>).catch === "function") {
+        (result as Promise<void>).catch(() => undefined);
+      }
+    } catch {
+      /* 잠글 수 없는 환경 — 시선 돌리기가 안 될 뿐 판은 돈다. */
+    }
+  }
+
+  private lookBy(event: PointerEvent): void {
+    if (!this.box) {
+      const rect = this.element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      this.box = rect;
+    }
+    const dx = event.movementX ?? 0;
+    const dy = event.movementY ?? 0;
+    if (dx === 0 && dy === 0) return;
+    const moved = lookDelta(this.box, dx, dy, this.lookSpeed);
+    if (moved) this.onLook?.(moved.dnx, moved.dny);
+  }
 
   private onUp = (event: PointerEvent): void => {
     // 손을 떼도 조준점은 그 자리에 남는다 — 게임의 상태이지 손가락의 상태가 아니다.

@@ -133,6 +133,11 @@ export class GameRunner {
     this.game.fire?.(nx, ny);
   }
 
+  /** 시선이 돌아갔을 때 앱이 호출(마우스 움직임). 러너는 뜻을 모른다 — IGame.look에 위임. */
+  look(dnx: number, dny: number): void {
+    this.game.look?.(dnx, dny);
+  }
+
   /** 남의 발사에 맞았을 때 앱이 호출. 게임이 아는 효과면 로컬에 적용한다.
    *  게임이 뭔지는 모른다 — IGame.applyEffect에 그대로 위임. */
   applyEffect(kind: string, durationMs: number): void {

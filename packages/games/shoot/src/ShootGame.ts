@@ -62,7 +62,8 @@ const FLASH_TICKS = 14;
       이야기다. 여기서는 화면 좌표와 판 좌표 사이에 시야 오프셋(view)이 하나 있고,
       **그리기도 판정도 같은 오프셋을 지난다.** 그래서 눈에 보이는 표적을 누르면 언제나
       그 표적이 맞는다.
-        화면 = 판 + view   ·   판 = 화면 - view
+        화면 = (판 - 시선) × 배율 + 화면 한가운데
+        판   = (화면 - 화면 한가운데) ÷ 배율 + 시선
       조준점은 **오프셋을 안 지난다** — 마우스가 곧 조준점이라, 화면 좌표 그대로 찍힌다. */
 
 /** 쏜 뒤 조준점이 벌어졌다 돌아오는 시간(tick). 22 ≈ 0.37초 — 눈에 남을 만큼 길다. */
@@ -78,6 +79,10 @@ const HOLE_TICKS = 180;
 /** 자국을 몇 개까지 들고 있을지. 넘치면 오래된 것부터 버린다. */
 const MAX_SHOTS = 48;
 
+/** 시점이 물러나고 돌아오는 빠르기(tick마다 남은 거리의 이 비율). 한 프레임에 툭 바뀌면
+ *  판이 튄 것처럼 보인다 — 0.12면 0.3초쯤에 걸쳐 물러난다. */
+const ZOOM_EASE = 0.12;
+
 /** 판 위에 잠깐 떠오르는 숫자. **순수 시각이라 판정과 무관하다.** */
 type Mark = { x: number; y: number; tick: number; text: string; good: boolean };
 /** 한 발이 남긴 자국(섬광·파열·탄흔). 역시 순수 시각이다. */
@@ -90,10 +95,27 @@ export class ShootGame implements IGame {
   /** 조준점 = 손이 가리키는 **화면 좌표**. 반동이 여기 손대는 일은 없다. */
   private pointerX = C.screenWidth / 2;
   private pointerY = C.screenHeight / 2;
-  /** 시야가 튄 양(px). 판을 이만큼 옮겨 그리고, 화면 좌표를 판 좌표로 되돌릴 때도 쓴다.
-   *  매 tick 지수로 줄어든다. */
-  private viewX = 0;
-  private viewY = 0;
+  /** 지금 보고 있는 자리 = 화면 한가운데가 가리키는 **판 좌표**. 시선을 돌리면 여기가
+   *  움직인다. 감쇠하지 않는다 — 돌린 채로 있는 게 정상이다.
+   *  ⚠️ **손가락에서는 늘 판 한가운데다.** 폰은 절대 조준이라 시선을 돌리지 않는다. */
+  private camX = C.screenWidth / 2;
+  private camY = C.screenHeight / 2;
+  /** 반동으로 총구가 들린 양(판 px). 매 tick 지수로 줄어든다.
+   *  ⚠️ 시선(cam)과 **따로 산다.** 하나로 합쳐 두면 반동 상한(68px)이 시선 돌리기까지
+   *     잘라 버려 판을 못 돈다 — 둘은 크기도 수명도 다른 값이다. */
+  private recoilX = 0;
+  private recoilY = 0;
+  /** 그리는 배율. 1이면 판이 화면에 꼭 맞고, 작을수록 시점이 뒤로 물러난 것이다.
+   *  ⚠️ **판정은 이걸 안 탄다.** 마우스가 움직인 양도 반동도 판 좌표로 재므로, 물러나도
+   *     맞히는 어려움은 한 치도 안 바뀐다 — 바뀌는 건 한눈에 들어오는 넓이뿐이다. */
+  private zoom = 1;
+  /** 시선을 돌리는 방식인가(마우스 잠금). 시점이 물러나는 건 이때뿐이다. */
+  private looking = false;
+  /** 조준이 붙었는가. `aim`이든 `look`이든 **한 번이라도 오면** 켜진다.
+   *  ⚠️ PC에서는 포인터를 잠그기 전까지 마우스를 움직여도 아무 일이 안 일어난다(브라우저가
+   *     잠금을 사용자 동작 안에서만 허락하므로). 그 동안 화면이 고장 난 것처럼 보이지
+   *     않도록 안내를 깔고, 조준이 붙는 순간 걷는다. 손가락은 첫 터치에 바로 걷힌다. */
+  private engaged = false;
   /** 지금 몇 발째 연사인가. 쉬면 0으로 돌아간다 — 고정 궤적의 색인이다. */
   private burst = 0;
   /** 내가 이미 맞힌 표적 번호. **월드가 아니라 내 사정이다.** */
@@ -115,8 +137,13 @@ export class ShootGame implements IGame {
     this.state = INITIAL;
     this.pointerX = C.screenWidth / 2;
     this.pointerY = C.screenHeight / 2;
-    this.viewX = 0;
-    this.viewY = 0;
+    this.camX = C.screenWidth / 2;
+    this.camY = C.screenHeight / 2;
+    this.recoilX = 0;
+    this.recoilY = 0;
+    this.zoom = 1;
+    this.looking = false;
+    this.engaged = false;
     this.burst = 0;
     this.hitIndexes.clear();
     this.marks = [];
@@ -133,28 +160,70 @@ export class ShootGame implements IGame {
     if (this.marks.length > 0) this.marks = this.marks.filter((m) => tick - m.tick < MARK_TICKS);
     if (this.shots.length > 0) this.shots = this.shots.filter((s) => tick - s.tick < HOLE_TICKS);
     // 튄 시야가 제자리로 돌아온다. 지수라 처음엔 빠르고 끝에서 부드럽게 잦아든다.
-    this.viewX *= C.recoilRecover;
-    this.viewY *= C.recoilRecover;
+    // ⚠️ 반동만 잦아든다 — 돌려 둔 시선은 그대로다.
+    this.recoilX *= C.recoilRecover;
+    this.recoilY *= C.recoilRecover;
+    // 시점이 물러나고 돌아오는 것도 여기서 굴린다(조준 방식이 바뀌는 순간에만 일어난다).
+    const want = this.looking ? C.viewZoom : 1;
+    this.zoom =
+      Math.abs(want - this.zoom) < 0.001 ? want : this.zoom + (want - this.zoom) * ZOOM_EASE;
     // 한동안 안 쐈으면 연사가 끊긴 것 — 다음 발은 다시 첫 발이다.
     if (this.worldTick - this.firedAt > C.recoilResetTicks) this.burst = 0;
   }
 
+  /** 절대 조준 — 손가락, 그리고 잠금이 풀린 마우스. 이때는 **판이 화면에 꼭 맞아야 한다.**
+   *  가리킨 자리가 곧 판의 그 자리이기 때문이다. 그래서 시선을 판 한가운데로 되돌리고
+   *  시점도 제자리(배율 1)로 돌아온다. */
   aim(nx: number, ny: number): void {
+    this.engaged = true;
+    this.looking = false;
+    this.camX = C.screenWidth / 2;
+    this.camY = C.screenHeight / 2;
     this.pointerX = nx * C.screenWidth;
     this.pointerY = ny * C.screenHeight;
   }
 
-  /** 조준점이 **판의 어디를** 겨누고 있는가. 화면 좌표에서 시야 오프셋을 빼면 나온다.
-   *  ⚠️ 맞히는 것도 관전에 싣는 것도 이 자리를 쓴다. 그려질 때 다시 오프셋이 더해지므로,
+  /** 조준점이 **판의 어디를** 겨누고 있는가 = toScreen의 역이다.
+   *  ⚠️ 맞히는 것도 관전에 싣는 것도 이 자리를 쓴다. 그릴 때 같은 변환을 되짚으므로,
    *     눈에 보이는 표적을 누르면 언제나 그 표적이 맞는다. */
   private aimPoint(): { x: number; y: number } {
-    return { x: this.pointerX - this.viewX, y: this.pointerY - this.viewY };
+    return {
+      x: (this.pointerX - C.screenWidth / 2) / this.zoom + this.viewX(),
+      y: (this.pointerY - C.screenHeight / 2) / this.zoom + this.viewY(),
+    };
+  }
+
+  /** 화면 한가운데가 지금 겨누는 판 좌표 = 돌린 시선 + 튄 반동. */
+  private viewX(): number {
+    return this.camX + this.recoilX;
+  }
+  private viewY(): number {
+    return this.camY + this.recoilY;
+  }
+
+  /** 마우스로 시선을 돌렸다. **조준점은 안 움직이고 판이 움직인다** — 그래서 조준점을
+   *  화면 한가운데에 못 박고 판을 반대로 민다.
+   *  ⚠️ 겨누는 자리가 판 밖으로 나가지 않게 막는다. 판 밖을 겨누면 아무것도 못 맞히는
+   *     자리에서 헤매게 되고, 돌아오는 길도 안 보인다. */
+  look(dnx: number, dny: number): void {
+    this.engaged = true;
+    this.looking = true;
+    this.pointerX = C.screenWidth / 2;
+    this.pointerY = C.screenHeight / 2;
+    // 마우스가 움직인 양은 **판 좌표로** 잰다 — 그래서 시점이 물러나도 손이 판을 훑는
+    // 속도는 그대로다(물러난 만큼 화면에서만 덜 움직인다).
+    this.camX += dnx * C.screenWidth;
+    this.camY += dny * C.screenHeight;
+    // 겨누는 자리가 판 안에 남아야 한다.
+    this.camX = Math.min(C.screenWidth, Math.max(0, this.camX));
+    this.camY = Math.min(C.screenHeight, Math.max(0, this.camY));
   }
 
   /** 한 발. ⚠️ 끝난 판에서는 아무것도 받지 않는다 — 시간이 다 된 뒤 도착한 한 발이
    *  점수를 바꾸면 결과 화면과 순위 기록이 어긋난다(숫자 야구·에임 추적과 같은 이유). */
   fire(nx: number, ny: number): void {
     if (isOver(this.worldTick)) return;
+    this.engaged = true; // 쐈다는 건 조준이 붙었다는 뜻이다 — 안내를 걷는다.
     // ⚠️ 넘어온 좌표는 **화면 좌표**다. 총알이 가는 곳은 그 아래 깔린 **판의** 어느
     //    자리이고, 그건 눈에 보이던 그 표적이다(시야가 튀어 있어도 마찬가지).
     this.pointerX = nx * C.screenWidth;
@@ -200,11 +269,12 @@ export class ShootGame implements IGame {
   private applyRecoil(): void {
     const kick = C.recoilKick;
     const drift = C.recoilDrift[this.burst % C.recoilDrift.length]!;
-    this.viewY += kick;
-    this.viewX -= kick * drift;
+    // 총구가 들리면 시선은 위로 간다 = 판 좌표에서 **작은 y**(화면에서는 판이 내려온다).
+    this.recoilY -= kick;
+    this.recoilX += kick * drift;
     // 상한은 **쌓인 총량**에도 건다. 안 그러면 길게 연사할 때 판이 화면 밖으로 나간다.
-    this.viewY = Math.min(C.recoilMax, this.viewY);
-    this.viewX = Math.min(C.recoilMax, Math.max(-C.recoilMax, this.viewX));
+    this.recoilY = Math.max(-C.recoilMax, this.recoilY);
+    this.recoilX = Math.min(C.recoilMax, Math.max(-C.recoilMax, this.recoilX));
     this.burst++;
   }
 
@@ -216,10 +286,10 @@ export class ShootGame implements IGame {
   /** 판 좌표 → 화면 좌표. **판에 속한 것은 전부 이걸 지난다**(배경만 시차로 덜 움직인다).
    *  ⚠️ 조준점만 예외다 — 그건 판이 아니라 손에 속한다. */
   private toScreenX(x: number): number {
-    return x + this.viewX;
+    return (x - this.viewX()) * this.zoom + C.screenWidth / 2;
   }
   private toScreenY(y: number): number {
-    return y + this.viewY;
+    return (y - this.viewY()) * this.zoom + C.screenHeight / 2;
   }
 
   render(r: IRenderer): void {
@@ -230,7 +300,11 @@ export class ShootGame implements IGame {
     this.drawShots(r);
     this.drawMarks(r);
     // ⚠️ 조준점은 **손이 가리키는 화면 좌표 그대로**다. 판이 흔들려도 여기는 안 흔들린다.
+    //    시선 돌리기 방식에서는 look()이 이 값을 화면 한가운데에 못 박아 둔다.
     this.drawAim(r, this.pointerX, this.pointerY, sinceFire);
+    if (!this.engaged && !isOver(this.worldTick)) {
+      r.text("클릭하면 조준이 잠깁니다", C.screenWidth / 2, C.screenHeight / 2 - 46, DIM, 22, "center");
+    }
   }
 
   /** 남의 화면. a·b는 그 사람의 조준점이고 표적은 공통 월드라 여기서 다시 구한다.
@@ -242,9 +316,12 @@ export class ShootGame implements IGame {
   renderSpectator(r: IRenderer, target: SpectateTarget): void {
     // ⚠️ 관전 화면은 **내 시야가 튄 것을 따라가지 않는다.** 저 판은 남이 보고 있는 것이고,
     //    내가 쏜다고 남의 화면이 흔들릴 이유가 없다. a·b도 판 좌표로 와서 그대로 맞는다.
-    const view = { x: this.viewX, y: this.viewY };
-    this.viewX = 0;
-    this.viewY = 0;
+    const view = { cx: this.camX, cy: this.camY, rx: this.recoilX, ry: this.recoilY, z: this.zoom };
+    this.camX = C.screenWidth / 2;
+    this.camY = C.screenHeight / 2;
+    this.recoilX = 0;
+    this.recoilY = 0;
+    this.zoom = 1;
     this.drawRange(r, C.backdropParallax);
     for (const spot of liveTargets(this.seed, this.worldTick)) this.drawTarget(r, spot);
 
@@ -258,8 +335,11 @@ export class ShootGame implements IGame {
     }
     this.drawAim(r, target.a, target.b, age);
     r.text(target.label, C.screenWidth / 2, 52, DIM, 22, "center");
-    this.viewX = view.x;
-    this.viewY = view.y;
+    this.camX = view.cx;
+    this.camY = view.cy;
+    this.recoilX = view.rx;
+    this.recoilY = view.ry;
+    this.zoom = view.z;
   }
 
   /** 사격장 바닥. **사각 격자가 아니라 동심원이다** — 에임 추적과 한눈에 갈리는 첫 단서다.
@@ -269,11 +349,13 @@ export class ShootGame implements IGame {
     r.rect(0, 0, C.screenWidth, C.screenHeight, BACKDROP);
     // ⚠️ 배경은 표적보다 **덜** 움직인다(시차). 가까운 것이 많이, 먼 것이 적게 움직이는
     //    것이 깊이감의 전부다 — 3D 없이 화면이 밀리는 느낌을 내는 값싼 수법이다.
-    const cx = C.screenWidth / 2 + this.viewX * parallax;
-    const cy = C.screenHeight / 2 + this.viewY * parallax;
+    const cx = C.screenWidth / 2 + (C.screenWidth / 2 - this.viewX()) * this.zoom * parallax;
+    const cy = C.screenHeight / 2 + (C.screenHeight / 2 - this.viewY()) * this.zoom * parallax;
+    // ⚠️ 고리도 배율을 탄다. 시점이 물러나면 판에 테두리가 없어 어디까지가 판인지 알 길이
+    //    없는데, 판 한가운데에 놓인 이 고리가 그걸 대신 알려 준다.
     for (const radius of [330, 220, 110]) {
-      r.circle(cx, cy, radius, RANGE_RING);
-      r.circle(cx, cy, radius - 2, BACKDROP);
+      r.circle(cx, cy, radius * this.zoom, RANGE_RING);
+      r.circle(cx, cy, radius * this.zoom - 2, BACKDROP);
     }
     const left = ticksLeft(this.worldTick) / C.timeLimitTicks;
     r.rect(0, 0, C.screenWidth, 7, RANGE_RING);
@@ -288,12 +370,13 @@ export class ShootGame implements IGame {
     const t = Math.min(1, Math.max(0, life));
     const x = this.toScreenX(target.x);
     const y = this.toScreenY(target.y);
-    r.circle(x, y, C.radius * (APPROACH_FROM - (APPROACH_FROM - 1) * t), APPROACH);
+    const radius = C.radius * this.zoom;
+    r.circle(x, y, radius * (APPROACH_FROM - (APPROACH_FROM - 1) * t), APPROACH);
 
-    r.circle(x, y, C.radius, TARGET_RIM);
-    r.circle(x, y, C.radius * 0.66, BACKDROP);
-    r.circle(x, y, C.radius * 0.4, TARGET_RIM);
-    r.circle(x, y, C.radius * 0.16, TARGET_CORE);
+    r.circle(x, y, radius, TARGET_RIM);
+    r.circle(x, y, radius * 0.66, BACKDROP);
+    r.circle(x, y, radius * 0.4, TARGET_RIM);
+    r.circle(x, y, radius * 0.16, TARGET_CORE);
   }
 
   /** 빗맞힌 자리에 남는 탄흔. **오래 남는다**(3초) — 헛방에 소리를 안 붙였으므로
@@ -302,7 +385,7 @@ export class ShootGame implements IGame {
     for (const shot of this.shots) {
       if (shot.hit) continue;
       const age = (this.worldTick - shot.tick) / HOLE_TICKS;
-      r.circle(this.toScreenX(shot.x), this.toScreenY(shot.y), 5,
+      r.circle(this.toScreenX(shot.x), this.toScreenY(shot.y), 5 * this.zoom,
         `rgba(120, 132, 126, ${(0.5 * (1 - age)).toFixed(3)})`);
     }
   }
@@ -313,12 +396,13 @@ export class ShootGame implements IGame {
       const age = this.worldTick - shot.tick;
       if (age < SPARK_TICKS) {
         const t = age / SPARK_TICKS;
-        r.circle(this.toScreenX(shot.x), this.toScreenY(shot.y), 22 * (1 - t) + 4,
+        r.circle(this.toScreenX(shot.x), this.toScreenY(shot.y), (22 * (1 - t) + 4) * this.zoom,
           `rgba(255, 241, 205, ${(0.85 * (1 - t)).toFixed(3)})`);
       }
       if (shot.hit && age < BURST_TICKS) {
         const t = age / BURST_TICKS;
-        r.circle(this.toScreenX(shot.x), this.toScreenY(shot.y), C.radius * (0.6 + t * 1.5),
+        r.circle(this.toScreenX(shot.x), this.toScreenY(shot.y),
+          C.radius * (0.6 + t * 1.5) * this.zoom,
           `rgba(144, 190, 109, ${(0.4 * (1 - t)).toFixed(3)})`);
       }
     }
